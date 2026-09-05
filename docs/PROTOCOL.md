@@ -506,20 +506,52 @@ of `buildStateJson` in `main.cpp` and supplies only the worst-case width of each
 value, so a field added to the firmware without a width is a hard error rather
 than a silent gap in the estimate.
 
-Worst case — every field populated at its widest, 2026-09-05:
+Worst case — every field populated at its widest, 2026-09-05. All three columns
+use the short keys; only the fault encoding differs:
 
-| active faults | readable, `fw` always | compact, `fw` always | compact, `fw` rarely |
+| active faults | readable (was shipping) | compact, `fw` always | compact, `fw` rarely |
 |---|---|---|---|
-| 0 | 762 | 486 | 465 |
-| 1 | 772 | 497 | 476 |
-| 2 | 795 | 508 | 487 |
-| 4 | 841 | 530 | **509** |
+| 0 | 533 | 486 | 465 |
+| 1 | 543 | 497 | 476 |
+| 2 | 566 | 508 | 487 |
+| 4 | 612 | 530 | **509** |
 
-These are worse than the 2026-09-04 figures this section used to quote (560 /
-583 / 622 against 452 / 475 / 514). Those were a realistic ride; these assume
+For reference: long keys with readable faults and no fault at all is **762**,
+which is why the radio moved to short keys on 2026-09-04. The MQTT payload —
+long keys, VIN, four faults — is 953 and has no limit.
+
+An earlier version of the tool tied key length and fault encoding together, so
+its "readable" column was really "long keys", a combination nothing had run
+since 2026-09-04, while the bike was running short keys with readable faults —
+the one case the table did not show. That case is the left-hand column, and it
+is **over the ceiling from zero faults**.
+
+These are also worse than the 2026-09-04 figures this section used to quote (560
+/ 583 / 622 against 452 / 475 / 514). Those were a realistic ride; these assume
 every optional field present at its widest value at once. The pessimistic number
-is the one worth budgeting against, because the payload only overflows on the day
-something is wrong.
+is what to budget against, because the payload only overflows on the day
+something is already wrong.
+
+### Calibration against a real payload
+
+`--check <file.json>` compares the model with a payload captured off the bike,
+for the same field set. The model must come out **above** the real one; below
+means a width is too small, which is the failure that matters, because it would
+under-report the risk of a silent truncation.
+
+Measured in the garage, 2026-09-05, engine off and the tyre sensors asleep:
+
+```
+34 of 40 fields present
+  measured  391
+  modelled  448  (+57)
+  absent: tf tr tft trt fi wh
+```
+
+391 bytes with six fields missing. Four of those six are the tyre readings, which
+are absent only because the bike had been parked eight hours; on a ride they are
+all present and a realistic payload lands near 480. The margin was thinner than
+it looked.
 
 The right-hand column is what ships. Two changes got it there.
 
