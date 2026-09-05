@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Warm instrument lighting on a near-black dial, in the spirit of the bike's own
+  cluster. Amber is the single accent and is spent on live values; green/amber/red
+  are reserved for tyre judgement so they never compete with it.
+-->
+<resources>
+    <color name="ground">#0A0C10</color>
+    <color name="surface">#12161C</color>
+    <color name="line">#232830</color>
+    <color name="ink">#F2F5F9</color>
+    <color name="muted">#7C8797</color>
+    <color name="accent">#E8A33D</color>
+    <color name="ok">#4FA96B</color>
+    <color name="watch">#E8A33D</color>
+    <color name="act">#D2452F</color>
+</resources>

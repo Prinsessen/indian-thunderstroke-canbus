@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The dial, reduced to what still reads at 48dp: the 240 degree arc with its
+  redline, a needle at rest, and the hub. Same geometry as GaugeView and the
+  splash badge, so the icon, the startup screen and the instruments are one
+  object seen at three sizes.
+
+  Everything sits inside a 60-unit circle centred in the 108-unit viewport,
+  which keeps it within the 66-unit safe zone an adaptive icon guarantees the
+  launcher's mask will not clip.
+
+  No Indian branding: the war bonnet is Polaris's trademark. The instrument is
+  the app's own identity and belongs to it.
+
+  Coordinates are computed, not eyeballed — a needle a degree off its arc is
+  visible even at icon size.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Dial track: 150 to 30 degrees, opening at the bottom. -->
+    <path
+        android:pathData="M28.02,69.00 A30,30 0 1 1 79.98,69.00"
+        android:strokeColor="#2A313B"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round" />
+
+    <!-- Travelled arc, up to where the needle rests. -->
+    <path
+        android:pathData="M28.02,69.00 A30,30 0 0 1 68.45,27.71"
+        android:strokeColor="#E8A33D"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round" />
+
+    <!-- Redline: the last sixth of the sweep. -->
+    <path
+        android:pathData="M83.54,48.79 A30,30 0 0 1 79.98,69.00"
+        android:strokeColor="#D2452F"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round" />
+
+    <!-- Needle: a tapered blade with a counterweight, as on the real dial. -->
+    <path
+        android:pathData="M66.92,32.57 L65.17,31.61 L47.87,59.76 L52.42,62.26 Z"
+        android:fillColor="#E8A33D" />
+
+    <!-- Hub: bright cap over a dark centre, so the blade passes beneath it. -->
+    <path
+        android:pathData="M54,54 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0"
+        android:fillColor="#E8A33D" />
+    <path
+        android:pathData="M54,54 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0"
+        android:fillColor="#0E1218" />
+</vector>

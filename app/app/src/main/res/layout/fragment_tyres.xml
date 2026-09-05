@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <dk.agesen.springfield.TyreView
+        android:id="@+id/front"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <dk.agesen.springfield.TyreView
+        android:id="@+id/rear"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:id="@+id/tyreTrend"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="6dp"
+        android:textSize="13sp"
+        android:fontFamily="monospace"
+        android:textColor="@color/accent" />
+
+    <TextView
+        android:id="@+id/tyreAge"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingVertical="10dp"
+        android:textSize="13sp"
+        android:fontFamily="monospace"
+        android:textColor="@color/muted" />
+</LinearLayout>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Deliberately raw. This screen exists to answer "is the decode wrong or are
+  the bytes wrong", and any formatting applied here would be one more thing
+  standing between the question and the answer.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ground"
+    android:fitsSystemWindows="true">
+
+    <TextView
+        android:id="@+id/dump"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="18dp"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:textIsSelectable="true"
+        android:textColor="@color/ink" />
+</ScrollView>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  keepScreenOn: on a handlebar mount the default screen timeout blanks the
+  cluster after half a minute, and reaching for a phone at speed to wake an
+  instrument panel is not a thing anyone should have to do. The foreground
+  service already holds the link; this holds the display that shows it.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:keepScreenOn="true"
+    android:background="@color/ground">
+
+    <!-- Behind everything: the slow sheen that keeps the panel from reading as
+         a screenshot. -->
+    <dk.agesen.springfield.AmbientView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:fitsSystemWindows="true">
+
+        <!-- Tabs as words rather than dots: three pages is few enough to name,
+             and a named tab tells you what you are swiping towards. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp">
+
+            <TextView android:id="@+id/tab0" style="@style/Tab" android:text="RIDE" />
+            <TextView android:id="@+id/tab1" style="@style/Tab" android:text="TYRES" />
+            <TextView android:id="@+id/tab2" style="@style/Tab" android:text="MACHINE" />
+            <TextView android:id="@+id/tab3" style="@style/Tab" android:text="HEAT" />
+
+            <TextView
+                android:id="@+id/settingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="14dp"
+                android:text="\u2699"
+                android:textSize="18sp"
+                android:textColor="@color/muted"
+                android:background="?android:attr/selectableItemBackground" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/line" />
+
+        <!-- Faults interrupt at the top of the cluster, above the pages, so a
+             warning cannot be swiped past by changing page. GONE until there is
+             something to say. -->
+        <dk.agesen.springfield.AlertBannerView
+            android:id="@+id/alert"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:visibility="gone" />
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/pager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/muted"
+            android:background="@color/surface"
+            android:text="Starting…" />
+    </LinearLayout>
+
+    <!-- Above the cluster: redline warning as light in the periphery, which is
+         where it will actually be noticed with eyes on the road. Not clickable,
+         so it never intercepts a swipe between pages. -->
+    <dk.agesen.springfield.EdgeGlowView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- The pre-ride check, above the cluster but under the splash: it must not
+         cover the identity sequence, and it must cover the pages, because it is
+         asking for a moment of attention rather than competing for it. Starts
+         gone; it decides for itself when the moment has come. -->
+    <dk.agesen.springfield.PreRideView
+        android:id="@+id/preride"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Sits on top until its animation finishes, then fades itself out. -->
+    <dk.agesen.springfield.SplashView
+        android:id="@+id/splash"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

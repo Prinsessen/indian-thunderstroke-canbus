@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Portrait shows the SPEEDOMETER as the one dial, with the tachometer reduced to
+  a digital figure and a bar beneath it. Two dials stacked in a tall window would
+  each be too small to read at a glance, and speed is the number a rider actually
+  looks for — it earns the full face.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <dk.agesen.springfield.GaugeView
+        android:id="@+id/gauge"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <dk.agesen.springfield.DigitalReadoutView
+        android:id="@+id/readout"
+        android:layout_width="match_parent"
+        android:layout_height="122dp" />
+
+    <dk.agesen.springfield.FuelBarView
+        android:id="@+id/fuel"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginHorizontal="4dp" />
+
+    <!--
+      The grips belong to the motorcycle, so they sit here rather than on the
+      heat page, which is the rider's own clothing. Compact, because the
+      speedometer holds the weighted space above and must not shrink for them.
+    -->
+    <dk.agesen.springfield.GripsView
+        android:id="@+id/grips"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginHorizontal="4dp" />
+
+    <dk.agesen.springfield.TellTaleView
+        android:id="@+id/telltales"
+        android:layout_width="match_parent"
+        android:layout_height="76dp"
+        android:layout_marginTop="6dp" />
+</LinearLayout>

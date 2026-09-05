@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Landscape is wide enough for the pair. Speed leads on the left — it is the
+  primary instrument and carries the gear window — with the tachometer to its
+  right. Each dial carries the turn arrow for its own side, so the indicators sit
+  at the outer edges of the panel instead of huddled in the middle.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <dk.agesen.springfield.GaugeView
+            android:id="@+id/gauge"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <dk.agesen.springfield.GaugeView
+            android:id="@+id/gauge2"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <dk.agesen.springfield.FuelBarView
+        android:id="@+id/fuel"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginBottom="4dp"
+        android:layout_marginHorizontal="6dp" />
+
+    <!--
+      The grips belong to the motorcycle, so they ride with the instruments.
+      Shorter here than in portrait: landscape spends its height on two dials
+      side by side, and neither may shrink for a strip.
+    -->
+    <dk.agesen.springfield.GripsView
+        android:id="@+id/grips"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginBottom="4dp"
+        android:layout_marginHorizontal="6dp" />
+
+    <dk.agesen.springfield.TellTaleView
+        android:id="@+id/telltales"
+        android:layout_width="match_parent"
+        android:layout_height="66dp" />
+</LinearLayout>

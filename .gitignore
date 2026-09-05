@@ -1,0 +1,19 @@
+# Firmware — build output and the file holding your own credentials
+firmware/.pio/
+firmware/src/config.h
+
+# Android
+app/build/
+app/app/build/
+app/.gradle/
+app/local.properties
+*.iml
+.idea/
+
+# Captures are deliberately absent from this repository. They contain the VIN
+# and the odometer of one specific motorcycle. Keep your own outside the repo.
+captures/
+*.log
+
+# OS
+.DS_Store

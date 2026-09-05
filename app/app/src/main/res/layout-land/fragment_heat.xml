@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Two zones, because two is what the app can reach. The gloves have their own
+  controller with no Bluetooth, so they get a line rather than a bar — the app
+  can tell the rider it is cold enough for them, and nothing more.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <dk.agesen.springfield.FeltTempView
+        android:id="@+id/felt"
+        android:layout_width="match_parent"
+        android:layout_height="108dp"
+        android:layout_marginBottom="14dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <dk.agesen.springfield.HeatZoneView
+            android:id="@+id/zoneLegs"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <dk.agesen.springfield.HeatZoneView
+            android:id="@+id/zoneJacket"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="14dp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/gloves"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="12dp"
+        android:textSize="12sp"
+        android:letterSpacing="0.04"
+        android:textColor="@color/watch" />
+
+    <TextView
+        android:id="@+id/heatStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="6dp"
+        android:textSize="11sp"
+        android:letterSpacing="0.06"
+        android:textColor="@color/muted" />
+</LinearLayout>

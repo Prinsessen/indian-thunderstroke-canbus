@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/ground"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SETTINGS"
+            android:textSize="13sp"
+            android:letterSpacing="0.20"
+            android:textStyle="bold"
+            android:textColor="@color/accent"
+            android:paddingBottom="18dp" />
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Front tyre target" />
+            <TextView style="@style/SettingSub" android:text="Cold pressure the front is judged against" />
+        </LinearLayout>
+        <Button android:id="@+id/frontMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/frontValue" style="@style/SettingValue" />
+        <Button android:id="@+id/frontPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Rear tyre target" />
+            <TextView style="@style/SettingSub" android:text="Cold pressure the rear is judged against" />
+        </LinearLayout>
+        <Button android:id="@+id/rearMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/rearValue" style="@style/SettingValue" />
+        <Button android:id="@+id/rearPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Redline" />
+            <TextView style="@style/SettingSub" android:text="Where the dial reddens, the edge glows and the haptic fires" />
+        </LinearLayout>
+        <Button android:id="@+id/redlineMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/redlineValue" style="@style/SettingValue" />
+        <Button android:id="@+id/redlinePlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Heated clothing" />
+            <TextView style="@style/SettingSub" android:text="Follow the temperature automatically, or leave both zones manual" />
+        </LinearLayout>
+        <Button android:id="@+id/heatAutoButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Trousers controller" />
+            <TextView style="@style/SettingSub" android:text="Both controllers look identical over the air, so assign them once" />
+        </LinearLayout>
+        <Button android:id="@+id/legsMacButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Jacket controller" />
+        </LinearLayout>
+        <Button android:id="@+id/jacketMacButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Trousers: off at" />
+            <TextView style="@style/SettingSub" android:text="Felt temperature. Legs lead the jacket — they are in the wind" />
+        </LinearLayout>
+        <Button android:id="@+id/legsOffMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/legsOffValue" style="@style/SettingValue" />
+        <Button android:id="@+id/legsOffPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Trousers: full at" />
+        </LinearLayout>
+        <Button android:id="@+id/legsFullMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/legsFullValue" style="@style/SettingValue" />
+        <Button android:id="@+id/legsFullPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Jacket: off at" />
+        </LinearLayout>
+        <Button android:id="@+id/jacketOffMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/jacketOffValue" style="@style/SettingValue" />
+        <Button android:id="@+id/jacketOffPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Jacket: full at" />
+        </LinearLayout>
+        <Button android:id="@+id/jacketFullMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/jacketFullValue" style="@style/SettingValue" />
+        <Button android:id="@+id/jacketFullPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Tank capacity" />
+            <TextView style="@style/SettingSub" android:text="Litres. The one figure the range estimate cannot learn from the bus" />
+        </LinearLayout>
+        <Button android:id="@+id/tankMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/tankValue" style="@style/SettingValue" />
+        <Button android:id="@+id/tankPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Tyre pressure" />
+            <TextView style="@style/SettingSub" android:text="PSI, kPa or bar — independent of the others, because workshops are" />
+        </LinearLayout>
+        <Button android:id="@+id/pressureButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Speed and distance" />
+            <TextView style="@style/SettingSub" android:text="km/h and kilometres, or mph and miles" />
+        </LinearLayout>
+        <Button android:id="@+id/distanceButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Temperature" />
+            <TextView style="@style/SettingSub" android:text="Coolant, ambient and tyre temperature" />
+        </LinearLayout>
+        <Button android:id="@+id/temperatureButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Screen brightness" />
+            <TextView style="@style/SettingSub" android:text="Full brightness beats direct sun, and dazzles at night" />
+        </LinearLayout>
+        <Button android:id="@+id/brightButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Screen orientation" />
+            <TextView style="@style/SettingSub" android:text="A mount holds the phone one way up; auto-rotate answers to bumps as readily as to intent" />
+        </LinearLayout>
+        <Button android:id="@+id/orientationButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Ride distance" />
+            <TextView style="@style/SettingSub" android:text="The bike's own trip cannot be reset from here — this is the app's" />
+        </LinearLayout>
+        <Button android:id="@+id/tripButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Service interval" />
+            <TextView style="@style/SettingSub" android:text="Indian specify 8000 km for the Thunder Stroke" />
+        </LinearLayout>
+        <Button android:id="@+id/svcMinus" style="@style/StepButton" android:text="–" />
+        <TextView android:id="@+id/svcValue" style="@style/SettingValue" />
+        <Button android:id="@+id/svcPlus" style="@style/StepButton" android:text="+" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Last service" />
+            <TextView style="@style/SettingSub" android:text="Tap to record one at the odometer showing now" />
+        </LinearLayout>
+        <Button android:id="@+id/svcRecord" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Fault codes" />
+            <TextView style="@style/SettingSub" android:text="Name a code Polaris keep to themselves, and it stays named" />
+        </LinearLayout>
+        <Button android:id="@+id/dtcButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="All-time records" />
+            <TextView style="@style/SettingSub" android:text="Highest speed and rpm ever seen, across every ride" />
+        </LinearLayout>
+        <Button android:id="@+id/recordsButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Bluetooth pairing" />
+            <TextView style="@style/SettingSub" android:text="If pairing keeps failing, forget Springfield here and connect again" />
+        </LinearLayout>
+        <Button android:id="@+id/bluetoothButton" style="@style/WideButton" android:text="OPEN" />
+    </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/line"
+            android:layout_marginTop="18dp" />
+
+        <TextView
+            android:id="@+id/firmware"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="16dp"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/muted" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="12dp"
+            android:textSize="11sp"
+            android:letterSpacing="0.22"
+            android:textStyle="bold"
+            android:textColor="@color/accent"
+            android:text="© NANNA AGESEN 2026" />
+    </LinearLayout>
+</ScrollView>
