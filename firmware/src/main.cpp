@@ -859,6 +859,12 @@ struct Dm1Src {
     uint8_t  lamps;
     uint32_t seen;
     char     dtc[72];        // this source's faults, "" when it reports none
+    // The same faults as numbers, for the radio. A GATT notification carries
+    // 514 bytes and cannot fragment, and the readable form does not fit -- see
+    // buildStateJson. Built here rather than reformatted later because the
+    // numbers are in hand at this point and parsing our own sentence back would
+    // be a second decoder able to disagree with the first.
+    char     dtcC[40];       // "520250:8:2,904:12:1"
 };
 static Dm1Src dm1Src[DM1_SOURCES];
 
@@ -973,6 +979,7 @@ void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
 
     // --- what THIS source is reporting -------------------------------------
     char out[72]; int op = 0; int ndtc = 0;
+    char outC[40]; int cp = 0;          // the same list as numbers, for BLE
     for (uint16_t i = 2; i + 3 < nn; i += 4) {
         uint32_t spn = b[i] | (b[i + 1] << 8) | (((uint32_t)(b[i + 2] >> 5) & 7) << 16);
         uint8_t fmi = b[i + 2] & 0x1F;
@@ -981,9 +988,12 @@ void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
         if (spn == 0x7FFFF || (b[i] == 0xFF && b[i + 1] == 0xFF)) continue;
         op += snprintf(out + op, sizeof(out) - op, "%sSPN %lu FMI %u (x%u)",
                        ndtc ? "; " : "", (unsigned long)spn, fmi, oc);
+        cp += snprintf(outC + cp, sizeof(outC) - cp, "%s%lu:%u:%u",
+                       ndtc ? "," : "", (unsigned long)spn, fmi, oc);
         if (++ndtc && op > (int)sizeof(out) - 24) break;
     }
     out[op] = 0;
+    outC[cp] = 0;
 
     // --- park it in this source's slot --------------------------------------
     const uint32_t now = millis();
@@ -999,9 +1009,12 @@ void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
     dm1Src[slot].seen  = now;
     strncpy(dm1Src[slot].dtc, out, sizeof(dm1Src[slot].dtc) - 1);
     dm1Src[slot].dtc[sizeof(dm1Src[slot].dtc) - 1] = 0;
+    strncpy(dm1Src[slot].dtcC, outC, sizeof(dm1Src[slot].dtcC) - 1);
+    dm1Src[slot].dtcC[sizeof(dm1Src[slot].dtcC) - 1] = 0;
 
     // --- compose from every source still talking ----------------------------
     char all[96]; int ap = 0; int total = 0;
+    char allC[64]; int cpA = 0;
     uint8_t lamps = 0;
     for (int i = 0; i < DM1_SOURCES; i++) {
         if (!dm1Src[i].used) continue;
@@ -1013,10 +1026,13 @@ void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
         if (!dm1Src[i].dtc[0]) continue;
         int n = snprintf(all + ap, sizeof(all) - ap, "%s%s", total ? "; " : "", dm1Src[i].dtc);
         if (n > 0) ap += n;
+        int nc = snprintf(allC + cpA, sizeof(allC) - cpA, "%s%s", total ? "," : "", dm1Src[i].dtcC);
+        if (nc > 0) cpA += nc;
         total++;
         if (ap > (int)sizeof(all) - 24) break;
     }
     all[ap] = 0;
+    allC[cpA] = 0;
 
     #define LMP(sh) (((lamps >> (sh)) & 1) ? "ON" : "off")
     char full[112];
@@ -1024,6 +1040,22 @@ void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
              total ? all : "No active DTC", LMP(6), LMP(4), LMP(2), LMP(0));
     #undef LMP
     SETS(dm1, full);
+
+    // The same thing for the radio: faults as numbers, lamps as bits.
+    //
+    // The bit order is NOT the internal one. Internally MIL sits at 6 and Prot
+    // at 0, which is the order the J1939 byte packs them in; on the wire they go
+    // MIL 1, Stop 2, Warn 4, Prot 8, which reads naturally and is what the app
+    // parses. Remapped here rather than at either end, so exactly one place
+    // knows both orders.
+    uint8_t wire = 0;
+    if ((lamps >> 6) & 1) wire |= 1;    // MIL
+    if ((lamps >> 4) & 1) wire |= 2;    // Stop
+    if ((lamps >> 2) & 1) wire |= 4;    // Warn -- the ABS lamp on this machine
+    if ((lamps >> 0) & 1) wire |= 8;    // Prot
+    char compact[64];
+    snprintf(compact, sizeof(compact), "%s|%u", total ? allC : "", wire);
+    SETS(dm1c, compact);
 }
 
 // SOFT (PGN 65242) identity record — mirrors canbus_vin.js / canbus_swid.js.
@@ -2036,7 +2068,8 @@ static void clearLiveValues() {
 }
 
 
-size_t buildStateJson(char *out, size_t cap, bool includeVin) {
+size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
+                      bool includeFw) {
     // includeVin doubles as "this is the MQTT payload".
     const bool ble = !includeVin;
 
@@ -2134,7 +2167,47 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin) {
     // along on MQTT (openHAB wants them once) but stay off the BLE link.
     if (includeVin && st.vin[0])  doc[K("vin","vn")]        = st.vin;
     if (includeVin && st.swid[0]) doc[K("softwareId","si")] = st.swid;
-    if (st.dm1[0])              doc[K("dm1","d1")]          = st.dm1;
+    // Compact on the radio, readable on MQTT -- the same split as the keys.
+    // BLE has 514 bytes and cannot fragment; MQTT has no such limit and a person
+    // may be reading it on a sitemap.
+    char dm1Trim[64];
+    if (ble && st.dm1c[0]) {
+        const char *src = st.dm1c;
+        if (dm1Max && strlen(src) > dm1Max) {
+            // Drop whole faults from the end, and never mark the cut.
+            //
+            // Two deliberate differences from the readable form above. It cuts
+            // mid-string and appends an ellipsis, which is right for a person
+            // reading a sitemap; here a half-written SPN would parse as a
+            // different, real fault number, and an ellipsis would parse as
+            // nothing at all. Only whole "spn:fmi:oc" groups are dropped, so
+            // what arrives is always a shorter true list rather than a
+            // corrupted one. The lamp bits after the bar are never dropped --
+            // they are what lights the cluster icons, and they are four bytes.
+            const char *bar = strchr(src, '|');
+            const size_t lampLen = bar ? strlen(bar) : 0;
+            const size_t room = (dm1Max > lampLen) ? dm1Max - lampLen : 0;
+            size_t cut = 0;
+            for (size_t i = 0; i < room && src[i] && src[i] != '|'; i++)
+                if (src[i] == ',') cut = i;      // last whole fault that fits
+            snprintf(dm1Trim, sizeof(dm1Trim), "%.*s%s",
+                     (int)cut, src, bar ? bar : "");
+            src = dm1Trim;
+        }
+        doc[K("dm1","d1")] = src;
+    } else if (st.dm1[0]) {
+        // Trimmed with an ellipsis when a cap is given, so a reader can see it
+        // happened rather than wondering where the rest went.
+        if (dm1Max && strlen(st.dm1) > dm1Max) {
+            char cut[sizeof(st.dm1)];
+            size_t keep = dm1Max > 3 ? dm1Max - 3 : 0;
+            memcpy(cut, st.dm1, keep); cut[keep] = 0;
+            strncat(cut, "...", sizeof(cut) - keep - 1);
+            doc[K("dm1","d1")] = cut;
+        } else {
+            doc[K("dm1","d1")] = st.dm1;
+        }
+    }
     // dm1Raw is omitted from the BLE payload for the same reason the VIN
     // is: a GATT notification carries at most MTU-3 bytes, 514 at the
     // 517 we negotiate, and the JSON has to fit in one. With tyres
@@ -2156,7 +2229,9 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin) {
     // first thing anyone asks for when a phone and a bike disagree — a client
     // that cannot say which firmware it is talking to makes every report of odd
     // behaviour start with a guess.
-    doc[K("fw","fw")] = FW_VERSION;
+    // Static for the life of a boot, and twenty-one bytes of a notification
+    // that has 514. Sent on connect and then rarely; the app remembers it.
+    if (includeFw) doc[K("fw","fw")] = FW_VERSION;
 
     return serializeJson(doc, out, cap);
 }

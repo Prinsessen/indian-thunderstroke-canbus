@@ -15,6 +15,29 @@ sent back up or they are lost on the next refresh.
 | Firmware source | `/etc/openhab/indian-canbus` |
 | Local working copy | `C:\SpringfieldAndroid\indian-canbus-app` |
 
+### Copying source into this repository
+
+The server tree is the one that runs on the bike; this repository is a published
+copy of it. Files move **server → repository**, never the other way.
+
+One line differs on purpose and must be re-applied every time `main.cpp` is
+copied across:
+
+```c
+// server                                    // here
+"http://10.0.5.x:8080/static/..."            "http://192.0.2.10:8080/static/..."
+```
+
+`192.0.2.0/24` is TEST-NET-1, the range reserved for documentation, so it is
+obviously not a real address to anyone reading it. The server's own address is
+not secret in any serious sense, but it is house infrastructure and there is no
+reason for it to be on the internet.
+
+**Check the diff after copying, not before.** On 2026-09-05 three firmware files
+were copied across in one command and the real address went with them; it was
+caught by reading `git diff` before committing, which is the only reason it is
+not in the history. `git diff` before `git commit`, every time.
+
 ---
 
 ## The everyday one

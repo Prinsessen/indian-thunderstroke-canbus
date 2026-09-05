@@ -248,9 +248,11 @@ Verify the version *inside the binary* with `strings` before flashing.
 MQTT reconnect, and a reconnect storm was read as a reboot loop for hours. Use
 `uptime` and `reset` from `meta` instead.
 
-**The BLE state JSON has a hard 514-byte ceiling** and cannot fragment. It is
-already at 452 in ordinary use. Adding fields is not free; [PROTOCOL.md](PROTOCOL.md) has the
-budget and the next lever.
+**The BLE state JSON has a hard 514-byte ceiling** and cannot fragment. Worst
+case is 509 — five bytes of margin, with fault codes already compacted to numbers
+and the firmware version already sent rarely. Adding a field is not free; run
+`python3 tools/ble_budget.py` before you do. [PROTOCOL.md](PROTOCOL.md) has the
+budget and what gets sacrificed when it still does not fit.
 
 **Landscape has its own layout files.** Three views shipped portrait-only in one
 day. Check `layout-land/` every single time.

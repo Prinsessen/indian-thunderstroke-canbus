@@ -33,6 +33,9 @@
 #ifndef BLE_FAST_MS
 #define BLE_FAST_MS 100
 #endif
+#ifndef BLE_FW_MS
+#define BLE_FW_MS 30000
+#endif
 #ifndef BLE_JSON_MS
 #define BLE_JSON_MS 1000
 #endif
@@ -61,6 +64,7 @@ static NimBLECharacteristic *gChSvc   = nullptr;
 static bool     gPaired    = false;   // connected AND encrypted
 static uint32_t gLastFast  = 0;
 static uint32_t gLastJson  = 0;
+static uint32_t gLastFw    = 0;
 
 // ---------------------------------------------------------------------------
 // Server callbacks
@@ -90,6 +94,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
             return;
         }
         gPaired = true;
+        gLastFw = 0;        // a reconnecting app gets the version immediately
         Serial.println("[ble] paired, link encrypted");
     }
 };
@@ -252,6 +257,9 @@ bool bleClientConnected() {
 // flagsValid exists because every switch is tri-state in VehState (-1 unknown).
 // Without it the app could not tell "brake released" from "never seen a brake
 // message", and would show a confident RELEASED on a bike that never reported.
+// A GATT notification carries ATT_MTU minus 3, and we negotiate the 517 maximum.
+#define BLE_STATE_MAX 514
+
 static void buildFastPacket(const VehState &st, uint8_t *out) {
     uint16_t rpm = isnan(st.rpm)   ? FAST_U16_UNKNOWN : (uint16_t)lroundf(st.rpm);
     uint16_t spd = isnan(st.speed) ? FAST_U16_UNKNOWN : (uint16_t)lroundf(st.speed * 10.0f);
@@ -315,7 +323,14 @@ void bleUpdate(const VehState &st) {
         // Same serialiser MQTT uses, minus the VIN — one decode path, so the
         // app and openHAB can never disagree about what a value means.
         char payload[900];
-        size_t n = buildStateJson(payload, sizeof(payload), false /*includeVin*/);
+        // The firmware version is static for the life of a boot and costs
+        // twenty-one bytes of a notification that has 514. Sent on connect, so
+        // the app has it immediately, and then once every half minute in case a
+        // notification was missed; the app remembers the last value it saw.
+        bool withFw = (gLastFw == 0) || (now - gLastFw >= BLE_FW_MS);
+        if (withFw) gLastFw = now;
+        size_t n = buildStateJson(payload, sizeof(payload), false /*includeVin*/,
+                                  0, withFw);
         // A GATT notification carries at most ATT_MTU-3 bytes and the stack
         // truncates silently past that, which would hand the app a JSON object
         // cut off mid-string -- unparseable, and with no error anywhere to say
@@ -323,9 +338,51 @@ void bleUpdate(const VehState &st) {
         // and dm1Raw are left out; see buildStateJson), but it grows with tyre
         // readings and the length of an active fault list, so say so out loud
         // if it ever gets close rather than discovering it on a ride.
-        if (n > 500) {
-            Serial.printf("[ble] WARNING state JSON %u bytes, near the %d-byte "
-                          "notification limit\n", (unsigned)n, 514);
+        // If it does not fit, shorten the fault list until it does -- never
+        // send it oversized.
+        //
+        // The old guard printed a warning to a serial port nobody is watching on
+        // a ride and then sent the payload anyway. The stack truncates past 514
+        // in silence, so the app received JSON cut off mid-string: unparseable,
+        // with no error anywhere to say why. That failed exactly when it mattered
+        // most, because a clean bike is far under the limit and it is the fault
+        // list that overflows it.
+        //
+        // Measured 2026-09-05: everything except dm1 is 468 bytes, leaving 38
+        // characters for a fault summary whose lamp section alone is 34. There
+        // is no room for a single fault. The real fix is the compact DM1
+        // encoding -- SPN, FMI and count as numbers with the lamps as bits --
+        // and it is now required rather than an optimisation. This is the net
+        // underneath until that lands.
+        //
+        // Losing the tail of a fault list is a poor outcome. Losing the entire
+        // state, silently, is a much worse one, and the banner reads the first
+        // fault anyway.
+        // Give up the firmware version before giving up a fault. Both cannot
+        // fit alongside four faults, and of the two the version is the one the
+        // app already has: it caches it, and it cannot change without a reboot.
+        // Dropping a fault instead would make the app's fault list lose an entry
+        // for one tick every half minute and then get it back -- a flicker on
+        // the exact screen a rider is looking at when something is wrong.
+        if (n > BLE_STATE_MAX && withFw) {
+            n = buildStateJson(payload, sizeof(payload), false, 0, false);
+            gLastFw = 0;        // not actually sent; try again next tick
+            withFw = false;
+        }
+        if (n > BLE_STATE_MAX && st.dm1c[0]) {
+            const size_t over = n - BLE_STATE_MAX;
+            const size_t len  = strlen(st.dm1c);   // dm1c is what BLE carries
+            const size_t keep = (len > over) ? len - over : 1;
+            n = buildStateJson(payload, sizeof(payload), false, keep, withFw);
+            Serial.printf("[ble] state JSON was %u bytes; fault list trimmed to fit %d\n",
+                          (unsigned)(n + over), BLE_STATE_MAX);
+        }
+        if (n > BLE_STATE_MAX) {
+            // Still too long with no fault list to give up. Send nothing rather
+            // than something unparseable; the fast packet keeps working.
+            Serial.printf("[ble] state JSON %u bytes with no dm1 to trim -- DROPPED\n",
+                          (unsigned)n);
+            n = 0;
         }
         if (n > 0) {
             gChState->setValue((const uint8_t *)payload, n);

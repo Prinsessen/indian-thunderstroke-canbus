@@ -490,53 +490,87 @@ in [DECODE-PLAN.md](DECODE-PLAN.md).
 
 ---
 
-## Payload budget, and the next lever
+## Payload budget
 
 A GATT notification carries **ATT_MTU minus 3** bytes and cannot fragment. We
 negotiate 517, the BLE maximum, so **514 bytes** is a hard ceiling — there is no
-larger MTU to ask for.
+larger MTU to ask for. Past it the stack truncates in silence: the app receives
+JSON cut off mid-string, cannot parse it, and stops updating while the cluster
+carries on from the binary frame. Nothing anywhere reports an error. The first
+sign on a ride would be tyre pressures that never change.
 
-Measured 2026-09-04 with every field the firmware can emit:
+Measure it with `python3 tools/ble_budget.py`, run from the firmware
+directory — `indian-canbus/` on the server, `firmware/` in the public
+repository. The tool reads the field list out
+of `buildStateJson` in `main.cpp` and supplies only the worst-case width of each
+value, so a field added to the firmware without a width is a hard error rather
+than a silent gap in the estimate.
 
-| | long keys | short keys |
-|---|---|---|
-| ordinary ride, no fault | 560 | 452 |
-| two active faults | 583 | 475 |
-| four faults, all lamps lit | 622 | **514** |
+Worst case — every field populated at its widest, 2026-09-05:
 
-The long-key column is why the payload moved to two-letter keys on the radio
-that night: it was already over the limit for an ordinary ride with the tyres
-reporting, and the failure is silent — the stack truncates, the app cannot
-parse, and it stops updating while the cluster carries on from the binary frame.
-The first sign would have been tyre pressures that never changed.
+| active faults | readable, `fw` always | compact, `fw` always | compact, `fw` rarely |
+|---|---|---|---|
+| 0 | 762 | 486 | 465 |
+| 1 | 772 | 497 | 476 |
+| 2 | 795 | 508 | 487 |
+| 4 | 841 | 530 | **509** |
 
-Short keys bought room, but the worst realistic case now sits **exactly on the
-line**. About four ordinary fields remain; one costs roughly 13 characters.
+These are worse than the 2026-09-04 figures this section used to quote (560 /
+583 / 622 against 452 / 475 / 514). Those were a realistic ride; these assume
+every optional field present at its widest value at once. The pessimistic number
+is the one worth budgeting against, because the payload only overflows on the day
+something is wrong.
 
-### The next lever: send fault codes as numbers
+The right-hand column is what ships. Two changes got it there.
 
-`dm1` is the last large consumer. Four active faults written as sentences is
-about 115 characters — a quarter of the whole payload — to say something the app
-can already say for itself:
+### Fault codes as numbers on the radio
+
+`dm1` was the largest consumer. Four faults written as sentences is about 115
+characters — a quarter of the payload — to say something the app can already say
+for itself:
 
 ```
-SPN 520250 FMI 8 (x2) | SPN 904 FMI 12 | MIL:ON Stop:off Warn:ON Prot:off
+SPN 520250 FMI 8 (x2); SPN 904 FMI 12 (x1) | MIL:ON Stop:off Warn:ON Prot:off
+520250:8:2,904:12:1|5
 ```
+
+SPN, FMI and occurrence count per fault, then the lamps as bits: **MIL 1, Stop 2,
+Warn 4, Prot 8**. Note that this is *not* the internal bit order — J1939 packs
+the lamps with MIL highest, and the firmware remaps them in one place
+(`decodeDM1`), so exactly one function knows both orders.
 
 The app holds 115 manual SPNs, 51 generic J1939 entries, 264 P-codes and 23 FMI
-descriptions. It does not need the words; it needs the numbers.
+descriptions; it does not need the words, it needs the numbers. openHAB keeps the
+readable form over MQTT, where a person reads it on a sitemap and there is no
+limit, so `canbus_dtc.js` and the sitemap were untouched. `Dtc.kt` parses both
+formats and is tested against both in `DtcFormatTest`.
 
-```
-520250:8:2,904:12:1|1010
-```
+### The firmware version, sent rarely
 
-SPN, FMI and occurrence count per fault, then the four lamps as bits. That is
-about 35 characters where there were 115, and it removes the ceiling problem
-rather than deferring it.
+`fw` is static for the life of a boot and costs 21 bytes of 514. It is sent on
+connect — and on every reconnect, so a dropped link recovers it at once — and
+then once every 30 s in case a notification was missed. The app caches the last
+value it saw.
 
-**What it costs.** The app must format the sentence it currently receives, which
-it is already able to do — `Dtc.describe` and `Dtc.summary` exist and are
-tested. openHAB keeps the long form over MQTT, where a human reads it and there
-is no limit, so `canbus_dtc.js` and the sitemap are untouched. Firmware and app
-change together, and both sides should be generated from one definition, the way
-the short keys were.
+### What happens if it still does not fit
+
+Two nets, in order, and the order is the point:
+
+1. **Drop `fw`.** At four faults the version and the fault list cannot both fit.
+   The version is the one the app already has and which cannot change without a
+   reboot; dropping a fault instead would make the fault list lose an entry for
+   one tick every half minute and get it back — a flicker on exactly the screen
+   a rider is looking at when something is wrong.
+2. **Drop whole faults from the end.** Never a partial one: a half-written SPN
+   would parse as a different, real fault number. The lamp bits after the bar are
+   never dropped — they are four bytes and they are what lights the cluster
+   icons. Unlike the readable form on MQTT, the compact form is cut without an
+   ellipsis, because an ellipsis would parse as nothing at all.
+
+If neither is enough the payload is **dropped rather than sent oversized**. An
+earlier version warned to a serial port nobody is watching on a ride and sent it
+anyway; that failed exactly when it mattered, because it is the fault list that
+overflows and a clean bike is far under the limit.
+
+About four ordinary fields of headroom remain at four faults; one costs roughly
+13 characters. Run the tool before adding one.

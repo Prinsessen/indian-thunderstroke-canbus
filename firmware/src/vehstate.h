@@ -32,6 +32,9 @@ struct VehState {
     char  vin[18];       // 17-char VIN (PGN 65242 SOFT, TP/BAM)
     char  swid[112];     // full software/ID record ('|'-joined)
     char  dm1[112];      // decoded active DTC summary (PGN 65226)
+    // The same summary as numbers, for BLE, where 514 bytes is a hard ceiling
+    // and the readable form does not fit. "520250:8:2,904:12:1|5"
+    char  dm1c[64];
     char  dm1Raw[20];    // DM1 first-frame raw hex
     // brakeFront and horn were removed 2026-09-05. Neither was ever assigned
     // after their decodes were withdrawn, so both shipped as permanently absent
@@ -61,4 +64,8 @@ struct VehState {
  *
  * Returns the number of bytes written (excluding the NUL), as serializeJson().
  */
-size_t buildStateJson(char *out, size_t cap, bool includeVin);
+// dm1Max caps the fault-summary string; 0 means no cap. It exists because a
+// GATT notification cannot fragment, and the fault list is the one field whose
+// length is unbounded -- see the trimming in ble.cpp.
+size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max = 0,
+                      bool includeFw = true);
