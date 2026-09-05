@@ -148,12 +148,17 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `rpm` | int | rpm | |
 | `throttle` | int | % | |
 | `gear` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
+| `gearGlitches` | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly |
 | `coolant` | int | °C | **Cylinder head temperature.** The key is a misnomer kept for continuity: this engine is air-cooled and has no coolant, and no oil temperature sensor either — the manual lists exactly one engine temperature sensor, the CHT on the front cylinder head. |
-| `speed` | float | km/h | 1 decimal |
+| `speed` | float | km/h | 1 decimal. From the ABS module, and the figure the dash shows |
+| `speedFront` | float | km/h | The front wheel, from the same module. Kept separate on purpose: comparing the two is how a failing wheel-speed sensor is caught before the ABS decides anything is wrong |
 | `fuel` | int | % | |
 | `odometer` | int | km | |
+| `svcKm` | int | km | Odometer at the last service. Held in the ESP32's NVS, not on the bike |
 | `trip` | float | km | 1 decimal |
-| `fuelEconomy` | float | l/100 km | 1 decimal |
+| `fuelEconomy` | float | l/100 km | 1 decimal, the bike's own average |
+| `fuelEconInst` | float | l/100 km | Instantaneous |
+| `fuelRate` | float | L/h | SPN 183. The discriminator for anything that might be injector duty |
 | `battery` | float | V | 1 decimal. >13.5 V ⇒ engine running/charging |
 | `ambient` | float | °C | 1 decimal |
 | `tyreFront` | float | PSI | 1 decimal |
@@ -167,6 +172,13 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `cruiseSw` | string | | `"SET/DEC"`, `"RES/ACC"` or `"none"` — the legend printed on the rocker |
 | `hazard` | string | | `"ON"` / `"OFF"` |
 | `security` | string | | `"OK"`, `"SEARCHING"`, `"NOT FOUND"` — the key fob |
+| `ignition` | string | | `"ON"` / `"OFF"`. Derived from whether the bus is alive, not from a signal -- pressing wake is what starts the traffic |
+| `grips` | int | | Heated grips, 0 for off through 10. Ten detents, and the byte moves in exact steps of 25 |
+| `gripTempL`, `gripTempR` | float | °C | What each grip has actually reached. Left is byte 0 -- confirmed by holding a bare hand on it with the heat off, which is the only way to be sure |
+| `lean` | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it |
+| `stand` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`.** The sidestand state is not on this bus. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
+| `wheels` | string | | `"OK"`, `"FRONT LOST"`, `"REAR LOST"`. Continuous comparison of the two wheel speeds |
+| `wheelBlips`, `wheelBlipsRear` | int | | Brief dropouts counted per sensor since the board was last erased. Survives reboots and OTA |
 | `headlight` | string | | `"High"` / `"Low"` / `"Off"` |
 | `indLeft` | string | | `"ON"` / `"OFF"` |
 | `indRight` | string | | `"ON"` / `"OFF"` |
