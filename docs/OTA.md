@@ -66,11 +66,15 @@ outbound connection to fetch the image, which sails straight through NAT.
    library-version note below):
    ```bash
    cd /etc/openhab/indian-canbus
-   ~/.platformio/penv/bin/pio run
+   ~/.platformio/penv/bin/pio run -e sniffer-t2can
    ```
+   The environment name matters. The board moved to the LilyGO T-2CANFD and
+   `sniffer-t2can` is the only environment that still builds; a bare `pio run`
+   picks up whatever is listed first and writes it to a different path than the
+   one step 3 copies from.
 3. **Deploy** the image to the web root that the device downloads from:
    ```bash
-   cp .pio/build/sniffer/firmware.bin \
+   cp .pio/build/sniffer-t2can/firmware.bin \
       /etc/openhab/html/indian-canbus-firmware.bin
    ```
    Verify it's served:
@@ -90,7 +94,8 @@ outbound connection to fetch the image, which sails straight through NAT.
    - → `Running 2026.08.16-3` after the reboot
    - `Running Version` (CanBus_FW_Version) flips to the new version too.
 
-Download of ~1.26 MB takes ~10 s on LAN, longer on a slow cellular link.
+Download of ~1.38 MB takes ~10 s on LAN, longer on a slow cellular link.
+Measured 2026-09-05: from trigger to `Running <version>` was under 25 seconds.
 
 > If the UI still shows the *old* version after the reboot, it's browser cache.
 > Hard-refresh with **Ctrl+Shift+R**. The item states (and MQTT) are the truth.
@@ -176,7 +181,7 @@ pio run -e sniffer-usb -t upload -t monitor \
 The deployed OTA image **must be built on the openHAB server**, whose PlatformIO
 has arduino-esp32 **3.3.9** (WiFi/HTTPUpdate/WiFiClientSecure `3.3.9`). A laptop
 with the older **2.0.0** libraries produces a *different, smaller* binary
-(~1.03 MB vs ~1.26 MB). Always build + deploy the OTA `.bin` from the server so
+(~1.03 MB vs ~1.38 MB). Always build + deploy the OTA `.bin` from the server so
 what you serve matches what you tested. USB flashing from a laptop is fine for
 emergency recovery, but treat the **server build as the source of truth** for
 OTA.
