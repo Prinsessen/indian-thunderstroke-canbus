@@ -34,7 +34,7 @@ send a command, clear a fault, or change a setting on the bike.
 | **Wheel-speed sensor monitoring** | Both sensors compared continuously; brief dropouts counted and kept across reboots |
 | **Gear-change logging** | Every change with its context, and a tally of the implausible ones |
 | **Lean angle** | Upright, resting on the stand, or lying down |
-| **Grip heater level and both grip temperatures** | |
+| **Grip heater level and both grip temperatures** | The level in its ten detents, and what each grip has actually reached — separately, so you can see whether the heat is arriving rather than only what you asked for. Which side is which was settled by holding a bare hand on one grip with the heat off |
 | **Cylinder head temperature** | The engine's only temperature sensor. This bike is air-cooled and has no oil temperature sensor at all |
 | **A derived cruise-control state** | See below — the bike does not transmit it |
 
