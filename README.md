@@ -78,6 +78,66 @@ Only the rule is inferred. Every input is measured, and the published value says
 
 ---
 
+## The app
+
+An instrument cluster rather than a data readout. Around 10,000 lines of Kotlin,
+plain Views and Canvas — no Compose — because everything on screen is a drawn
+instrument and a layout engine has nothing to contribute to a needle.
+
+**Four pages.**
+
+| | |
+|---|---|
+| **Ride** | Speedometer with the gear window and turn arrows on the face, a digital rev readout with the ignition and ABS lamps beside it, fuel, grip heaters, and a row of tell-tales |
+| **Tyres** | Both wheels: what is in the tyre now, what that would be cold, the temperature that separates them, and the target. Plus a slow-leak trend measured across weeks on cold-corrected figures, since raw readings taken at different temperatures mostly describe the weather |
+| **Machine** | Cylinder head, battery, ambient, odometer, service interval, fuel economy |
+| **Heat** | The rider's own clothing — see below |
+
+**A fault banner across the top of every page.** The diagnostics were decoded and
+then buried on a page nobody visits while a fault is developing, which is the one
+time they matter. Six conditions in the order a rider wants them: what could put
+you down, then what will strand you, then what needs planning. It is deliberately
+not dismissible — a warning you can swipe away is one you will swipe away.
+
+**Three lamp states, not two.** Every switch is lit, dark, or *struck through*
+when the bus has never mentioned it. A dark lamp reads as "not active", which is
+a claim the app has no business making about something it has never heard from.
+
+**Two transports.** A packed eight-byte BLE frame at 10 Hz for the things that
+move — revs, speed, throttle, gear, switch flags — and a JSON state at 1 Hz for
+everything else. Over WiFi the same JSON arrives by MQTT. The fast frame carries
+a second byte of *validity* flags for exactly the reason above.
+
+**It remembers what the bike cannot.** The CAN interface is listen-only, so the
+motorcycle's own trip meter can never be reset from here — the app keeps its own.
+Tyre readings, their trend, the service interval and the ride distance all live on
+the phone.
+
+---
+
+## Heated clothing
+
+The app also drives **Keis heated jacket and trousers** over Bluetooth, because
+they are the other half of being warm and there is no reason to carry a second
+app for them.
+
+The protocol is undocumented. It was recovered by decompiling *Keis iControl* —
+which under the EU Software Directive's interoperability provision is a permitted
+purpose, and which proved both faster and more reliable than sniffing packets: a
+capture shows what was sent once, the source constants show what the firmware was
+written to accept. [`docs/KEIS-PROTOCOL.md`](docs/KEIS-PROTOCOL.md) documents what
+was found.
+
+**Three levels, not a percentage.** The hardware has off, green, amber and red.
+Modelling it as 0-100 would let the app ask for 45%, which does not exist, and the
+driver would then round to something the rider never chose.
+
+**Automatic control against ambient**, with hysteresis, and it watches the supply:
+the controllers run off the bike, so the app knows when the engine is off and the
+heat is coming out of the battery.
+
+---
+
 ## Layout
 
 ```
@@ -85,6 +145,18 @@ firmware/     ESP32-S3 (LilyGO T-2CANFD, MCP2518FD). PlatformIO.
 app/          Android cluster. Kotlin, plain Views and Canvas, no Compose.
 docs/         The protocol, the decode plan, and the method.
 ```
+
+| document | what it is |
+|---|---|
+| [`PROTOCOL.md`](docs/PROTOCOL.md) | Every field, over MQTT and over BLE, and what each one means |
+| [`DECODE-PLAN.md`](docs/DECODE-PLAN.md) | What is known, what is not, what has been ruled out and why |
+| [`GARAGE-RUN.md`](docs/GARAGE-RUN.md) | Eight test sessions written up as they happened, including the ones that failed and why |
+| [`UNEXPLORED-BYTES.md`](docs/UNEXPLORED-BYTES.md) | Every byte that varies and is not yet read |
+| [`KEIS-PROTOCOL.md`](docs/KEIS-PROTOCOL.md) | The heated clothing BLE protocol |
+| [`DTC-CODES.md`](docs/DTC-CODES.md) | The fault code tables |
+| [`FLASHING.md`](docs/FLASHING.md) · [`OTA.md`](docs/OTA.md) | Getting firmware onto the board, by cable and over the air |
+| [`BUILD-SETUP.md`](docs/BUILD-SETUP.md) · [`WORKFLOW.md`](docs/WORKFLOW.md) | Building the app, and the traps that cost an afternoon each |
+| [`SKILLS.md`](docs/SKILLS.md) | A handover note: the machine, the bus, the method, and eight ways to be wrong |
 
 **Start with [`docs/PROTOCOL.md`](docs/PROTOCOL.md)** — every field, over MQTT and
 over BLE, and what each one actually means.
