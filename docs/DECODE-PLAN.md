@@ -227,9 +227,16 @@ broadcast. There are exactly seven in the whole manual:
 | 520329 | **Operator Switch Status (pOSS1)** | P1063 | **Partly answered 2026-09-05.** PGN 65381 from SA 39 carries a switch layer: byte 1 bits 2/4/6 are the indicator switch and its cancel, byte 2 bit 0 is hazard held for its exact duration. Whether that message IS pOSS1 is unproven -- it is proprietary, not the standard's parameter. |
 | 520330 | **Immobilizer** | P106A | **Found 2026-09-05.** PGN 65386 SA 39 byte 0, bits 6-7: `00` authorised, `01` searching, `10` fob not detected. Proved by a controlled pair -- fob in a pocket resolves in one second, fob left indoors sits searching for twenty and then reports failure while the bike shuts down -- and the owner watched all three states on the display. As with pOSS1, whether this IS SPN 520330 cannot be shown from a proprietary PGN; what is certain is that it carries the state the security lamp shows. |
 
-Five of seven were already shipped, which is a fair independent check on the
-work so far. Both of the other two were then hunted the same day: the immobiliser
-was found, and the switch layer behind pOSS1 was partly found. See the rows.
+**Six of seven are shipped.** Five already were when this table was written,
+which is a fair independent check on the work so far. The immobiliser was then
+hunted, found and shipped the same day -- firmware, openHAB and the app's alert
+banner -- so only pOSS1 is outstanding.
+
+And even that is not empty-handed: PGN 65381 from SA 39 carries a switch layer
+where pOSS1 predicted one, and the hazard warning decoded from that message is
+shipped too. What is missing is not a signal but a name -- proof that the
+proprietary message IS the standard's parameter, which a proprietary layout
+cannot give.
 
 **SPN 5582 is a quiet confirmation.** The lean value was found empirically in
 PGN 2304 and named "tilt" because that is what it looked like. The manual calls
