@@ -100,6 +100,34 @@ Measured 2026-09-05: from trigger to `Running <version>` was under 25 seconds.
 > If the UI still shows the *old* version after the reboot, it's browser cache.
 > Hard-refresh with **Ctrl+Shift+R**. The item states (and MQTT) are the truth.
 
+### If the phone will not stay connected afterwards
+
+**Forget the device in Android's Bluetooth settings — not just in the app — and
+pair again with the passkey.**
+
+Android caches the GATT service table for every bonded device and does not
+re-read it on reconnect. When the ESP32 reboots mid-connection, which is exactly
+what an OTA does, that cache can be left stale, and the phone then writes to
+handles that no longer mean what it thinks. The symptom is specific:
+
+```
+CCCD write failed (133) — pairing may be required
+Disconnected (status 133)   /  (status 8)  /  (status 147)
+```
+
+connecting fine, negotiating MTU 517, and dropping within seconds to a minute.
+Once, MTU came back as 23.
+
+This is Android's cache, not a firmware fault — nothing here deletes bonds, and
+`setSecurityAuth` has bonding on. Forgetting the device is what clears it.
+
+Seen 2026-09-05 after flashing 2026.09.05-56: fifteen minutes of connect-and-drop
+across six attempts. Re-pairing fixed it outright, and the link then held through
+ignition on *and* ignition off with no dropouts. Worth knowing because the
+obvious suspects — the new firmware, and the bike's ignition being off — were
+both wrong, and the ignition theory in particular looked convincing: the one long
+connection of the evening happened to span the only ignition-on window.
+
 ---
 
 ## openHAB pieces
