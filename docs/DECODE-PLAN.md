@@ -224,12 +224,12 @@ broadcast. There are exactly seven in the whole manual:
 | 5582 | Static Roll Angle | P1062 | **Shipped** — this is almost certainly our PGN 2304 lean byte |
 | 520300 | Tire Pressure Sensor (Front) | C1085 | **Shipped** — PGN 65268 |
 | 520302 | Tire Pressure Sensor (Rear) | C1090 | **Shipped** — PGN 65268 |
-| 520329 | **Operator Switch Status (pOSS1)** | P1063 | **Not looked for.** See Tier 1 below. |
-| 520330 | **Immobilizer** | P106A | **Not looked for.** |
+| 520329 | **Operator Switch Status (pOSS1)** | P1063 | **Partly answered 2026-09-05.** PGN 65381 from SA 39 carries a switch layer: byte 1 bits 2/4/6 are the indicator switch and its cancel, byte 2 bit 0 is hazard held for its exact duration. Whether that message IS pOSS1 is unproven -- it is proprietary, not the standard's parameter. |
+| 520330 | **Immobilizer** | P106A | **Found 2026-09-05.** PGN 65386 SA 39 byte 0, bits 6-7: `00` authorised, `01` searching, `10` fob not detected. Proved by a controlled pair -- fob in a pocket resolves in one second, fob left indoors sits searching for twenty and then reports failure while the bike shuts down -- and the owner watched all three states on the display. As with pOSS1, whether this IS SPN 520330 cannot be shown from a proprietary PGN; what is certain is that it carries the state the security lamp shows. |
 
-Five of seven were already found, which is a fair independent check on the work
-so far. Two were not, and one of them is the most interesting lead in this
-document.
+Five of seven were already shipped, which is a fair independent check on the
+work so far. Both of the other two were then hunted the same day: the immobiliser
+was found, and the switch layer behind pOSS1 was partly found. See the rows.
 
 **SPN 5582 is a quiet confirmation.** The lean value was found empirically in
 PGN 2304 and named "tilt" because that is what it looked like. The manual calls
@@ -605,13 +605,20 @@ bike opened, and do it from a fob unlock rather than a code entry. That answers
 the useful question -- did someone just open my motorcycle -- without recording
 the secret.
 
-**Add the immobiliser to this tier.** SPN 520330 faults with FMI 9, "Abnormal
-Update Rate" (P106A), so it is one of the seven signals the manual confirms is
-broadcast periodically — and it belongs with the fob work rather than on its
-own, because the immobiliser is what the fob talks to. If the message carries an
-authorised/not-authorised state, it is the cleanest possible answer to "is the
-key present", far better than inferring presence from what the bike will let you
-do. Hunt it in the same session as the rest of the fob work.
+**The immobiliser was hunted here and FOUND — 2026-09-05.** It is not in this
+tier any more; the full write-up is in GARAGE-RUN.md, run 5.
+
+It is **PGN 65386 SA 39 byte 0, bits 6-7**: `00` authorised, `01` searching,
+`10` fob not detected. A controlled pair settled it — fob in a pocket resolves
+inside one second, fob left indoors sits at searching for twenty and then reports
+failure as the bike shuts down — and the manual gives the same twenty seconds and
+describes the dash lamp as lit while searching and flashing when not detected,
+which is what the owner saw in each run.
+
+**It is also what the withdrawn horn decode had been reading.** Byte 0 bit 6 was
+called the horn in August and withdrawn for lighting whenever the wake button was
+pressed with no sound. It was the security system looking for the fob, and
+pressing wake is exactly when it looks.
 
 **And this one comes with a visible control, which is rare here.** The owner
 reports a shield telltale on the instrument cluster for the immobiliser. That
@@ -667,10 +674,17 @@ lamp, not merely that something is wrong.
 
 ### Tier 2d — the Operator Switch Status message (stationary, ten minutes)
 
-**From the manual cross-reference, 2026-09-05, and the best lead in this
-document.** SPN 520329, "Operator Switch Status (pOSS1)", faults with FMI 9
-"Abnormal Update Rate" (P1063), which means the ECU expects a periodic message
-carrying the state of the operator's switches. We have never looked for it.
+**From the manual cross-reference, and partly answered the same day.** SPN
+520329, "Operator Switch Status (pOSS1)", faults with FMI 9 "Abnormal Update
+Rate" (P1063), which means the ECU expects a periodic message carrying the state
+of the operator's switches.
+
+**A switch layer was found where this predicted one** — see GARAGE-RUN.md, runs
+1 and 2. PGN 65381 from SA 39 carries the indicator switch and its cancel in
+byte 1 bits 2, 4 and 6, and the hazard warning in byte 2 bit 0, held for the
+exact duration of the flashing. What is NOT established is that this message is
+pOSS1: it is proprietary, and the standard's parameter cannot be identified from
+a proprietary layout. The lead below stands for the rest of the switches.
 
 **The candidate is PGN 65381 from SA 39** — the message the headlight already
 comes from. Its shape is right where nothing else on the bus is: few distinct
