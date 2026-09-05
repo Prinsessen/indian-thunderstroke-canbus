@@ -2,7 +2,7 @@
 
 Everything a client (Android app, script, nRF Connect) needs to talk to the
 firmware, written so it can be implemented **without reading the firmware
-source**. Implemented by [src/ble.cpp](src/ble.cpp); the rationale for the design
+source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
 lives in the "BLE phone link" section of [README.md](README.md).
 
 Firmware from `2026.09.02-2` onwards. Verified on the bike 2026-09-02.
@@ -294,7 +294,7 @@ factory flash wipes.
 
 ## What the captures corrected, and what they could not
 
-Read back from `captures/tpms_ride_2026-08-15*.log` — four rides, 42,365 frames.
+Read back from four ride captures, 42,365 frames. The captures are not published — they carry the VIN of one motorcycle.
 The TPMS decode those were taken for is correct and untouched.
 
 ### Headlight, PGN 65381 — fixed

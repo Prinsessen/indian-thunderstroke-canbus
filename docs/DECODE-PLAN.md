@@ -2,7 +2,7 @@
 
 A standing, prioritised list of the CAN work still to do on the 2017 Springfield,
 written so a session can be picked up cold. Pairs with
-[REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) (the running log of *how* things
+the private working log (the running record of *how* things
 were found) and [PROTOCOL.md](PROTOCOL.md) (what the firmware publishes today).
 
 > **New here?** [SKILLS.md](SKILLS.md) is the handover note: how the work is
@@ -11,11 +11,13 @@ were found) and [PROTOCOL.md](PROTOCOL.md) (what the firmware publishes today).
 > is the *how*.
 
 Evidence base: **42,365 frames across four captures from 2026-08-15**, in
-[captures/](captures/). Every number below is measured from those files, not
+captures held privately. **They are not in this repository:** they carry the VIN
+and odometer of one specific motorcycle, and nothing in the code needs them.
+Every number below is measured from those files, not
 taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
-Last revised **2026-09-03**.
+Last revised **2026-09-05**, after two days in which the cruise control, the horn, the saddlebag locks, the alarm and the sidestand were all settled -- four of them as nulls.
 
 ---
 
@@ -404,7 +406,7 @@ watched identically: it survived on a good bearing, not on a good gap.
 
 The physics decides what the check can see, and the first version had it wrong.
 These are **2-wire active Hall sensors, current-modulated 7/14 mA**, not passive
-inductive ones -- see `docs/ABS_WHEEL_SPEED_SENSOR_DIAGNOSTIC.md`, written by
+inductive ones -- established from the owner's own service notes, written by
 the owner, an electronics engineer, who had already measured all of it. An
 active sensor's output does not weaken with speed, so a worn sensor does not
 read progressively slow and there is no drift in the wheel ratio to watch for.
@@ -926,7 +928,7 @@ entry below for what happens when that distinction is skipped.
   which is the manufacturer saying it out loud.
 
 - Anything the cluster computes internally — see "Confirmed NOT on the bus" in
-  [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
+  the private working log.
 
 ---
 

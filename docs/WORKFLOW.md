@@ -158,7 +158,7 @@ scp landscape.jpg admin@your-server.example:/etc/openhab/source-code/indian-canb
 scp display.ttf admin@your-server.example:/etc/openhab/source-code/indian-canbus-app/app/src/main/res/font/display.ttf
 ```
 
-Sizes and composition rules: [app/src/main/res/README-artwork.md](app/src/main/res/README-artwork.md).
+Sizes and composition rules are documented alongside the artwork in the private working copy.
 
 ---
 

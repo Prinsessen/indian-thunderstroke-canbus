@@ -6,7 +6,7 @@ permitted purpose — and which turned out to be both faster and more reliable
 than sniffing packets. A capture shows what was sent once; the source constants
 show what the firmware was written to accept.
 
-Implemented by [`KeisBleDevice.kt`](app/src/main/java/dk/agesen/springfield/KeisBleDevice.kt).
+Implemented by [`KeisBleDevice.kt`](../app/app/src/main/java/dk/agesen/springfield/KeisBleDevice.kt).
 
 ---
 

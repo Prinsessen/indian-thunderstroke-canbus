@@ -7,7 +7,7 @@ It deliberately does **not** repeat the reference documents. Those are listed
 below and are the authority on what has been found. This one is about **how the
 work is done, where things live, and what has already cost time.**
 
-Last revised **2026-09-04**, after a day of 37 firmware builds and six signals
+Last revised **2026-09-05**, after a day of 37 firmware builds and six signals
 found.
 
 ---
@@ -86,12 +86,9 @@ the reasoning for each. If you read only one other file, read that one.
 | [NEXT-RIDE.md](NEXT-RIDE.md) | What is waiting on wheels, and the two things that need the rider to do something |
 | [PROTOCOL.md](PROTOCOL.md) | The BLE contract — UUIDs, byte layout, the payload budget |
 | [TOOLING-GAPS.md](TOOLING-GAPS.md) | Three things missing from how we work, and what each has cost |
-| [ABS_WHEEL_SPEED_SENSOR_DIAGNOSTIC.md](../docs/ABS_WHEEL_SPEED_SENSOR_DIAGNOSTIC.md) | Written by the owner, an electronics engineer. **Authoritative on the sensors.** |
 | [OTA.md](OTA.md) · [FLASHING.md](FLASHING.md) | Updating over the air, and recovering a dead board over USB |
-| [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | Session log, older, historical |
 | [README.md](README.md) | Long-form background |
-| [GIT-NOTES.md](GIT-NOTES.md) | How git is used here, for someone new to it — and why the commit log is the real changelog |
-| [../source-code/indian-canbus-app/WORKFLOW.md](../source-code/indian-canbus-app/WORKFLOW.md) | How the app gets from this server to the phone |
+| [../source-code/indian-canbus-app/WORKFLOW.md](WORKFLOW.md) | How the app gets from this server to the phone |
 
 ---
 
@@ -192,7 +189,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 This is the part that matters. The method below found six signals in one day,
 and skipping steps of it is what produced the four that had to be withdrawn.
 
-1. **Inventory from the captures first.** [`captures/`](captures/) holds 42,365 frames
+1. **Inventory from captures first.** The reference set holds 42,365 frames
    from four rides. Which source addresses send the PGN, how many frames, which
    bytes actually vary. A byte constant across all of them carries nothing, and
    `0xFF` is J1939 for "not available" — never mask it into a value.
@@ -311,7 +308,7 @@ sniffer to **transmit**, which means leaving hardware listen-only.
 
 The owner has said she is willing, **after** passive listening is finished,
 documented, the app is current, and a real test ride has happened. That
-sequence is hers and it is the right one. `TX_ENABLED` in [`src/main.cpp`](src/main.cpp) is 0 and
+sequence is hers and it is the right one. `TX_ENABLED` in [`src/main.cpp`](../firmware/src/main.cpp) is 0 and
 stays 0 until she says otherwise, at a moment she chooses, with the engine off
 and a USB cable attached.
 
