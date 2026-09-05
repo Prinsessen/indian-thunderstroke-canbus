@@ -193,6 +193,31 @@ They are permanent vehicle identity, not telemetry, and BLE advertises to
 whoever is within range in a car park. A client must not expect them, and adding
 them back would need a firmware change, not a client one.
 
+### The DM1 lamps, and which one is the ABS lamp
+
+`dm1` ends with the four lamps J1939 defines, e.g. `MIL:off Stop:off Warn:ON
+Prot:off`. They are the bike's own severity judgement and worth reading
+separately from the fault list: a stored code with every lamp dark is a different
+situation from one with Stop lit, and only the machine knows which it is.
+
+| lamp | on this motorcycle's dash |
+|---|---|
+| **MIL** | The engine symbol. *Malfunction Indicator Lamp* is what the acronym means and what it has always been |
+| **Warn** | **The amber ABS lamp.** Established 2026-09-05 by the owner watching the instrument while riding: Warn goes out and follows the ABS lamp as the wheels come up to speed |
+| **Stop** | Almost certainly the red triangle. Not confirmed -- it cannot be provoked without doing real harm, so it waits until it lights on its own |
+| **Prot** | Unobserved |
+
+**The Warn finding closed a question that had stood for weeks.** DM1 had reported
+`Warn:ON` with no active fault behind it, and it looked like a standing warning
+with nothing behind it. It was the ABS self-test, which needs the wheels turning
+and so can never clear on a parked bike -- and every observation until then had
+been of a parked bike. No amount of analysis on stationary captures was going to
+show it; it needed somebody moving, looking at the instrument.
+
+**There is no `abs` field**, and there does not need to be. The app reads
+`Warn:` out of this string and draws the lamp from it, which costs nothing extra
+over BLE because the summary crosses for the fault list anyway.
+
 ### TPMS caveat
 
 Tyre pressure and temperature come from wheel sensors that **only wake once the
