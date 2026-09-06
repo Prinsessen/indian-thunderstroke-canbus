@@ -1,29 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Same disease as the ride page, same cure: landscape has width and no height,
+  so the block of text moves beside the instruments instead of under them.
+
+  Measured 2026-09-06. machine_footer is six stacked lines with generous padding
+  and comes to roughly 147 dp. The fragment gets about 233 dp in landscape once
+  the tab row and the alert banner have taken theirs, so the footer was using
+  63 % of the page and the six gauges were splitting the remaining 86 dp across
+  two rows. That is 43 dp each, which is what the owner described as gauges you
+  have to squint at, and she was being generous.
+
+  Three across in two rows, with the text in a 280 dp column on the right. Each
+  gauge cell becomes about 191 x 116, so the dials go from 43 dp to 116.
+
+  Portrait is untouched and still stacks: it has the height, and the footer reads
+  better full width when there is room for it.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:orientation="horizontal"
     android:padding="10dp">
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
         android:layout_weight="1"
-        android:orientation="horizontal">
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gFuel"    android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gCoolant" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gBattery" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gAmbient" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gFuel"     android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gCoolant"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gBattery"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gAmbient"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gEconNow"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gFuelRate" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        </LinearLayout>
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="horizontal">
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gEconNow" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-        <dk.agesen.springfield.MiniGaugeView android:id="@+id/gFuelRate" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-    </LinearLayout>
-
-    <include layout="@layout/machine_footer" />
+    <ScrollView
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="10dp"
+        android:scrollbars="none">
+        <include layout="@layout/machine_footer" />
+    </ScrollView>
 </LinearLayout>
