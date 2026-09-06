@@ -26,7 +26,7 @@ control at a time and read the bit that flips. No fragile baseline.
 
 USAGE (ignition ON; engine can be off):
     source /etc/openhab/.venv/bin/activate
-    python3 -u /etc/openhab/indian-canbus/tools/switch_watch.py | tee /tmp/canbus_switch.log
+    python3 -u /etc/openhab-firmware/indian-canbus/tools/switch_watch.py | tee /tmp/canbus_switch.log
 
     # background:
     nohup python3 -u .../switch_watch.py > /tmp/canbus_switch.log 2>&1 &

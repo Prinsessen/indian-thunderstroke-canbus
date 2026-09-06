@@ -65,7 +65,7 @@ outbound connection to fetch the image, which sails straight through NAT.
 2. **Build** on the openHAB server (matches the deployed libraries — see the
    library-version note below):
    ```bash
-   cd /etc/openhab/indian-canbus
+   cd /etc/openhab-firmware/indian-canbus
    ~/.platformio/penv/bin/pio run -e sniffer-t2can
    ```
    The environment name matters. The board moved to the LilyGO T-2CANFD and

@@ -95,8 +95,8 @@ the reasoning for each. If you read only one other file, read that one.
 ## 3. The workbench
 
 ```
-/etc/openhab/indian-canbus/          firmware, docs, captures
-/etc/openhab/indian-canbus/src/      main.cpp is ~2,300 lines
+/etc/openhab-firmware/indian-canbus/          firmware, docs, captures
+/etc/openhab-firmware/indian-canbus/src/      main.cpp is ~2,300 lines
 /etc/openhab/source-code/indian-canbus-app/    the Android app
 /etc/openhab/items|things|sitemaps/  the openHAB side
 ```
@@ -110,7 +110,7 @@ the reasoning for each. If you read only one other file, read that one.
 ### Build and flash over the air
 
 ```bash
-cd /etc/openhab/indian-canbus
+cd /etc/openhab-firmware/indian-canbus
 # bump FW_VERSION in src/config.h FIRST -- see the traps below
 pio run -e sniffer-t2can
 strings .pio/build/sniffer-t2can/firmware.bin | grep -o "2026\.[0-9.]*-[0-9]*"   # verify
@@ -152,7 +152,7 @@ method is built on. About 76 MB, seconds over the LAN.
 ```bash
 git clone admin@your-server.example:/etc/openhab openhab
 cd openhab
-scp admin@your-server.example:/etc/openhab/indian-canbus/src/config.h \
+scp admin@your-server.example:/etc/openhab-firmware/indian-canbus/src/config.h \
     indian-canbus/src/
 ```
 

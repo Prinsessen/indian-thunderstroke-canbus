@@ -30,7 +30,7 @@ next refresh.
 |---|---|
 | Server | `admin@your-server.example` (`192.0.2.10`) |
 | App source | `/etc/openhab/source-code/indian-canbus-app` |
-| Firmware source | `/etc/openhab/indian-canbus` |
+| Firmware source | `/etc/openhab-firmware/indian-canbus` |
 | Local working copy | `C:\SpringfieldAndroid\indian-canbus-app` |
 
 ### Copying source into this repository
@@ -241,7 +241,7 @@ longer has. Pairing fails until you forget the device on the phone.
 
 ```powershell
 # fetch
-scp admin@your-server.example:/etc/openhab/indian-canbus/.pio/build/sniffer-t2can/firmware.bin .
+scp admin@your-server.example:/etc/openhab-firmware/indian-canbus/.pio/build/sniffer-t2can/firmware.bin .
 
 # flash over USB (PlatformIO's own python has pyserial; the system one may not)
 ~/.platformio/penv/bin/python ~/.platformio/packages/tool-esptoolpy/esptool.py `

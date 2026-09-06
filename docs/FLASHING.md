@@ -26,7 +26,7 @@ laptop (adjust host/path to your server):
 
 ```bash
 # run on your LOCAL machine
-scp -r <user>@<openhab-server>:/etc/openhab/indian-canbus ./indian-canbus
+scp -r <user>@<openhab-server>:/etc/openhab-firmware/indian-canbus ./indian-canbus
 cd indian-canbus
 ```
 
@@ -238,8 +238,8 @@ openHAB server** (transforms already live in `/etc/openhab/transform/`):
 
 ```bash
 # on the openHAB server
-cp /etc/openhab/indian-canbus/canbus.things /etc/openhab/things/
-cp /etc/openhab/indian-canbus/canbus.items  /etc/openhab/items/
+cp /etc/openhab-firmware/indian-canbus/canbus.things /etc/openhab/things/
+cp /etc/openhab-firmware/indian-canbus/canbus.items  /etc/openhab/items/
 ```
 
 No restart needed — openHAB reloads things/items on save. Watch:
