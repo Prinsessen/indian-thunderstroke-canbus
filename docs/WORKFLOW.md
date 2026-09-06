@@ -4,9 +4,27 @@ Everything needed to move code and assets between the three machines, build,
 flash and debug. Written for PowerShell on the Windows build machine.
 
 The **openHAB server is the source of truth**. It holds the git repository; the
-Windows machine holds a working copy that is refreshed by `scp`. There is no git
-remote, so nothing pulls — files move by copy, and edits made on Windows must be
-sent back up or they are lost on the next refresh.
+Windows machine holds a working copy that is refreshed by `scp`. Files move by
+copy, and edits made on Windows must be sent back up or they are lost on the
+next refresh.
+
+> **Two repositories, and only one of them is private.**
+>
+> `/etc/openhab` on the server is the private one. It holds `secrets/`, real LAN
+> addresses, the broker hostname, the VIN, and an MQTT password that is still in
+> its old commits. It has no remote and must not get one until that credential
+> is rotated.
+>
+> **This repository is published at `github.com/Prinsessen/indian-thunderstroke-canbus`
+> and it is PUBLIC.** Anything committed here is on the internet the moment it is
+> pushed, and history cannot be un-pushed. Nothing that identifies the house, the
+> network or the machine belongs in it.
+>
+> Files move **server → here**, never the other way, and every push is preceded by:
+>
+> ```bash
+> tools/check-public.sh --all
+> ```
 
 | | |
 |---|---|
@@ -37,6 +55,15 @@ reason for it to be on the internet.
 were copied across in one command and the real address went with them; it was
 caught by reading `git diff` before committing, which is the only reason it is
 not in the history. `git diff` before `git commit`, every time.
+
+**And it happened again on 2026-09-06**, the same way: `main.cpp` and
+`vehstate.h` copied across to mirror the sidestand decode, carrying the real
+address with them again. Caught the same way, again before committing.
+
+Twice is a process rather than an accident, so the reminder became a check:
+`tools/check-public.sh` scans the tree, and `--all` scans every commit as well.
+Run it before pushing. It knows this redaction table exists and will still flag
+`10.0.5.x` in it — a hit is something to read, not automatically a leak.
 
 ---
 
