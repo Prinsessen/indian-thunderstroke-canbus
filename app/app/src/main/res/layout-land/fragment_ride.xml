@@ -16,6 +16,13 @@
   would be worse than the problem being fixed.
 
   The dials now get about 171 dp instead of 77.
+
+  The side column is 220 dp and the strips inside it are taller than in
+  portrait, which costs the dials nothing: they size on min(width, height) and
+  height binds them at about 171, so every dp of width above that was already
+  being thrown away. FuelBarView scales all of its text off its HEIGHT, so at
+  873 x 46 the captions were tiny characters adrift in an enormous strip. That
+  was the disproportion, and giving it height rather than width is what fixes it.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -44,19 +51,20 @@
             android:layout_weight="1" />
 
         <LinearLayout
-            android:layout_width="200dp"
+            android:layout_width="220dp"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:layout_marginStart="6dp">
+            android:gravity="center_vertical"
+            android:layout_marginStart="8dp">
             <dk.agesen.springfield.FuelBarView
                 android:id="@+id/fuel"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginBottom="6dp" />
+                android:layout_height="64dp"
+                android:layout_marginBottom="10dp" />
             <dk.agesen.springfield.GripsView
                 android:id="@+id/grips"
                 android:layout_width="match_parent"
-                android:layout_height="40dp" />
+                android:layout_height="54dp" />
         </LinearLayout>
     </LinearLayout>
 
