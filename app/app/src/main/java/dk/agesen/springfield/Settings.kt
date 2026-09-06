@@ -316,7 +316,22 @@ object Settings {
      * is named from then on.
      */
     fun dtcName(spn: Long): String? =
-        prefs.getString(K_DTC + spn, null)?.takeIf { it.isNotBlank() }
+        // Guarded because this is the one Settings lookup reachable from a pure
+        // JVM unit test. Dtc.line() -> summary() -> describe(f) -> here, and a
+        // test has no Android context to call init() with, so prefs is still
+        // lateinit and every fault-formatting test dies on the lookup rather
+        // than on anything it was written to check. It has now broken
+        // DtcFormatTest twice, each time through a call chain that did not
+        // exist when it was last fixed, so the guard goes at the bottom of the
+        // chain instead of at the top of each new test.
+        //
+        // Returning null is not swallowing the error, it is the correct answer:
+        // no preferences means no rider-supplied name for this code, and
+        // describe() falls back to the manual's table. Nor can it hide a real
+        // missing init() -- every other accessor in this object reads prefs
+        // directly and would throw long before a fault code needed naming.
+        if (!::prefs.isInitialized) null
+        else prefs.getString(K_DTC + spn, null)?.takeIf { it.isNotBlank() }
 
     fun setDtcName(spn: Long, name: String) {
         val trimmed = name.trim()
