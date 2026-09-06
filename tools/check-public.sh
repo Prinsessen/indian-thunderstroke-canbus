@@ -21,7 +21,10 @@ PATTERNS=(
     '10\.0\.5\.[0-9]'          # the openHAB server and the LAN it sits on
     '10\.235\.'                # the device's cellular address
     '192\.168\.'
-    'mqtt\.agesen\.dk'
+    'agesen\.dk'                # any host in the house domain, not just the broker
+    'Users[/\\]Nanna'       # the Windows home path, redacted in BUILD-SETUP.
+                               # NOT bare "Nanna": she is the copyright holder in
+                               # LICENSE and README, which is deliberate.
     '56KTHAAAXH3343342'        # the VIN
     'adminops@'
     'id_ed25519'

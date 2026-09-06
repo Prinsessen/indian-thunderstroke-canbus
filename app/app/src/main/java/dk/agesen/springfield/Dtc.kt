@@ -558,8 +558,59 @@ object Dtc {
      */
     private val PATTERN = Regex("""SPN\s+(\d+)\s+FMI\s+(\d+)\s*\(x(\d+)\)""")
 
+    /**
+     * The compact form, which is what crosses BLE.
+     *
+     * `520250:8:2,904:12:1|5` — SPN, FMI and occurrence count per fault, then
+     * the four lamps as bits: MIL 1, Stop 2, Warn 4, Prot 8. An empty section
+     * before the bar means no active faults.
+     *
+     * It exists because a GATT notification carries 514 bytes and cannot
+     * fragment. Measured 2026-09-05, everything else in the state came to 468,
+     * which left 38 characters for a fault summary whose lamp text alone was 34
+     * — no room for a single fault, on exactly the machines where the app has
+     * something to say. The readable form still goes out over MQTT, where there
+     * is no such limit and a person may be reading it.
+     *
+     * **Both formats are accepted here on purpose.** The app learned to read
+     * this one before the firmware started sending it, so that the change could
+     * be made in two steps with a working state after each, and so that rolling
+     * the firmware back never needs the app rolled back with it.
+     */
+    private val PATTERN_COMPACT = Regex("""(\d+):(\d+):(\d+)""")
+
+    private fun isCompact(dm1: String): Boolean =
+        !dm1.contains("MIL:", ignoreCase = true) && dm1.contains('|')
+    // Keyed on "MIL:" rather than on "SPN", which was the first attempt and was
+    // wrong for every healthy bike: "No active DTC | MIL:off ..." contains no
+    // SPN and does contain a bar, so it was read as compact and its lamp section
+    // parsed as a number. The readable form always names the lamps; the compact
+    // form never does.
+
+    /** Lamp bits from either form. Null when the string carries none. */
+    private fun lampBits(dm1: String?): Int? {
+        val t = dm1 ?: return null
+        if (isCompact(t)) return t.substringAfter('|', "").trim().toIntOrNull()
+        var bits = 0
+        if (t.contains("MIL:ON", true)) bits = bits or 1
+        if (t.contains("Stop:ON", true)) bits = bits or 2
+        if (t.contains("Warn:ON", true)) bits = bits or 4
+        if (t.contains("Prot:ON", true)) bits = bits or 8
+        return if (t.contains("MIL:", true) || isCompact(t)) bits else null
+    }
+
     fun parse(dm1: String?): List<Fault> {
         val text = dm1 ?: return emptyList()
+        if (isCompact(text)) {
+            val faults = text.substringBefore('|')
+            if (faults.isBlank()) return emptyList()
+            return PATTERN_COMPACT.findAll(faults).mapNotNull { m ->
+                val spn = m.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+                val fmi = m.groupValues[2].toIntOrNull() ?: return@mapNotNull null
+                val n = m.groupValues[3].toIntOrNull() ?: 1
+                Fault(spn, fmi, n)
+            }.toList()
+        }
         return PATTERN.findAll(text).mapNotNull { m ->
             val spn = m.groupValues[1].toLongOrNull() ?: return@mapNotNull null
             val fmi = m.groupValues[2].toIntOrNull() ?: return@mapNotNull null
@@ -569,8 +620,12 @@ object Dtc {
     }
 
     /** True when the summary says the bike has nothing active. */
-    fun healthy(dm1: String?): Boolean =
-        dm1 != null && dm1.startsWith("No active", ignoreCase = true)
+    fun healthy(dm1: String?): Boolean {
+        val t = dm1 ?: return false
+        // Compact: nothing before the bar. Readable: the sentence says so.
+        return if (isCompact(t)) t.substringBefore('|').isBlank()
+        else t.startsWith("No active", ignoreCase = true)
+    }
 
     /** Where a name came from, because the tiers deserve different trust. */
     enum class Source { RIDER, MANUAL, J1939_GENERIC }
@@ -1015,8 +1070,33 @@ object Dtc {
      * off is a different situation from one with Stop lit, and only the bike
      * knows which it is.
      */
-    fun lamps(dm1: String?): String? =
-        dm1?.substringAfter('|', "")?.trim()?.takeIf { it.isNotEmpty() }
+    fun lamps(dm1: String?): String? {
+        val t = dm1 ?: return null
+        if (!isCompact(t)) return t.substringAfter('|', "").trim().takeIf { it.isNotEmpty() }
+        // Compact carries bits, and a diagnostics screen wants words. Rendered
+        // here rather than shipped as text, which is the whole saving.
+        val b = lampBits(t) ?: return null
+        fun on(mask: Int) = if (b and mask != 0) "ON" else "off"
+        return "MIL:${on(1)} Stop:${on(2)} Warn:${on(4)} Prot:${on(8)}"
+    }
+
+    /**
+     * The one-line diagnostics summary for the machine page.
+     *
+     * Here rather than in the view because the view printed the firmware's raw
+     * string for months and looked right purely by accident — the readable form
+     * was a sentence. The compact form is not: a healthy bike sends "|4", and
+     * that went on screen verbatim. A line assembled in a layout file is a line
+     * no test can see.
+     *
+     * Null input means the bus has not spoken yet, which is not the same as a
+     * healthy bike, and the two read differently on purpose.
+     */
+    fun line(dm1: String?): String {
+        if (dm1 == null) return "no diagnostics reported"
+        return listOfNotNull(summary(dm1) ?: "No active DTC", lamps(dm1))
+            .joinToString("  |  ")
+    }
 
     /**
      * The amber warning lamp, which on this machine is the ABS lamp.
@@ -1031,10 +1111,9 @@ object Dtc {
      *
      * Returns null when the bus has not said, which is not the same as off.
      */
-    fun warnLamp(dm1: String?): Boolean? = when {
-        dm1 == null -> null
-        dm1.contains("Warn:ON", ignoreCase = true) -> true
-        dm1.contains("Warn:off", ignoreCase = true) -> false
-        else -> null
+    fun warnLamp(dm1: String?): Boolean? {
+        // Reads the bit rather than the words, so it works for both forms.
+        val b = lampBits(dm1) ?: return null
+        return (b and 4) != 0
     }
 }

@@ -362,9 +362,15 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
         v.findViewById<TextView>(R.id.records).text =
             if (best.isEmpty()) "" else "BEST  " + best.joinToString("  ·  ")
 
-        // The bike reports "no active DTC" as text, so an empty line here means
-        // the bus has not said anything yet — not that the bike is healthy.
-        v.findViewById<TextView>(R.id.dtc).text = s?.dm1 ?: "no diagnostics reported"
+        // Rendered through Dtc, never printed raw. This line used to print the
+        // firmware's string directly and looked right only by accident: the
+        // readable form happened to be a sentence. Since 2026.09.05-56 the radio
+        // carries the compact form, and a healthy bike sends "|4" — the lamp
+        // bits and nothing else — which put a bare "|4" at the foot of the page.
+        //
+        // An empty line still means the bus has not said anything yet, not that
+        // the bike is healthy; those are different and the wording keeps them so.
+        v.findViewById<TextView>(R.id.dtc).text = Dtc.line(s?.dm1)
     }
 }
 

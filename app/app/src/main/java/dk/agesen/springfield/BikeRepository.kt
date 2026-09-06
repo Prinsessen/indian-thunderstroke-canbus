@@ -118,6 +118,12 @@ object BikeRepository {
         // frozen speed as though the bike were still reporting it.
         if (text.startsWith("Disconnected") || text.startsWith("Scanning")) {
             connected = false
+            // Forget the cached firmware version. The board may come back from
+            // a flash running something else, and a remembered version that is
+            // quietly wrong is worse than none at all -- it would make the app
+            // confidently misreport the one fact every debugging conversation
+            // starts from.
+            lastFw = null
         }
         notifyObservers()
     }
@@ -130,11 +136,31 @@ object BikeRepository {
         notifyObservers()
     }
 
+    /**
+     * The last firmware version seen, carried across states that omit it.
+     *
+     * `fw` is twenty-one bytes of a string that cannot change while the board is
+     * running -- it only changes when the board is reflashed, and that reboots
+     * it. Sending it every second was costing more of the 514-byte BLE
+     * notification than the entire fault list is allowed, so the firmware now
+     * sends it on connect and then rarely.
+     *
+     * Remembering it here keeps the reason it is sent at all: a client that
+     * cannot say which firmware it is talking to makes every report of odd
+     * behaviour start with a guess. The app can still always answer. It simply
+     * learns the answer once.
+     *
+     * Cleared on disconnect, in `markDown`, because after a reboot the version
+     * may genuinely be different and a stale one would be worse than none.
+     */
+    @Volatile private var lastFw: String? = null
+
     fun setState(s: BikeJsonState) {
-        state = s
-        RideTrip.onState(s)      // starts a new ride after a long enough sleep
+        val filled = if (s.fw != null) { lastFw = s.fw; s } else s.copy(fw = lastFw)
+        state = filled
+        RideTrip.onState(filled)  // starts a new ride after a long enough sleep
         connected = true
-        TyreMemory.remember(s)
+        TyreMemory.remember(filled)
         notifyObservers()
     }
 
