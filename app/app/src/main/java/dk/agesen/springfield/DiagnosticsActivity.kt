@@ -190,7 +190,16 @@ class DiagnosticsActivity : AppCompatActivity() {
             appendLine("  sender        ${BikeRepository.state?.fuelPct?.let { "$it %" } ?: "-"}")
             appendLine("  filtered      ${FuelLevel.trusted?.let { "$it %" } ?: "none yet"}" +
                     if (FuelLevel.trusted != null && !FuelLevel.live) "  (remembered, not this ride)" else "")
-            appendLine("  tank          ${Settings.tankLitres} L")
+            // One decimal, not the raw Double. tankLitres is stored as a float
+            // preference and read back as a Double, so 19 litres arrives as
+            // 18.999992370605469 and printed straight it looked like a fault in
+            // the reading rather than in the formatting.
+            //
+            // One decimal rather than a whole number because the setting allows
+            // 20.8, which is the standard tank on this machine -- rounding to an
+            // integer would print 21 and quietly lose it. Every other litre
+            // figure in the app already shows one decimal.
+            appendLine("  tank          %.1f L".format(Settings.tankLitres))
 
             appendLine()
             appendLine("TYRES")

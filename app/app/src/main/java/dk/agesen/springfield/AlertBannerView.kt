@@ -398,7 +398,7 @@ class AlertBannerView @JvmOverloads constructor(
         bgPaint.shader = null
         bgPaint.alpha = 255
 
-        // Warning triangle, drawn rather than a glyph so it scales with the bar.
+        // Drawn rather than a glyph so it scales with the bar.
         val s = h * 0.30f
         val cx = h * 0.52f
         val cy = h * 0.50f
@@ -406,15 +406,36 @@ class AlertBannerView @JvmOverloads constructor(
         iconPaint.style = Paint.Style.STROKE
         iconPaint.strokeWidth = h * 0.055f
         iconPaint.strokeJoin = Paint.Join.ROUND
-        val path = android.graphics.Path()
-        path.moveTo(cx, cy - s)
-        path.lineTo(cx + s * 0.95f, cy + s * 0.72f)
-        path.lineTo(cx - s * 0.95f, cy + s * 0.72f)
-        path.close()
-        canvas.drawPath(path, iconPaint)
-        iconPaint.style = Paint.Style.FILL
-        canvas.drawRect(cx - h * 0.028f, cy - s * 0.38f, cx + h * 0.028f, cy + s * 0.20f, iconPaint)
-        canvas.drawCircle(cx, cy + s * 0.44f, h * 0.033f, iconPaint)
+
+        if (headline == "KILL SWITCH") {
+            // The power symbol, because that is what is printed on the switch
+            // she has to move. Every other alert here shares one warning
+            // triangle, and the owner missed this banner the first time for
+            // exactly that reason: she already had an amber bar on screen for a
+            // soft tyre, so a second amber bar with the same triangle did not
+            // register as new.
+            //
+            // The fix is the icon rather than a pulse. Red breathes and amber
+            // holds steady on purpose -- a caution that pulsed would compete
+            // with the criticals for the same reflex, and that distinction is
+            // worth more than this one banner. A different shape separates two
+            // ambers without touching what the colours mean.
+            val r = s * 0.86f
+            val gap = 52f
+            canvas.drawArc(cx - r, cy - r, cx + r, cy + r,
+                           -90f + gap / 2f, 360f - gap, false, iconPaint)
+            canvas.drawLine(cx, cy - r * 1.12f, cx, cy - r * 0.10f, iconPaint)
+        } else {
+            val path = android.graphics.Path()
+            path.moveTo(cx, cy - s)
+            path.lineTo(cx + s * 0.95f, cy + s * 0.72f)
+            path.lineTo(cx - s * 0.95f, cy + s * 0.72f)
+            path.close()
+            canvas.drawPath(path, iconPaint)
+            iconPaint.style = Paint.Style.FILL
+            canvas.drawRect(cx - h * 0.028f, cy - s * 0.38f, cx + h * 0.028f, cy + s * 0.20f, iconPaint)
+            canvas.drawCircle(cx, cy + s * 0.44f, h * 0.033f, iconPaint)
+        }
 
         val left = h * 1.05f
         textPaint.color = ink
