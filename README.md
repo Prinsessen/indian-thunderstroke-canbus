@@ -49,7 +49,7 @@ Worth as much as the list above, because it saves somebody a week:
 | **The horn** | Eight presses across two sessions with every byte visible. Nothing moved. The manual gives SPN 520293 only output-driver faults, no "abnormal update rate" |
 | **The saddlebag locks** | Console switch and both fob buttons, actuators confirmed running by the voltage sag they cause. The bus stayed silent |
 | **The security alarm** | Arming chirps the horn and wakes nothing |
-| **The sidestand *state*** | The switch exists — the instrument has a lamp for it — but it is never broadcast. It appears only as a DM1 event when it blocks a start |
+| **The fog lamps** | On and off six times with the change detector running. Nothing answered. Indian's fault table knows the lamps — SPN 520291 and 520292 — so failures are reported; the switch position is not |
 | **Cruise control engaged (SPN 595)** | Held at 94 km/h with the rider's hand off the grip. Byte 4 never moved, while the button presses in the *same frames* came through perfectly |
 | **Coast and accelerate (SPN 600 / 602)** | Not sent. Indian transmits SET and RESUME only; the decel/accel meaning is applied by the ECU once engaged |
 
@@ -58,6 +58,34 @@ a lock and an alarm are a switch wired into a module driving its own output, wit
 nothing to tell anybody. Check which side of that line a signal falls on before
 spending an evening on it — and check the manual for an FMI 9, "Abnormal Update
 Rate", which is the manufacturer admitting out loud that something is broadcast.
+
+### The sidestand was in this table, and it was wrong
+
+It said the switch existed, that the instrument had a lamp for it, and that it was
+never broadcast. It is broadcast: **PGN 65381 from SA 0, byte 7 bit 0**, clear for
+extended. The kill switch turned out to be two bytes away in the same message, at
+byte 4 bit 6.
+
+It had been ruled off this bus twice. The first hunt ran with thirty bytes masked
+out of the probe. The second was methodically clean and still wrong, because the
+byte that carries it moved six times *in that very log* and was set aside for
+looking too regular — eleven seconds apart, which reads like a timer rather than a
+foot.
+
+What settled it was a phase nobody had run: the motorcycle held upright by hand
+with the stand deliberately left alone, so a byte answering the handling could be
+told from a byte answering the stand. One of the two candidates went silent and
+the other answered five flicks out of five. The owner had said from the start that
+her wiring diagram showed no separate wire from the switch to the cluster, so the
+lamp had to be hearing it from the bus. The argument was right and the measurement
+was wrong, twice.
+
+The entry is corrected rather than quietly deleted because the lesson is the
+useful part: **a null is only as good as the run that produced it.** Every other
+row in this table earned its place with a control inside the same run — see the
+cruise row, where the button presses came through in the same frames that showed
+byte 4 sitting still. The sidestand never had that, and it took two attempts to
+notice.
 
 ---
 

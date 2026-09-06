@@ -97,39 +97,33 @@ ride is not a warning, and should not be read as one.
 on "No active", so with no fault code there is no banner regardless of the
 lamps. The lamps only shift severity when a real fault is present.)*
 
-## Cruise control — a minute, and it may be shippable
+## Cruise control — SETTLED 2026-09-05, no ride needed
 
-We concluded that the engaged state is not on the bus. That conclusion is
-unsound: byte 4 of PGN 65265 from SA 39 read a constant `0xF7` across all 5,223
-captured frames, but **cruise was never used on any of those rides**. The
-captures could not have shown an engaged state.
+Everything that was open here has been answered, and this section is kept only so
+the next person does not repeat the ride.
 
-The service manual says the dash shows amber for enabled-but-not-set and green
-for set, so the machine knows. Whether it says so on the wire is open.
+**The engaged state is not on the bus.** Byte 4 of PGN 65265 from SA 39 held
+`0xF7` — SPN 595 reading 3, "not available" — at 94, 87 and 73 km/h with cruise
+demonstrably holding the speed and the rider's hand off the grip. Set speed
+(SPN 86, byte 6) sat at a constant `0xFF` for the same reason.
 
-**Corrected 2026-09-05 — the instruction that was here could not have worked.**
-It said to watch `canbus/springfield/probe` while cruising. That probe returns
-early above 2 km/h, and the ignore mask for PGN 65265 (`0xDF`) hides bytes 0-4
-and 6-7 from it in any case. Cruise engages at around 40 km/h. So the test was
-silent twice over, and the ride would have been wasted proving nothing.
+What makes it a valid null rather than another silence: **the control was inside
+the measurement.** Byte 5 reported every SET and RESUME press in those same
+frames, so the message was being received and decoded correctly while byte 4 sat
+still. See PROTOCOL.md for the full account.
 
-Firmware v-next adds `probe/cruise`, which sits deliberately above the speed
-gate and reports these two bytes at any speed. **Flash before the ride.**
+That is the second null on this question. The first was drawn from captures in
+which cruise had never been engaged at all, and it was withdrawn — a capture
+cannot show a state nobody produced. This section used to carry that withdrawal
+and an instruction to flash `probe/cruise` before riding. Both are obsolete.
 
-**Engage cruise, hold it for a minute, cancel.** Watching:
+**The buttons are found and shipped**: 65265 SA 39 byte 4 carries SET/DEC and
+RES/ACC as momentary presses, reported as the legend printed on the rocker. The
+enable rocker is byte 4 bit 0.
 
-```bash
-tools/probe_watch.sh          # includes probe/cruise
-```
-
-Output is `b4=F7 595=3  b5=DF  84 km/h`. **`595=3` is "not available" — the
-state we have always seen. `595=1` is active**, and means SPN 595 is populated,
-the state is on the bus, and cruise control can go back into production properly
-— this time as the state rather than as a button press.
-
-While you are there, the two switches are Set/**Decel** and Resume/**Accel** —
-the same rocker, different meaning once engaged. Press each while cruising and
-they should show in byte 5.
+**What the app shows is derived in code** from measured inputs only — the rocker,
+the presses, the brake, the clutch and road speed. It is honest about being a
+derivation: the vocabulary differs from the measured fields around it on purpose.
 
 ## Two thirty-second tests, stationary, whenever convenient
 
