@@ -808,7 +808,7 @@ void resetState() {
     st.gear[0] = 0; st.headlight[0] = 0; st.security[0] = 0;
     st.vin[0] = st.swid[0] = st.dm1[0] = st.dm1Raw[0] = 0;
     st.brakeRear = st.cruiseEnable = st.cruiseSw = st.hazard = -1;
-    st.cruiseHold = st.clutch = -1;
+    st.cruiseHold = st.clutch = st.standDown = -1;
     st.indLeft = st.indRight = -1;
     st.grips = -1;
     st.lean = -1;
@@ -1708,6 +1708,35 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             // A held state, not the momentary blip the switch bits in byte 1
             // produce -- which is what makes it worth shipping.
             if (j.sa == 39 && nn >= 3 && b[2] != 0xFF) SETI(hazard, b[2] & 1);
+            // Sidestand switch, SA 0 byte 7 bit 0. Clear = extended, set =
+            // retracted. Proved 2026-09-06 after being wrongly ruled off this
+            // bus twice.
+            //
+            // The first null had thirty bytes masked. The second (GARAGE-RUN
+            // run 8) was clean and still wrong: this byte toggled six times
+            // during the minute the stand was worked, and the log was read as
+            // "nothing moved" because nobody had recorded when the flicks
+            // happened and the intervals looked like a metronome.
+            //
+            // What settled it was a control nobody had run -- the motorcycle
+            // held upright by hand with the stand deliberately left alone. This
+            // byte was silent through 68 s untouched and 46 s of that handling,
+            // then answered five flicks with five transitions. The rival
+            // candidate died in the same phase: 65265 b3 moved six times while
+            // she merely held the bike and never once during the flicks, being
+            // SPN 597, the brake switch under the hand doing the holding.
+            //
+            // Confirmed live minutes later against the cluster's own red
+            // sidestand lamp -- six movements, six immediate transitions, the
+            // lamp agreeing every time. It holds its state between movements,
+            // which is what makes it a position and not an artefact.
+            //
+            // The ECU is the right source: it cuts the engine with the stand
+            // down and in gear, and reports SPN 520267 when it blocks a start.
+            // It was always going to know. The wiring diagram was the clue --
+            // there is no separate wire to the cluster, so the lamp has to be
+            // hearing this.
+            if (j.sa == 0 && nn >= 8 && b[7] != 0xFF) SETI(standDown, !(b[7] & 1));
             break;
         case 65089:
             // Indicators, byte 1: bit 6 left, bit 4 right. Confirmed clean in
@@ -2062,7 +2091,7 @@ static void clearLiveValues() {
     st.rpm = st.throttle = st.speed = st.speedFront = NAN;
     st.fuelRate = st.fuelEconInst = NAN;
     st.brakeRear = st.indLeft = st.indRight = -1;
-    st.cruiseEnable = st.cruiseSw = st.hazard = -1;
+    st.cruiseEnable = st.cruiseSw = st.hazard = st.standDown = -1;
     st.cruiseHold = st.clutch = -1;
     stateDirty = true;
 }
@@ -2124,6 +2153,7 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     if (st.cruiseSw >= 0)        doc[K("cruiseSw","cs")]     = st.cruiseSw == 1 ? "SET/DEC"
                                                             : st.cruiseSw == 2 ? "RES/ACC" : "none";
     if (st.hazard >= 0)          doc[K("hazard","hz")]       = st.hazard ? "ON" : "OFF";
+    if (st.standDown >= 0)       doc[K("standDown","sd")]    = st.standDown ? "DOWN" : "UP";
     if (st.security[0])          doc[K("security","se")]     = st.security;
     if (st.headlight[0])         doc[K("headlight","hl")]    = st.headlight;
     if (st.indLeft >= 0)         doc[K("indLeft","il")]      = st.indLeft ? "ON" : "OFF";

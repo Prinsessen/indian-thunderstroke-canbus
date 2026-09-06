@@ -46,8 +46,13 @@ struct VehState {
     // bus -- proved on the road with the cruise holding at 94 km/h and the byte
     // unmoved -- so the field could never carry a value. cruiseHold replaces it
     // and is DERIVED; see the cruise section in main.cpp.
+    // standDown is the sidestand SWITCH, and it is not the same question as
+    // `stand` below. The switch says where the stand is; `stand` is derived
+    // from lean and says whether the motorcycle is resting on it. Both are
+    // worth having: the stand can be down with the bike held upright, which is
+    // the moment the interlock matters and the cluster lamp is lit.
     int8_t brakeRear, cruiseEnable, cruiseSw, cruiseHold, clutch, hazard,
-           indLeft, indRight;                                   // -1=unknown
+           indLeft, indRight, standDown;                        // -1=unknown
     int8_t grips;        // heated grips, 0=off, 1..10; -1=unknown
     int16_t lean;        // PGN 2304 byte 0 raw, 127 upright; -1 unknown
     char  stand[9];      // "UPRIGHT", "STAND", "DOWN" -- only while stationary

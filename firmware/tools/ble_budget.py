@@ -25,8 +25,8 @@ W = {
     "fe": 5, "bv": 4, "am": 5, "tf": 4, "tr": 4, "tft": 5, "trt": 5,
     "br": 9, "cc": 9, "cl": 8, "ce": 5, "cs": 9, "hz": 5, "se": 11,
     "hl": 6, "il": 5, "ir": 5, "gr": 1, "sf": 5, "fr": 5, "fi": 5,
-    "wh": 24, "wf": 5, "wr": 5, "gg": 3, "ln": 3, "st": 6, "ig": 5,
-    "gl": 5, "gR": 5, "sk": 6, "fw": 15,
+    "wh": 24, "wf": 5, "wr": 5, "gg": 3, "ln": 3, "st": 9, "ig": 5,   # st: "UPRIGHT"
+    "gl": 5, "gR": 5, "sk": 6, "fw": 15, "sd": 6,   # "DOWN"/"UP"
     # MQTT-only; never on the radio.
     "vn": 19, "si": 22, "dr": 40,
 }
