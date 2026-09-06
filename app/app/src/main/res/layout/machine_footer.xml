@@ -59,19 +59,9 @@
         android:textSize="12sp"
         android:fontFamily="monospace"
         android:textColor="@color/muted" />
-
-    <!-- Maker's plate. Engraved rather than shouted: the same amber as the
-         instrument lighting, spaced out like a badge on a tank. -->
-    <TextView
-        android:id="@+id/credit"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:paddingTop="14dp"
-        android:paddingBottom="4dp"
-        android:textSize="11sp"
-        android:letterSpacing="0.22"
-        android:textStyle="bold"
-        android:textColor="@color/accent"
-        android:text="© NANNA AGESEN 2026" />
+    <!-- The maker's plate used to sit here and does not any more. It shows on
+         the splash for four or five seconds at every start, and it appears again
+         at the foot of the settings page, where tapping it now opens About. Three
+         times on one screen's worth of app was two too many, and on this page it
+         was also taking room the gauges needed. -->
 </LinearLayout>

@@ -284,6 +284,13 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
             true
         }
+
+        // The maker's plate opens About. A plain press, unlike the diagnostics
+        // long-press above: that screen is for the two of us debugging, this one
+        // is for anyone holding the phone and wondering what it is wired to.
+        findViewById<TextView>(R.id.credit).setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java))
+        }
     }
 
     /**

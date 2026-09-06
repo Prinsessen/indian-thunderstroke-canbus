@@ -227,11 +227,16 @@
             android:fontFamily="monospace"
             android:textColor="@color/muted" />
 
+        <!-- The maker's plate, and the way into About. A badge you can press is
+             where a rider looks for "what is this thing", and it costs the page
+             no room it was not already using. -->
         <TextView
+            android:id="@+id/credit"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
             android:paddingTop="12dp"
+            android:paddingBottom="8dp"
             android:textSize="11sp"
             android:letterSpacing="0.22"
             android:textStyle="bold"
