@@ -156,6 +156,29 @@ class AlertBannerView @JvmOverloads constructor(
         // than in a rider's face at 80 km/h.
         val wheelFault = state?.wheels?.takeIf { it == "FRONT LOST" || it == "REAR LOST" }
 
+        // The kill switch, and it outranks everything below it on purpose.
+        //
+        // The owner asked for this from her own riding: she has caught the
+        // run/stop switch several times, moving and parked, and then stood there
+        // for minutes wondering why the engine would not start. That is the
+        // failure this banner exists for -- not a fault, but a question already
+        // being asked out loud.
+        //
+        // First in the chain, because a tyre two PSI low is a true statement
+        // that does not answer "why will it not start". Anything else on this
+        // list appears the moment the switch goes back to RUN, which is the right
+        // order to be told things in. And the engine cannot be running while this
+        // is true, so nothing it displaces is urgent.
+        //
+        // CAUTION rather than CRITICAL: nothing is broken. Red on this cluster
+        // means something is wrong with the motorcycle, and a switch doing
+        // exactly what it was moved to do is not that. The headline carries it.
+        //
+        // Only visible with the ignition on -- with the key out the ECU sends no
+        // 65381 at all and the field is absent, which is also the only time the
+        // question does not arise.
+        val killStop = state?.killSwitch == "STOP"
+
         // Key fob: a search that is taking too long, or one that has given up.
         val security = state?.security
         val nowMs = System.currentTimeMillis()
@@ -204,6 +227,12 @@ class AlertBannerView @JvmOverloads constructor(
         val key: String?
 
         when {
+            killStop -> {
+                newSeverity = Severity.CAUTION
+                newHeadline = "KILL SWITCH"
+                newDetail = "run/stop is at STOP — the engine will not start"
+                key = "kill-stop"
+            }
             tyreLevel == TyreMemory.Level.ACT && worstTyre != null -> {
                 newSeverity = Severity.CRITICAL
                 newHeadline = "TYRE PRESSURE"

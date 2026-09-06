@@ -182,6 +182,14 @@ data class BikeJsonState(
      * gear. Confirmed 2026-09-06 against the cluster's own red lamp.
      */
     val standDown: String? = null,
+    /**
+     * "RUN" / "STOP" -- the red run/stop switch on the right bar, PGN 65381
+     * SA 0 byte 4 bit 6, set for RUN.
+     *
+     * Absent with the ignition off, because the ECU is not transmitting 65381
+     * then. Found 2026-09-06.
+     */
+    val killSwitch: String? = null,
     /** L/h, and instantaneous economy against the running average. */
     val fuelRate: Double? = null,
     val fuelEconInst: Double? = null,
@@ -268,6 +276,7 @@ data class BikeJsonState(
                 gripRightC = d("gR"),
                 stand = s("st"),
                 standDown = s("sd"),
+                killSwitch = s("ks"),
                 fuelRate = d("fr"),
                 fuelEconInst = d("fi"),
                 speedFrontKmh = d("sf"),
