@@ -1,9 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Landscape is wide enough for the pair. Speed leads on the left — it is the
-  primary instrument and carries the gear window — with the tachometer to its
-  right. Each dial carries the turn arrow for its own side, so the indicators sit
-  at the outer edges of the panel instead of huddled in the middle.
+  Landscape has width to spare and almost no height, so the secondary strips sit
+  BESIDE the dials rather than under them.
+
+  Measured 2026-09-06, and the owner saw it before the arithmetic did: the six
+  tell-tale lamps at the foot were the same size as the speed and rev dials. On a
+  350 dp landscape screen the tabs take 45, the alert banner 52, and stacking the
+  fuel bar, the grips strip and the tell-tale row underneath took another 160 —
+  73 % of the screen to chrome, leaving 77 dp for the two instruments the page
+  exists for. Both gauges size on min(width, height), so 428 dp of width was
+  thrown away to be bound by 77 dp of height.
+
+  Fuel and grips move into a column on the right. The tell-tale row keeps the
+  full width along the bottom, because six lamps squeezed into a 200 dp column
+  would be worse than the problem being fixed.
+
+  The dials now get about 171 dp instead of 77.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -17,37 +29,36 @@
         android:layout_weight="1"
         android:orientation="horizontal">
 
+        <!-- Speed leads, carrying the gear window; the tachometer sits beside it.
+             Each dial draws the turn arrow for its own side, so the indicators
+             land at the outer edges rather than huddled in the middle. -->
         <dk.agesen.springfield.GaugeView
             android:id="@+id/gauge"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
-
         <dk.agesen.springfield.GaugeView
             android:id="@+id/gauge2"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
+
+        <LinearLayout
+            android:layout_width="200dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:layout_marginStart="6dp">
+            <dk.agesen.springfield.FuelBarView
+                android:id="@+id/fuel"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginBottom="6dp" />
+            <dk.agesen.springfield.GripsView
+                android:id="@+id/grips"
+                android:layout_width="match_parent"
+                android:layout_height="40dp" />
+        </LinearLayout>
     </LinearLayout>
-
-    <dk.agesen.springfield.FuelBarView
-        android:id="@+id/fuel"
-        android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginBottom="4dp"
-        android:layout_marginHorizontal="6dp" />
-
-    <!--
-      The grips belong to the motorcycle, so they ride with the instruments.
-      Shorter here than in portrait: landscape spends its height on two dials
-      side by side, and neither may shrink for a strip.
-    -->
-    <dk.agesen.springfield.GripsView
-        android:id="@+id/grips"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginBottom="4dp"
-        android:layout_marginHorizontal="6dp" />
 
     <dk.agesen.springfield.TellTaleView
         android:id="@+id/telltales"
