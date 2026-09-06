@@ -156,7 +156,7 @@ class AlertBannerView @JvmOverloads constructor(
         // than in a rider's face at 80 km/h.
         val wheelFault = state?.wheels?.takeIf { it == "FRONT LOST" || it == "REAR LOST" }
 
-        // The kill switch, and it outranks everything below it on purpose.
+        // The kill switch banner.
         //
         // The owner asked for this from her own riding: she has caught the
         // run/stop switch several times, moving and parked, and then stood there
@@ -164,11 +164,15 @@ class AlertBannerView @JvmOverloads constructor(
         // failure this banner exists for -- not a fault, but a question already
         // being asked out loud.
         //
-        // First in the chain, because a tyre two PSI low is a true statement
-        // that does not answer "why will it not start". Anything else on this
-        // list appears the moment the switch goes back to RUN, which is the right
-        // order to be told things in. And the engine cannot be running while this
-        // is true, so nothing it displaces is urgent.
+        // Ranked immediately BELOW the active fault list, at the owner's call:
+        // a machine reporting that something is wrong outranks a rider's own
+        // slip, and a DTC should never queue behind anything. It was written
+        // above the whole chain first and that was the wrong instinct.
+        //
+        // Everything it does sit above -- charging, fuel, the tyre watch level,
+        // service -- cannot be true at the same time anyway, or does not matter
+        // while the engine is refusing to start. The charging check needs the
+        // engine turning, which it cannot be while this is true.
         //
         // CAUTION rather than CRITICAL: nothing is broken. Red on this cluster
         // means something is wrong with the motorcycle, and a switch doing
@@ -227,12 +231,6 @@ class AlertBannerView @JvmOverloads constructor(
         val key: String?
 
         when {
-            killStop -> {
-                newSeverity = Severity.CAUTION
-                newHeadline = "KILL SWITCH"
-                newDetail = "run/stop is at STOP — the engine will not start"
-                key = "kill-stop"
-            }
             tyreLevel == TyreMemory.Level.ACT && worstTyre != null -> {
                 newSeverity = Severity.CRITICAL
                 newHeadline = "TYRE PRESSURE"
@@ -295,6 +293,12 @@ class AlertBannerView @JvmOverloads constructor(
                 // telephoning a dealer will be.
                 newDetail = Dtc.summary(dm1, short = true) ?: dm1
                 key = "dtc-" + dm1
+            }
+            killStop -> {
+                newSeverity = Severity.CAUTION
+                newHeadline = "KILL SWITCH"
+                newDetail = "run/stop is at STOP — the engine will not start"
+                key = "kill-stop"
             }
             charging -> {
                 newSeverity = Severity.CRITICAL
