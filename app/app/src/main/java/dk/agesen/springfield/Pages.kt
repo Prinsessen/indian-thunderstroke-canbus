@@ -163,7 +163,7 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
             fast, state?.headlight, state?.stand,
             cruiseText = state?.cruise, cruiseEnableText = state?.cruiseEnable,
             hazardText = state?.hazard, brakeText = state?.brakeRear,
-            cruiseSwText = state?.cruiseSw
+            cruiseSwText = state?.cruiseSw, sidestandText = state?.standDown
         )
     }
 

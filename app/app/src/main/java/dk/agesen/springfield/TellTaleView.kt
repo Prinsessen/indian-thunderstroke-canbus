@@ -48,6 +48,7 @@ class TellTaleView @JvmOverloads constructor(
     private val colLow = Color.parseColor("#CBD3DE")
     private val colBrake = Color.parseColor("#D2452F")
     private val colStand = Color.parseColor("#4FA96B")     // parked and settled
+    private val colSidestand = Color.parseColor("#D2452F")  // stand out: red, as the cluster has it
     private val colDown = Color.parseColor("#D2452F")      // on its side
     private val colOff = Color.parseColor("#1E242C")
     private val colStrike = Color.parseColor("#39414D")
@@ -56,7 +57,7 @@ class TellTaleView @JvmOverloads constructor(
     private val colCruiseSet = Color.parseColor("#4FA96B")  // holding a speed
     private val colHazard = Color.parseColor("#D2452F")
 
-    private val slots = 5
+    private val slots = 6
 
     /** How long a rocker press stays readable after the button is released. */
     private val PRESS_HOLD_MS = 1500L
@@ -106,6 +107,22 @@ class TellTaleView @JvmOverloads constructor(
      */
     var stand: String? = null
 
+    /**
+     * "DOWN" / "UP", or null -- the sidestand SWITCH, from the ECU.
+     *
+     * A different fact from `stand` above, and the reason both are drawn. This
+     * says where the stand is; `stand` is read off the tip-over sensor and says
+     * whether the machine is resting on it. They disagree in the one moment
+     * that matters: stand out, bike held upright, engine running and the
+     * interlock armed. The cluster lights its red lamp there and the drawing
+     * beside it shows a bike standing straight up, and both are telling the
+     * truth.
+     *
+     * Found 2026-09-06 at PGN 65381 SA 0 byte 7 bit 0, after being ruled off
+     * this bus twice.
+     */
+    var sidestand: String? = null
+
 
     /** "High" / "Low" / "Off" from the state JSON; null = never reported. */
     var headlight: String? = null
@@ -131,7 +148,7 @@ class TellTaleView @JvmOverloads constructor(
         p: FastPacket?, beam: String?, standState: String?,
         cruiseText: String? = null, cruiseEnableText: String? = null,
         hazardText: String? = null, brakeText: String? = null,
-        cruiseSwText: String? = null
+        cruiseSwText: String? = null, sidestandText: String? = null
     ) {
         fun onOff(t: String?): Boolean? = when (t) {
             // "HOLDING"/"off" is the derived cruise, which deliberately uses a
@@ -158,6 +175,7 @@ class TellTaleView @JvmOverloads constructor(
         hazard = p?.hazard ?: onOff(hazardText)
         headlight = beam
         stand = standState
+        sidestand = sidestandText
         invalidate()
     }
 
@@ -195,7 +213,17 @@ class TellTaleView @JvmOverloads constructor(
                    if (intro != null) Cluster.introLamp(intro, 2, slots) else cruise,
                    if (intro != null) true else cruiseEnable)
         drawHazard(canvas, cellW * 3.5f, cy, unit, state(3, hazard))
-        drawStand(canvas, cellW * 4.5f, cy, unit,
+        // The switch lamp goes to the LEFT of the drawing, so the leaning
+        // motorcycle keeps the right-hand end of the row where the owner reads
+        // it. Six cells rather than five: the lamps lose a few dp and nothing
+        // else on the page moves.
+        drawSidestand(canvas, cellW * 4.5f, cy, unit,
+                      if (intro != null) true else when (sidestand) {
+                          "DOWN" -> true
+                          "UP" -> false
+                          else -> null
+                      })
+        drawStand(canvas, cellW * 5.5f, cy, unit,
                   if (intro != null) "STAND" else stand)
 
         label(canvas, cellW * 0.5f, unit, "BEAM")
@@ -211,7 +239,8 @@ class TellTaleView @JvmOverloads constructor(
             else -> "CRUISE"
         })
         label(canvas, cellW * 3.5f, unit, "HAZARD")
-        label(canvas, cellW * 4.5f, unit, when (stand) {
+        label(canvas, cellW * 4.5f, unit, "SIDESTAND")
+        label(canvas, cellW * 5.5f, unit, when (stand) {
             "DOWN" -> "DOWN"
             "STAND" -> "ON STAND"
             "UPRIGHT" -> "UPRIGHT"
@@ -464,6 +493,46 @@ class TellTaleView @JvmOverloads constructor(
         canvas.drawCircle(cx, cy + r * 0.40f, unit * 0.024f, paint)
 
         if (state == null) strike(canvas, cx, cy, unit)
+    }
+
+    /**
+     * The sidestand lamp: red when the stand is extended, which is what the
+     * cluster's own lamp does.
+     *
+     * Driven by the switch and never by lean. That is the point of it sitting
+     * beside the leaning motorcycle rather than replacing it -- the switch
+     * knows where the stand is even while the bike is held bolt upright, and
+     * that is exactly when the interlock will cut the engine if a gear goes in.
+     *
+     * Red rather than amber because it is red on the machine, and a rider reads
+     * the colour before the shape.
+     */
+    private fun drawSidestand(canvas: Canvas, cx: Float, cy: Float, unit: Float, down: Boolean?) {
+        val colour = if (down == true) colSidestand else colOff
+        if (down == true) glow(canvas, cx, cy, unit, colour)
+
+        val r = unit * 0.26f
+        strokePaint.color = colour
+        strokePaint.strokeWidth = unit * 0.046f
+        strokePaint.strokeJoin = Paint.Join.ROUND
+
+        // The leg, hinged at the top and swung down and forward, over the
+        // ground it is standing on. Drawn rather than lettered: every other
+        // lamp in this row is a shape, and one letter among five glyphs reads
+        // as a mistake.
+        path.reset()
+        path.moveTo(cx + r * 0.44f, cy - r * 0.88f)
+        path.lineTo(cx - r * 0.26f, cy + r * 0.52f)
+        canvas.drawPath(path, strokePaint)
+        canvas.drawLine(cx - r * 0.78f, cy + r * 0.74f,
+                        cx + r * 0.30f, cy + r * 0.74f, strokePaint)
+
+        // The pivot, so the leg reads as hinged rather than fallen off.
+        paint.color = colour
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(cx + r * 0.44f, cy - r * 0.88f, unit * 0.030f, paint)
+
+        if (down == null) strike(canvas, cx, cy, unit)
     }
 
     private fun drawBrake(canvas: Canvas, cx: Float, cy: Float, unit: Float, state: Boolean?, wheel: String) {

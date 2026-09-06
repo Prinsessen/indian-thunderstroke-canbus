@@ -262,23 +262,28 @@ class DigitalReadoutView @JvmOverloads constructor(
         textPaint.letterSpacing = 0.18f
         canvas.drawText("RPM", cx, h * 0.66f, textPaint)
 
-        IgnitionLamp.draw(canvas, w * 0.085f, h * 0.42f, h * 0.155f,
+        // r was h*0.155 until 2026-09-06 and the arithmetic below it was wrong
+        // in a way that put the two lamps on top of each other.
+        //
+        // IgnitionLamp draws a soft halo at 1.55r whenever the ignition is
+        // known, which is nearly always. At the old radius the halo reached
+        // h*0.180 -- not the h*0.265 the ring alone suggests -- and the ABS
+        // brackets come down to h*0.207, so they overlapped by h*0.027. The
+        // note that claimed seven clear dp had measured the ring and forgotten
+        // the glow around it.
+        //
+        // At h*0.115 the halo tops out at h*0.242 and there are h*0.035 clear,
+        // about 4dp on a 122dp row. There is no height to spare in this column,
+        // so the fix is to shrink the ring rather than move anything: the owner
+        // reported it both ways at once -- the lamps touching, and the ignition
+        // ring looking enormous beside ABS. One number answers both. The rings
+        // are now 0.115 against 0.095, near enough to read as a pair, with the
+        // ignition still the larger because it is the one read from ten paces.
+        IgnitionLamp.draw(canvas, w * 0.085f, h * 0.42f, h * 0.115f,
                           ignition, barPaint, textPaint)
 
-        // ABS directly above it, sharing the column. The ignition ring reaches
-        // up to h*0.265 and the rev figure does not come further left than about
-        // a third of the width, so this strip is free.
-        // ABS above it, sharing the column.
-        //
-        // The lamp is a ring with brackets and needs a little over 2r of height;
-        // at r = h*0.095 centred on h*0.110 it runs from 1.6dp to 25.2dp on a
-        // 122dp row. The ignition ring starts at h*0.265, which is 32.3, so
-        // there are seven clear dp between them.
-        //
-        // The previous placement left 2.4 and the owner could see them touching.
-        // That version was a triangle with a caption slung underneath, which
-        // stands taller than a ring for the same optical weight -- the shape
-        // changed and the geometry was not redone with it.
+        // ABS directly above it, sharing the column, running from h*0.013 to
+        // h*0.207. Unchanged: it is the ignition ring that had to give way.
         AbsLamp.draw(canvas, w * 0.085f, h * 0.110f, h * 0.095f,
                      abs, barPaint, textPaint)
 

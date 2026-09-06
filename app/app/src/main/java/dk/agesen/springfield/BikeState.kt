@@ -166,11 +166,22 @@ data class BikeJsonState(
     /**
      * "UPRIGHT" / "STAND" / "DOWN", absent while moving.
      *
-     * Derived on the bike from the tip-over sensor, because this bus carries no
-     * sidestand switch at all. It answers the better question anyway: not where
-     * the stand is, but whether the machine is resting on it.
+     * Derived on the bike from the tip-over sensor. It answers a different
+     * question from the switch below: not where the stand is, but whether the
+     * machine is resting on it.
+     *
+     * The comment here used to say this bus carries no sidestand switch at all.
+     * It does -- see standDown. The claim was wrong for three weeks because the
+     * hunt that produced it had thirty bytes masked out of the probe.
      */
     val stand: String? = null,
+    /**
+     * "DOWN" / "UP" -- the sidestand switch itself, PGN 65381 SA 0 byte 7 bit 0.
+     *
+     * The ECU knows it because it cuts the engine with the stand down and in
+     * gear. Confirmed 2026-09-06 against the cluster's own red lamp.
+     */
+    val standDown: String? = null,
     /** L/h, and instantaneous economy against the running average. */
     val fuelRate: Double? = null,
     val fuelEconInst: Double? = null,
@@ -256,6 +267,7 @@ data class BikeJsonState(
                 gripLeftC = d("gl"),
                 gripRightC = d("gR"),
                 stand = s("st"),
+                standDown = s("sd"),
                 fuelRate = d("fr"),
                 fuelEconInst = d("fi"),
                 speedFrontKmh = d("sf"),
