@@ -678,7 +678,10 @@ as its targets.
 
 # Run 8 — 2026-09-05 19:43, the sidestand, properly this time
 
-**Settled: the switch exists, the cluster shows it, and the bus never hears it.**
+**WRONG -- corrected by run 9 below, 2026-09-06. The switch IS on the bus,
+at PGN 65381 SA 0 byte 7 bit 0. What follows is kept as written, because the
+way it was got wrong is the useful part: the byte that carries it appears in
+this very log and was dismissed for looking too regular.**
 
 The sidestand was ruled off the bus in August, but that test ran with the full
 mask set -- and the owner then pointed out that her instrument carries an `(S)`
@@ -713,8 +716,9 @@ the bus was an arm lifting a motorcycle.
 
 ## The pattern holds, with one wrinkle
 
-Horn, saddlebag locks, security alarm, sidestand: four switches, four modules
-driving their own outputs, nothing told to anybody. This bus carries state a
+Horn, saddlebag locks, security alarm: three switches, three modules driving
+their own outputs, nothing told to anybody. The sidestand was the fourth until
+2026-09-06, when it turned out to be on the bus after all -- see run 9. This bus carries state a
 rider reads and not actuation a rider performs.
 
 The wrinkle is that a sidestand lamp *is* state a rider reads -- so the rule is
@@ -722,3 +726,90 @@ narrower than it first looked. What travels is state the **other modules** need.
 The ECU has the sidestand, because it cuts the engine with the stand down and in
 gear, and it reports it as a DM1 event (SPN 520267 FMI 31) when it blocks a
 start. It simply never says so the rest of the time.
+
+---
+
+# Run 9 — 2026-09-06, the sidestand: SETTLED, and it IS on the bus
+
+**PGN 65381, SA 0 (the ECU), byte 7, bit 0. Clear = extended, set = retracted.**
+
+Run 8 above is wrong, and so was the August null before it. This entry is the
+correction, kept beside them rather than replacing them, because how a thing was
+got wrong twice is worth more than the answer on its own.
+
+## What Run 8 actually missed
+
+Nothing about run 8's method was sloppy: unmasked, control flash through, no
+rate-limit saturation. It was the *reading* of the log. `65381 sa=0 b7` toggled
+six times during the one minute the stand was worked, and ten times in the whole
+rest of that day. It was set aside because the intervals -- 11, 10, 12, 11, 12
+seconds -- looked like a metronome, and because nobody had recorded when the
+flicks happened, so six transitions could not be matched to anything.
+
+Two lessons, and the second is the general one:
+
+- **A byte that moves during the test is data, even when it looks periodic.**
+  Today's run gave 12, 7, 22, 9, 22 for the same byte. A timer does not change
+  its period. The regularity was a coincidence of one minute.
+- **Record when you did the thing.** Correlation is not available afterwards if
+  only one of the two streams was written down.
+
+## The phase that settled it
+
+`tools/stand_fog_test.py` runs three phases and the middle one is the whole
+point:
+
+| phase | duration | b7 |
+|---|---|---|
+| quiet, resting on the stand, untouched | 68 s | silent |
+| **upright, held by hand, stand deliberately untouched** | 46 s | **silent** |
+| upright, stand worked on prompt | 47 s | **five transitions, one per flick** |
+
+The control phase excluded the rival outright. `65265 sa=0 b3` moved six times
+while she merely held the motorcycle and never once during the flicks -- it is
+SPN 597, the brake switch, under the hand holding 380 kg upright by the front
+lever. It had scored four of five flicks in the earlier run and looked as good
+as b7 did.
+
+That phase also proves the handling was real, so b7's silence in it is a null
+with a control behind it rather than an idle bus.
+
+## Confirmed against the machine
+
+`tools/stand_watch.py` puts the bit on screen with no prompts and no windows.
+Six movements of the stand, six immediate transitions, each holding its state in
+between, every one agreeing with the cluster's own red lamp. The owner's verdict:
+*"passer 110% med den røde kickstand lampe"*.
+
+A position switch changes when the thing moves and stays changed. Timing that is
+nearly right is the weakest evidence available, and this did not need it.
+
+## Why it was always going to be the ECU
+
+The owner read the wiring diagram and said so before any of this: there is no
+separate wire from the switch to the cluster, so the lamp has to be hearing it
+from the bus. The ECU is the module that knows -- it cuts the engine with the
+stand down and in gear, and raises SPN 520267 when it blocks a start.
+
+**The argument from the diagram was right and the measurement was wrong. Twice.**
+
+## What this does NOT change
+
+The tilt-derived `stand` stays exactly as it is. The switch says where the stand
+is; the tip-over sensor says whether the machine is resting on it, and those are
+different questions that disagree in the moment that matters -- stand out, bike
+held upright, interlock armed. The app draws both: a red lamp from the switch,
+and the leaning motorcycle beside it from the tilt.
+
+## And the fog lamps, in the same session
+
+**Not on the bus.** Six transitions, nothing answered. Three bytes scored 1 of 6
+and all three also moved during the quiet phase, which is what background noise
+does.
+
+This closes the open item this file has carried since the first garage run:
+"a real null for 65381, 65386 and 65390 -- but not for 65265, which was blind at
+the time". 65265 was visible this time, and `65265 b3` had demonstrably reported
+minutes earlier in the same session, so the rig was proved capable against the
+same message that was blind before.
+

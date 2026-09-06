@@ -176,7 +176,8 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `grips` | int | | Heated grips, 0 for off through 10. Ten detents, and the byte moves in exact steps of 25 |
 | `gripTempL`, `gripTempR` | float | °C | What each grip has actually reached. Left is byte 0 -- confirmed by holding a bare hand on it with the heat off, which is the only way to be sure |
 | `lean` | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it |
-| `stand` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`.** The sidestand state is not on this bus. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
+| `stand` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`**, and it answers whether the machine is RESTING on the stand, not where the stand is. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
+| `standDown` | string | | `"DOWN"` / `"UP"` -- the sidestand **switch**, PGN 65381 SA 0 byte 7 bit 0, clear for extended. The measured fact, as against `stand` above, which is inferred from tilt. Absent with the ignition off, because the ECU is not transmitting 65381 then. Found 2026-09-06 after being ruled off this bus twice; see GARAGE-RUN run 9 |
 | `wheels` | string | | `"OK"`, `"FRONT LOST"`, `"REAR LOST"`. Continuous comparison of the two wheel speeds |
 | `wheelBlips`, `wheelBlipsRear` | int | | Brief dropouts counted per sensor since the board was last erased. Survives reboots and OTA |
 | `headlight` | string | | `"High"` / `"Low"` / `"Off"` |

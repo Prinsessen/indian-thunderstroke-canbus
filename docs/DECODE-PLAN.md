@@ -446,9 +446,11 @@ That was one step too far: a signal can exist as an event without existing as a
 value, and a change detector cannot see something that is only ever reported at
 the moment it matters.
 
-Still open, and cheap: **PGN 65390 byte 0** stepped DF <-> FF (bit 5) at the
-start of the same test. That is the PGN the front brake was withdrawn from, and
-bit 5 is a candidate for the sidestand switch itself. One clean test would say.
+**CLOSED 2026-09-06, and it was never the stand.** That DF <-> FF step is dated
+12:16:54, not the stand test at all, and eight other PGNs moved in the same
+second: it is the ignition waking up. The identical burst appears again at
+09:19:03 on 2026-09-06. The real sidestand switch is 65381 SA 0 byte 7 bit 0 --
+see GARAGE-RUN run 9.
 
 **3. PGN 65394 — SOLVED 2026-09-04. Grip temperature, left and right.**
 
@@ -662,8 +664,8 @@ Test: switch them on, hold ten seconds, off, hold ten, with the change detector
 running. A byte moving in step is the switch.
 
 Worth noting that the assumption behind the question is unsafe. "Not on the
-dash" does not mean "not on the bus": the sidestand shows nothing on the dash
-and reaches the bus as a fault, and grip temperature is on the bus while being
+dash" does not mean "not on the bus": the sidestand reaches the bus both as a
+fault AND as a live switch bit (65381 SA 0 b7 b0, settled 2026-09-06), and grip temperature is on the bus while being
 displayed nowhere on the motorcycle at all.
 
 **E. Headlight bulb — already decoded, nothing to do.** Pull the bulb or blow
@@ -744,8 +746,9 @@ we already decode.
 
 That matters because `standState()` currently derives DOWN from the lean byte
 with a three-second hold, and the comment there is honest about what it is: a
-heuristic chosen because no sidestand state exists on the bus. A DM1 fault from
-the machine itself is not a heuristic.
+heuristic chosen when no sidestand state was thought to exist on the bus. One
+does -- 65381 SA 0 byte 7 bit 0, found 2026-09-06 -- so the switch is now
+available as a measured input, and a DM1 fault from the machine is better still.
 
 **Nothing needs to be decoded.** The work is to watch for SPN 520200 FMI 14
 appearing in the DM1 stream and decide what it should drive — almost certainly

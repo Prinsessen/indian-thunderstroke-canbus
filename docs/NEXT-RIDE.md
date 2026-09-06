@@ -136,9 +136,11 @@ they should show in byte 5.
 Neither needs a ride. Both need the change detector, which is in the firmware
 while `PROBE_CHANGES` is 1.
 
-**Fog lamps.** On ten seconds, off ten seconds. Indian's fault table already
-knows them (SPN 520291 and 520292), so the bus is aware of the lamps; what is
-open is whether the switch position is broadcast.
+**Fog lamps -- DONE 2026-09-06, and they are not on the bus.** Six transitions,
+nothing answered, with PGN 65265 visible this time (it was masked when the first
+null was called, which is why that one did not count). Indian's fault table knows
+the lamps -- SPN 520291 and 520292 -- so failures are reported; the switch
+position is not. See GARAGE-RUN run 9.
 
 **Headlight bulb.** Nothing to test — it is already decoded. Pulling a bulb
 raises SPN 2350 FMI 5 for low beam or 2348 FMI 5 for high, and the app names it

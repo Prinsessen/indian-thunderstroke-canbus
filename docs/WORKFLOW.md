@@ -53,6 +53,19 @@ not in the history. `git diff` before `git commit`, every time.
 > The copy takes seconds. Take all of it, every time.
 
 
+> **There are two app trees on the server. Take the one in `source-code`.**
+>
+> `/etc/openhab/source-code/indian-canbus-app` is the working copy and the one
+> this command copies. The public repository also carries an `app/` directory,
+> which is an export and is periodically behind -- on 2026-09-06 it was missing
+> the previous evening's `Dtc.line()` fix.
+>
+> An edit made in the export is invisible to the phone, and copying the export
+> over the working copy silently reverts whatever the working copy had that the
+> export did not. Both happened that morning, an hour apart. If a change has to
+> exist in both, make it in `source-code` and port it outward -- never the
+> reverse.
+
 After any change on the server, refresh the source. **Copy the whole project,
 not `app\src`:**
 
