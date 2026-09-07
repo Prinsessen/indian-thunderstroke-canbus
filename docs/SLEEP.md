@@ -257,27 +257,99 @@ the estimate that said it was is the thing that was wrong.
 
 ## Still open
 
-### The next mA are in the transceiver — and there may be a cheap way in
+### The hunt for more mA is over — the floor is hardware
 
-An ESP32-S3 in deep sleep draws tens of microamps, so essentially **all** of the
-17 mA is everything except the CPU: the CAN transceiver in normal mode, the
-MCP2518FD, the 12 V regulator's quiescent draw, the USB-serial chip and a power
-LED. That confirms what this document predicted before the numbers existed.
+**Closed 2026-09-07, by a continuity test and a datasheet.**
 
-The expensive route is raw SPI writes to wake-on-CAN registers ACAN2517FD does
-not expose, unverifiable off the bike — set out under
-[How it wakes](#how-it-wakes).
+This document predicted the remaining current was in the transceiver and
+suggested looking for a standby pin. That was the wrong shape of answer.
 
-**Check the cheap route first.** Many CAN transceivers have a hardware standby
-pin (a TJA1051T/3 has `S`). If the T-2CANFD routes it to a GPIO, standby is a
-`digitalWrite` rather than register hacking, and it is likely worth most of the
-available 8–10 mA at none of the risk. **Open question: which transceiver is
-fitted, and is that pin brought out?** Read the schematic before writing any
-code.
+The owner measured for continuity between the 12 V input's negative and the CAN
+terminal's GND and found **none**. The CAN side is galvanically isolated, which
+narrows the part down: the board carries a **Mornsun TD501MCANFD**, an isolated
+CAN-FD transceiver module rated 5 VDC in, **2500 VDC isolation**, and — the line
+that matters — **"Integrated Power: yes"**. It contains its own isolated DC-DC.
 
-Worth keeping in proportion, though: 17 mA already gives about three weeks to
-half charge, and anything parked longer than that wants a tender regardless of
-what this board does. This is a nice-to-have, not a gap.
+That converter is where the milliamps are. Mornsun's published static current is
+26 mA at 5 V, which through a buck from 12 V is roughly 12.7 mA — about
+three-quarters of the measured 17 mA. (That figure comes from a search summary,
+not from reading the datasheet table; the 17 mA measurement is the authority
+here. Note the two constrain each other: 26 mA at 5 V behind a *linear* regulator
+would draw 26 mA at 12 V, which is more than the whole measured budget, so the
+board must be using a switching regulator or the 26 mA is high.)
+
+**The converter cannot be switched off without switching off the receiver, and
+the receiver is wake-on-CAN.** There is no firmware change that recovers this
+current. 17 mA is close to the floor for this board with the wake path intact,
+and the only route lower is different hardware.
+
+That is a better outcome than an item left open forever: it is a limit, not a
+gap.
+
+### It draws nothing extra from the machine's side
+
+Worth stating because the obvious worry is wrong. The isolated module's bus side
+is fed by its own DC-DC, whose **input** sits on the board's supply rail — it does
+not tap the bus for power. The receiver itself is a high-impedance differential
+input drawing microamps. And a termination resistor carries no current in the
+recessive state, so with the ignition off and the bus silent it contributes
+nothing at all.
+
+**So the 17 mA transfers one-for-one to the machine's battery, with nothing on
+top.** Had the module been the type that draws its bus-side power from the bus,
+the arithmetic would have been different; "Integrated Power" is what rules that
+out.
+
+### How long it can stand
+
+With a stated set of assumptions — 18 Ah AGM, self-discharge about 1 mA
+equivalent, 50 % state of charge as marginal cranking and 35 % as doubtful on a
+big twin:
+
+| machine's own quiescent | total | 50 % | 35 % |
+|---|---|---|---|
+| 5 mA | 23 mA | 16.3 days | 21.2 days |
+| **10 mA** | **28 mA** | **13.4 days** | **17.4 days** |
+| 20 mA | 38 mA | 9.9 days | 12.8 days |
+
+Winter is doubly strict — capacity falls and the engine is harder to turn. At
+0 °C the 13.4 days becomes about 10.7, at −10 °C about 9.4, and the real failure
+arrives sooner than the table says because cranking demand rises at the same
+time.
+
+**Stated plainly: the board shortens standing time.** If the machine draws 10 mA
+of its own, adding ours takes 11 mA to 28 and roughly 34 days to 13. Deep sleep
+moved this from impossible (5.5 days) to practical (13), but it is not free.
+Anything standing longer than a fortnight wants a maintenance charger, which is
+ordinary practice for a parked motorcycle regardless of what is wired to it.
+
+**The missing measurement is the machine's own quiescent draw** — meter in series
+with the battery negative, ignition off, board disconnected. Thirty seconds, and
+the table above stops being parametric. It is a useful baseline independently of
+this project: a motorcycle that suddenly draws 40 mA at rest has something wrong.
+
+### Wiring, and the isolation that gets bridged anyway
+
+The service connector provides CAN H, CAN L, GND and permanent 12 V. Both the
+board's DC input and the CAN terminal's GND take their reference from that one
+connector, so **the isolation barrier is bridged externally the moment it is
+wired**, and cannot be preserved while the supply and the bus share a source.
+
+That costs nothing here. Isolated modules exist for installations where two
+systems sit at different ground potentials; one machine with one battery and one
+reference has nothing to isolate from. What is given up is fault containment — a
+board that failed short would no longer be held off the machine's bus — and the
+protection that actually matters on a permanent installation is a fuse in the
+12 V feed.
+
+> ⚠️ The CAN A terminal's **`5VDC` pin is power, not signal**, and sits beside
+> `CanH`. Permanent 12 V on it destroys the board. 12 V goes to the DC input
+> only.
+
+One check worth doing before permanent installation, for bus health rather than
+current: measure **CAN H ↔ CAN L** at the service connector with the ignition
+off. **60 Ω** is correct. **40 Ω** means the board's own 120 Ω terminator is in
+circuit on an already-terminated bus and must be opened.
 
 ### The backstop has never actually fired
 
