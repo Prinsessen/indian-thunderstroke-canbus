@@ -342,9 +342,12 @@ board that failed short would no longer be held off the machine's bus — and th
 protection that actually matters on a permanent installation is a fuse in the
 12 V feed.
 
-> ⚠️ The CAN A terminal's **`5VDC` pin is power, not signal**, and sits beside
-> `CanH`. Permanent 12 V on it destroys the board. 12 V goes to the DC input
-> only.
+The CAN A terminal is `D GND · CAN H · CAN L · S GND`. **`D GND` is the isolated
+CAN ground and is the one the machine's ground belongs on**; `S GND` is for a
+cable screen and stays open on unshielded wiring. Power comes from the separate
+DC input, never from this terminal. (An earlier version of this note repeated
+README.md's claim that pin 1 was a `5VDC` rail to be kept clear — that was wrong,
+inherited from the other board, and is corrected there.)
 
 One check worth doing before permanent installation, for bus health rather than
 current: measure **CAN H ↔ CAN L** at the service connector with the ignition
