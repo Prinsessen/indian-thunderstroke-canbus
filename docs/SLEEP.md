@@ -182,13 +182,46 @@ high with `gpio_hold_en()`.
 
 ## Still open
 
-- **Current draw per mode** — not measured. This is the number the whole feature
-  is justified by.
-- **The timer backstop has never actually fired.** It is armed on every sleep and
-  has never been the thing that woke the board, so it is untested in the field.
-- **`busy` is hardcoded `false`** at both call sites. An OTA cannot currently
-  hold sleep off; in practice the bus is live during an OTA anyway, which is why
-  this has not bitten.
+**Current draw per mode — not measured.** This is the number the whole feature is
+justified by, and it is the gate on both decisions below. Measurements planned
+for 2026-09-07 afternoon: awake with WiFi and BLE up, awake idle, asleep, and
+the transient during a wake.
+
+### The next mA are in the controller
+
+Decided 2026-09-07, before the numbers: **there is more to take, and it is at the
+MCP2518FD and its transceiver**, which this design deliberately leaves powered.
+Everything else worth switching off is already off.
+
+The cost of going after it is set out under [How it wakes](#how-it-wakes): raw
+SPI writes to wake-on-CAN registers that ACAN2517FD does not expose, with no way
+to verify them off the bike. So the sequence is measure first, then decide
+whether the remaining draw justifies that risk — not the other way round. If the
+sleeping current is already low against the battery's self-discharge, it does
+not.
+
+### The backstop stays, for now
+
+The hourly timer wake is not free: each one is a full WiFi bring-up. At roughly
+90 seconds awake per hour that is about 2.5 % duty, and if awake costs twenty
+times what asleep does, the backstop alone is on the order of 40 % of the total.
+Worth checking against the real figures.
+
+It stays anyway until deep sleep has proved itself over weeks of real parking.
+It is the one guarantee standing between a sleep bug and a ride out to pull a
+fuse, and an untested safety net is not the thing to trade away for milliamps.
+Revisit once the measurements exist and wake-on-CAN has a track record — as a
+documented decision, not a quiet edit.
+
+**The backstop has also never actually fired.** It is armed on every sleep and
+has never yet been the thing that woke the board, so the recovery path it exists
+to provide is itself untested in the field.
+
+### Other
+
+**`busy` is hardcoded `false`** at both call sites. An OTA cannot currently hold
+sleep off; in practice the bus is live during an OTA anyway, which is why this
+has not bitten.
 
 ---
 
