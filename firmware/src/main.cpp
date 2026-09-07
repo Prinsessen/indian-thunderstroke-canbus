@@ -42,8 +42,10 @@
 
 #include "vehstate.h"
 #include "service.h"
+#include <Preferences.h>   // remembering which SSID worked
 #include "counters.h"
-#include "probeflags.h"      // fault tallies that outlive a reboot and an OTA
+#include "probeflags.h"
+#include "sleep.h"         // deep sleep while the bus is quiet
 #include "ble.h"           // local phone link; compiles to nothing when ENABLE_BLE 0
 
 // BLE serves the DECODED state, which only exists in PRODUCTION. In DISCOVERY
@@ -211,6 +213,42 @@ bool haveSpeed = false;
 // ten, while the bus itself announces the same event instantly and every time.
 // The signal we were hunting was underneath the whole search.
 uint32_t lastFrameMs = 0;
+
+// When PGN 65381 SA 0 and the two TPMS messages last arrived.
+//
+// These exist because openHAB cannot work the age out for itself: the state JSON
+// is republished about once a second with whatever the current values are, so a
+// consumer sees "killSwitch: RUN" every second whether the CAN frame behind it
+// is one second or seventeen minutes old. Only this side knows.
+//
+// And seventeen minutes is not hypothetical. PGN 65381 SA 0 -- the message
+// carrying BOTH the kill switch and the sidestand -- is event-driven, not
+// periodic: 13 frames in a 22-minute ride and 7 in an 18-minute one, measured
+// from the August captures. It stopped three minutes before the bus went quiet
+// in one ride and seventeen in the other. TPMS is worse: the sensors sleep when
+// the machine is parked, so a pressure can be a whole ride old.
+//
+// Both readings are worth keeping -- a rider walking up wants to know whether
+// the kill switch was left at STOP, and wants pressures to pump against -- but
+// only alongside how old they are.
+static uint32_t lastInterlockMs = 0;   // PGN 65381 SA 0
+static uint32_t lastTyreFrontMs = 0;   // PGN 65268, front
+static uint32_t lastTyreRearMs  = 0;   // PGN 65268, rear
+
+/** Seconds since a stamp, or -1 if it has never been set. */
+static int ageSeconds(uint32_t stamp) {
+    if (stamp == 0) return -1;
+    return (int)((millis() - stamp) / 1000UL);
+}
+
+/** The OLDER of the two tyre readings, so the age never overstates freshness. */
+static int tyreAgeSeconds() {
+    const int f = ageSeconds(lastTyreFrontMs), r = ageSeconds(lastTyreRearMs);
+    if (f < 0) return r;
+    if (r < 0) return f;
+    return f > r ? f : r;
+}
+
 
 // When the front wheel speed was last actually reported. A sensor can fail in
 // three ways -- report zero, report 0xFFFF "not available", or stop being sent
@@ -421,6 +459,26 @@ static void otaGuardStop() {
 }
 
 // Retained, so openHAB shows the truth after a restart of either end.
+static void publishSleepStatus() {
+    char buf[160];
+    size_t n = sleepStatusJson(buf, sizeof(buf), false);
+    mqtt.publish(topic("sleep/status").c_str(), (const uint8_t *)buf, n, true);
+}
+
+// Called from sleepTick() immediately before the chip goes down, so the silence
+// that follows carries a reason. status goes "offline" either way -- that is the
+// last will firing on a dropped connection -- but this retained marker says
+// whether it was meant. Flushed with mqtt.loop() because deep sleep does not
+// wait for a socket.
+void sleepPublishAsleep() {
+    if (!mqtt.connected()) return;
+    char buf[160];
+    size_t n = sleepStatusJson(buf, sizeof(buf), true);
+    mqtt.publish(topic("sleep/status").c_str(), (const uint8_t *)buf, n, true);
+    mqtt.loop();
+    delay(120);
+}
+
 static void publishProbeFlags() {
     char buf[160];
     size_t n = probeFlagsJson(buf, sizeof(buf));
@@ -438,6 +496,19 @@ void onMqttMessage(char* inTopic, byte* payload, unsigned int length) {
     //
     // This does not touch the CAN bus. It is our own code deciding whether to
     // talk to our own broker.
+    // Deep sleep: canbus/<base>/sleep/en  payload ON or OFF.
+    //
+    // Off by default and settable from anywhere, because a board that sleeps
+    // wrongly is a board you have to ride out to. This is the recall.
+    if (String(inTopic) == topic("sleep/en")) {
+        String v = payloadStr; v.toUpperCase();
+        const bool on = (v == "ON" || v == "1" || v == "TRUE");
+        sleepSetEnabled(on);
+        logEvent((String("[sleep] ") + (on ? "ENABLED" : "disabled")).c_str());
+        publishSleepStatus();
+        return;
+    }
+
     {
         String prefix = topic("probe/en/");
         String t = String(inTopic);
@@ -515,7 +586,9 @@ void mqttConnect() {
         mqtt.setCallback(onMqttMessage);           // Set callback for incoming messages
         mqtt.subscribe(topic("ota").c_str());      // Subscribe to OTA command topic
         mqtt.subscribe(topic("probe/en/+").c_str());   // one switch per probe
+        mqtt.subscribe(topic("sleep/en").c_str());     // the deep-sleep recall
         publishProbeFlags();                           // state, retained
+        publishSleepStatus();
         // Announce the running firmware version (retained) so the UI confirms
         // which image is live -- especially right after an OTA reboot.
         //
@@ -547,7 +620,29 @@ void wifiConnect() {
     const char* ssidList[] = {WIFI_SSID, WIFI_SSID2, WIFI_SSID3};
     const char* passList[] = {WIFI_PASSWORD, WIFI_PASSWORD2, WIFI_PASSWORD3};
     
-    for (int idx = 0; idx < 3; idx++) {
+    // Try the one that worked last time first.
+    //
+    // The list is tried in order, so a bike parked where only SSID3 reaches pays
+    // two ten-second timeouts before it connects. Measured on the motorcycle
+    // 2026-09-07: ninety-three seconds from the CAN frame that woke the board to
+    // MQTT being up, essentially all of it spent failing over. The wake itself
+    // was immediate.
+    //
+    // That cost is not new -- every OTA reboot has always paid it -- but deep
+    // sleep makes it visible, because it is now subtracted from the start of
+    // every ride rather than from a reboot nobody was watching.
+    //
+    // So the index of whichever SSID last worked is kept in NVS, and tried
+    // first. Same list, same fallback, different starting point: home is home
+    // most days, and when it is not, the first attempt costs one timeout that
+    // would have been paid anyway.
+    Preferences wifiPrefs;
+    wifiPrefs.begin("wificfg", false);
+    const int firstIdx = wifiPrefs.getUChar("last", 0) % 3;
+    wifiPrefs.end();
+
+    for (int n = 0; n < 3; n++) {
+        const int idx = (firstIdx + n) % 3;
         // Skip if SSID is empty (fallback disabled)
         if (!ssidList[idx] || strlen(ssidList[idx]) == 0) continue;
         
@@ -566,7 +661,17 @@ void wifiConnect() {
         Serial.println();
         
         if (WiFi.status() == WL_CONNECTED) {
-            Serial.printf("[wifi] connected to SSID%d\n", idx + 1);
+            Serial.printf("[wifi] connected to SSID%d%s\n", idx + 1,
+                          (n == 0) ? " (remembered)" : "");
+            // Remember it, but only when it changed: NVS has a write budget and
+            // the common case is connecting to the same network every time.
+            if (idx != firstIdx) {
+                Preferences wp;
+                wp.begin("wificfg", false);
+                wp.putUChar("last", (uint8_t)idx);
+                wp.end();
+                Serial.printf("[wifi] will try SSID%d first next time\n", idx + 1);
+            }
             Serial.printf("[wifi] IP %s\n", WiFi.localIP().toString().c_str());
             IPAddress brokerIp;
             bool brokerResolved = false;
@@ -808,7 +913,7 @@ void resetState() {
     st.gear[0] = 0; st.headlight[0] = 0; st.security[0] = 0;
     st.vin[0] = st.swid[0] = st.dm1[0] = st.dm1Raw[0] = 0;
     st.brakeRear = st.cruiseEnable = st.cruiseSw = st.hazard = -1;
-    st.cruiseHold = st.clutch = st.standDown = -1;
+    st.cruiseHold = st.clutch = st.standDown = st.killSwitch = st.startBtn = -1;
     st.indLeft = st.indRight = -1;
     st.grips = -1;
     st.lean = -1;
@@ -1670,6 +1775,7 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             bool rear  = (loc == 0x10 || loc == 0x21 || loc == 0x01);
             if (nn >= 2 && b[1] != 0xFF) { float psi = b[1] * 0.580152f;
                 if (front) SETF(tyreFront, psi); else if (rear) SETF(tyreRear, psi); }
+                if (front) lastTyreFrontMs = millis(); else if (rear) lastTyreRearMs = millis();
             if (nn >= 4 && !(b[2] == 0xFF && b[3] == 0xFF)) { uint16_t r = b[2] | (b[3] << 8);
                 float t = r / 32.0f - 273.0f;
                 if (front) SETF(tyreFrontTemp, t); else if (rear) SETF(tyreRearTemp, t); }
@@ -1708,6 +1814,26 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             // A held state, not the momentary blip the switch bits in byte 1
             // produce -- which is what makes it worth shipping.
             if (j.sa == 39 && nn >= 3 && b[2] != 0xFF) SETI(hazard, b[2] & 1);
+            // Start button, SA 39 byte 3 bit 2. Set = pressed. Found 2026-09-06,
+            // five presses, two transitions each -- down and up, which is what a
+            // momentary button looks like -- and silent through both the quiet
+            // and the handling phases, including while the light switch was
+            // being worked.
+            //
+            // SA 39, not SA 0, and that is the point: this is the handlebar
+            // switch module, alongside the indicators and the hazard bit. The
+            // kill switch and the sidestand are ECU interlocks on SA 0. A button
+            // is just a button.
+            //
+            // It also settles a worry the test was designed around. The run was
+            // done with the kill switch in STOP so it could not crank, and there
+            // was no way to know whether the button would still be reported
+            // while blocked. It is -- because it never went through the ECU.
+            //
+            // The byte was already in UNEXPLORED-BYTES as 65381/39/3, two values,
+            // rated LOW with the note "moved during the lights test". Seen, and
+            // mis-scored.
+            if (j.sa == 39 && nn >= 4 && b[3] != 0xFF) SETI(startBtn, (b[3] & 0x04) ? 1 : 0);
             // Sidestand switch, SA 0 byte 7 bit 0. Clear = extended, set =
             // retracted. Proved 2026-09-06 after being wrongly ruled off this
             // bus twice.
@@ -1737,6 +1863,23 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             // there is no separate wire to the cluster, so the lamp has to be
             // hearing this.
             if (j.sa == 0 && nn >= 8 && b[7] != 0xFF) SETI(standDown, !(b[7] & 1));
+            if (j.sa == 0) lastInterlockMs = millis();
+            // Kill switch (run/stop), SA 0 byte 4 bit 6. Set = RUN, clear = STOP.
+            // Found 2026-09-06, and it had never been hunted -- it sat unticked
+            // on a checklist in REVERSE_ENGINEERING.md while nine garage runs
+            // went past it. The owner remembered it; no document did.
+            //
+            // Ten transitions for five flicks, exactly two each, and this byte
+            // appears nowhere else in the run: not in the quiet phase, not while
+            // the bars and switchgear were being worked in the control phase.
+            //
+            // The run also answered the question that made the test risky. The
+            // bus does NOT die when the switch goes to STOP -- ignition stayed ON
+            // throughout and the ECU kept transmitting, so the switch cuts the
+            // engine without cutting the module that reports it. Had it gone
+            // quiet, the null would have been indistinguishable from a control
+            // that is not on the bus at all.
+            if (j.sa == 0 && nn >= 5 && b[4] != 0xFF) SETI(killSwitch, (b[4] & 0x40) ? 1 : 0);
             break;
         case 65089:
             // Indicators, byte 1: bit 6 left, bit 4 right. Confirmed clean in
@@ -2087,11 +2230,49 @@ static const char *wheelCheck() {
 // switches cannot be known. Oil temperature, battery, tyres, grips, the
 // odometer and the stand are all still exactly as true as they were a second
 // ago, so they stay.
+//
+// BLE consumers get this for free: buildFastPacket() turns each NAN into the
+// 0xFFFF / 0xFF sentinel the protocol defines, and the app draws dashes.
+//
+// MQTT consumers CANNOT be cleared from here, and that was measured rather than
+// assumed (2026-09-07). buildStateJson() omits a NAN field, and an absent field
+// cannot clear a consumer that has cached a value. Publishing an explicit JSON
+// null does not work either: JSONPATH returns null for it (openHAB's own
+// JSonPathTransformationServiceTest.testNullValue asserts this), and
+// ChannelState.processMessage discards the message without touching the item.
+// The string "UNDEF" is worse -- TypeParser rejects it and the binding logs a
+// WARN per message.
+//
+// So openHAB clears these itself, in automation/js/canbus-clear-live-values.js.
+// THAT LIST AND THIS FUNCTION MUST STAY IN STEP.
 static void clearLiveValues() {
-    st.rpm = st.throttle = st.speed = st.speedFront = NAN;
-    st.fuelRate = st.fuelEconInst = NAN;
+    // NARROWED 2026-09-07, to the momentary rider inputs only.
+    //
+    // This used to clear engine speed, road speed, throttle and the two
+    // interlocks as well, on the reasoning that they "stop meaning anything" on
+    // a stopped machine. They do not. A parked motorcycle genuinely reads zero
+    // revs, zero road speed and a throttle plate on its idle stop, and deep
+    // sleep is what made that observable: the board now outlives the other
+    // modules by five minutes and watches the bus taper off over about forty
+    // seconds, so what it is left holding is a true description of a parked
+    // machine rather than an arbitrary cut.
+    //
+    // Blanking them threw that away. The kill switch was the worst of it: a
+    // rider walking up to a machine that will not start wants to see STOP, and
+    // that is exactly the reading this function was erasing.
+    //
+    // What remains here is what a rider DID, not what the machine IS. A brake
+    // that was pressed, an indicator that was on, a start button that was held:
+    // the last one says nothing about a machine nobody is sitting on.
+    //
+    // Instantaneous economy goes too -- litres per 100 km at zero speed is
+    // undefined, not zero.
+    //
+    // The interlocks and the tyres survive instead as value plus age; see
+    // interlockAge / tyreAge above and automation/js/canbus-clear-live-values.js.
+    st.fuelEconInst = NAN;
     st.brakeRear = st.indLeft = st.indRight = -1;
-    st.cruiseEnable = st.cruiseSw = st.hazard = st.standDown = -1;
+    st.cruiseEnable = st.cruiseSw = st.hazard = st.startBtn = -1;
     st.cruiseHold = st.clutch = -1;
     stateDirty = true;
 }
@@ -2154,6 +2335,7 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
                                                             : st.cruiseSw == 2 ? "RES/ACC" : "none";
     if (st.hazard >= 0)          doc[K("hazard","hz")]       = st.hazard ? "ON" : "OFF";
     if (st.standDown >= 0)       doc[K("standDown","sd")]    = st.standDown ? "DOWN" : "UP";
+    if (st.killSwitch >= 0)      doc[K("killSwitch","ks")]   = st.killSwitch ? "RUN" : "STOP";
     if (st.security[0])          doc[K("security","se")]     = st.security;
     if (st.headlight[0])         doc[K("headlight","hl")]    = st.headlight;
     if (st.indLeft >= 0)         doc[K("indLeft","il")]      = st.indLeft ? "ON" : "OFF";
@@ -2197,6 +2379,23 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     // along on MQTT (openHAB wants them once) but stay off the BLE link.
     if (includeVin && st.vin[0])  doc[K("vin","vn")]        = st.vin;
     if (includeVin && st.swid[0]) doc[K("softwareId","si")] = st.swid;
+    // MQTT only, and deliberately. The BLE payload sits at 514 bytes with two
+    // faults -- exactly the ceiling -- so a field that earns its place on a
+    // rider's live dashboard has to be worth a byte of someone else's fault
+    // text. A momentary button is not: it reads RELEASED in almost every
+    // snapshot, because catching PRESSED needs the publish to land inside the
+    // press. On MQTT at 5 Hz that happens; on a glanceable dial it means
+    // nothing.
+    // Kept on ONE line on purpose. ble_budget.py decides a field is MQTT-only by
+    // finding the includeVin gate on the same line as the field itself, so
+    // wrapping this across two lines hid the gate and the tool counted it
+    // against the radio ceiling.
+    if (includeVin && st.startBtn >= 0) doc[K("startButton","sb")] = st.startBtn ? "PRESSED" : "RELEASED";
+    // Age of the readings openHAB keeps rather than clears. MQTT only: the BLE
+    // payload is already 525 bytes against a 514 ceiling at four faults, and the
+    // phone has the fast packet for anything it needs at ride speed.
+    if (includeVin && ageSeconds(lastInterlockMs) >= 0) doc[K("interlockAge","ia")] = ageSeconds(lastInterlockMs);
+    if (includeVin && tyreAgeSeconds() >= 0) doc[K("tyreAge","ta")] = tyreAgeSeconds();
     // Compact on the radio, readable on MQTT -- the same split as the keys.
     // BLE has 514 bytes and cannot fragment; MQTT has no such limit and a person
     // may be reading it on a sitemap.
@@ -2589,6 +2788,22 @@ bool scanAndEnterBus(bool firstBoot) {
     static int rrIdx = 0;                 // round-robin cursor for retries
     uint32_t best = 0; int bestIdx = -1;
 
+#ifdef CAN_FIXED_BITRATE
+    // One rate, always. See config.h for why the search is gone.
+    {
+        uint32_t cnt = 0;
+        const bool ok = tryRate(CAN_FIXED_BITRATE, SCAN_WINDOW_MS, cnt);
+        if (firstBoot)
+            Serial.printf("Fixed bitrate %lu: %s frames=%lu\n",
+                          (unsigned long)CAN_FIXED_BITRATE,
+                          ok ? "listening" : "install-failed", (unsigned long)cnt);
+        if (ok && cnt > 0) {
+            best = cnt;
+            for (int i = 0; i < CAN_NUM_RATES; i++)
+                if (CAN_RATES[i].bitrate == CAN_FIXED_BITRATE) { bestIdx = i; break; }
+        }
+    }
+#else
     if (firstBoot) {
         Serial.println("Scanning bitrates (listen-only)...");
         for (int i = 0; i < CAN_NUM_RATES; i++) {
@@ -2608,6 +2823,7 @@ bool scanAndEnterBus(bool firstBoot) {
         bool ok = tryRate(CAN_RATES[i].bitrate, SCAN_WINDOW_MS, cnt);
         if (ok && cnt > 0) { best = cnt; bestIdx = i; }
     }
+#endif
 
     if (bestIdx < 0 || best == 0) {
         // Bus silent — almost always just the ignition being OFF. Keep retrying
@@ -2788,6 +3004,7 @@ void setup() {
     serviceBegin();
     countersBegin();      // tallies that must outlive an OTA
     probeFlagsBegin();    // which probes run; also outlives an OTA
+    sleepBegin();         // deep-sleep setting, and why this boot happened
     bleSetup();
 
 #if ENABLE_MQTT
@@ -2806,16 +3023,41 @@ void setup() {
 // backoff) WITHOUT rebooting, so a dropped link self-heals in place.
 uint32_t lastWifiRetry = 0;
 uint32_t lastMqttRetry = 0;
+uint8_t  wifiRetriesOnSameSsid = 0;
 void ensureNetwork() {
     if (WiFi.status() != WL_CONNECTED) {
         if (millis() - lastWifiRetry > 10000) {
             lastWifiRetry = millis();
-            Serial.println("[wifi] link down - reconnecting");
-            WiFi.disconnect();
-            WiFi.reconnect();
+            // WiFi.reconnect() retries the SSID we are already configured for.
+            // That is right for a router that rebooted, and wrong for a bike
+            // that rode away: leaving the garage on home WiFi, the home SSID is
+            // simply gone, and reconnect() would keep asking for it every ten
+            // seconds for the rest of the ride while the phone hotspot sat
+            // there unused. wifiConnect() is the only code that walks the SSID
+            // list, and it only ran from setup() -- so the failover worked on
+            // wake but never in motion.
+            //
+            // So: three cheap reconnects (30 s, covers a router reboot or a
+            // brief dropout), then fall back to the full list. wifiConnect()
+            // re-runs the same path as boot, including remembering the SSID
+            // that worked in NVS, so once the hotspot has carried one ride it
+            // is tried first on the next wake. ArduinoOTA.begin() is guarded by
+            // its own _initialized flag, so calling it again is a no-op.
+            if (++wifiRetriesOnSameSsid <= 3) {
+                Serial.printf("[wifi] link down - reconnecting (%u/3)\n",
+                              wifiRetriesOnSameSsid);
+                WiFi.disconnect();
+                WiFi.reconnect();
+            } else {
+                Serial.println("[wifi] link down - rescanning all SSIDs");
+                wifiRetriesOnSameSsid = 0;   // cheap retries again after this
+                wifiConnect();               // blocks up to 30 s, as at boot
+                lastWifiRetry = millis();    // re-arm from when the scan ended
+            }
         }
         return;                            // no point touching MQTT yet
     }
+    wifiRetriesOnSameSsid = 0;             // link is up; start the count over
     if (!mqtt.connected()) {
         if (millis() - lastMqttRetry > 5000) {
             lastMqttRetry = millis();
@@ -2887,6 +3129,15 @@ void loop() {
         // are still true: a bike parked on its stand is still on its stand
         // after the ignition is switched off.
         publishState();
+
+        // Sleep is decided HERE as well as at the foot of the loop, and this is
+        // the copy that matters. The bus being down is exactly the state deep
+        // sleep exists for, and this branch returns early -- so the call at the
+        // end of loop() is unreachable in the one situation it was written for.
+        // Found on the bike within a minute of switching the feature on: it was
+        // enabled, the bus had been quiet for 481 seconds, and it stayed awake.
+        sleepTick(mqtt.connected(), false);
+
         delay(50);
         return;
     }
@@ -2898,6 +3149,7 @@ void loop() {
     while (processed < MAX_FRAMES_PER_PASS && canReceive(frame, 0)) {
         processed++;
         lastFrameMs = millis();
+        sleepNoteFrame();          // the bus is alive; the sleep timer restarts
         bool ext = frame.extd;
         uint32_t id = frame.identifier;
 #if DEBUG_USB_FRAMES
@@ -2944,4 +3196,10 @@ void loop() {
     tpExpire();                           // drop stalled multi-packet transfers
 #endif
 #endif
+
+    // Last thing in the loop, so anything with work in hand has already had it.
+    // Does nothing at all unless deep sleep has been switched on from openHAB,
+    // and cannot fire within the first ninety seconds of any wake -- see
+    // sleep.h for why that window is what makes the feature recoverable.
+    sleepTick(mqtt.connected(), false);
 }

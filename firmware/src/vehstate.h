@@ -52,7 +52,11 @@ struct VehState {
     // worth having: the stand can be down with the bike held upright, which is
     // the moment the interlock matters and the cluster lamp is lit.
     int8_t brakeRear, cruiseEnable, cruiseSw, cruiseHold, clutch, hazard,
-           indLeft, indRight, standDown;                        // -1=unknown
+           indLeft, indRight, standDown, killSwitch, startBtn;  // -1=unknown
+    // killSwitch is the red run/stop switch on the right bar: 1 = RUN, 0 = STOP.
+    // It sits two bytes from standDown in the same ECU message, which is the
+    // whole interlock story in one place -- the two things that can refuse to
+    // let the engine run, side by side.
     int8_t grips;        // heated grips, 0=off, 1..10; -1=unknown
     int16_t lean;        // PGN 2304 byte 0 raw, 127 upright; -1 unknown
     char  stand[9];      // "UPRIGHT", "STAND", "DOWN" -- only while stationary

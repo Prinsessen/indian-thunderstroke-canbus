@@ -201,6 +201,21 @@ class AlertBannerView @JvmOverloads constructor(
         // Tyres are judged on the cold equivalent, the same figure the tyre page
         // acts on — a warm tyre reading high is not over-inflated, and a banner
         // that shouted about it would train the rider to ignore the banner.
+        // A tyre banner stands on the reading's VALUE, never on its age.
+        //
+        // Settled deliberately on 2026-09-07, when TyreMemory's age was fixed and
+        // the obvious next question was whether a three-week-old pressure should
+        // still be allowed to raise a red banner. It should. The owner's
+        // reasoning, and it is better than the alternative: the tyres are already
+        // pumped to target, so a low reading means the tyre WAS low when it was
+        // last measured and nothing has said otherwise since. That is still
+        // actionable. And the banner clears itself the moment the wheel next
+        // reports a good pressure, which is the first thing that happens on
+        // moving off.
+        //
+        // Ageing the banner out would do the opposite of what this class is for:
+        // it would go quiet precisely when the machine has been standing long
+        // enough for a slow puncture to have emptied a tyre.
         val tyres = TyreMemory.last()
         val worstTyre = tyres?.let {
             listOf("FRONT" to it.front, "REAR" to it.rear)
