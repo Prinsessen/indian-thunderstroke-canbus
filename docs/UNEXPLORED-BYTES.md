@@ -79,7 +79,7 @@ control -- flick an indicator, work the headlight -- before being believed.
 | 65390 | 39 | 0 | 2 | 223–255 | Proprietary | **MEDIUM** | Two values, one bit. Stepped at the start of the sidestand test. The PGN the front brake was withdrawn from; bit 5 is unexplained. |
 | 61445 | 39 | 4 | 2 | 32–83 | ETC2 byte 5 — transmission field | **LOW** | Two values only. Indian already deviates in this PGN (we read the gear as ASCII in byte 6, which is not the standard), so the standard is a weak guide here. |
 | 65381 | 39 | 2 | 2 | 252–253 | Proprietary | **LOW** | Two values. |
-| 65381 | 39 | 3 | 2 | 243–255 | Proprietary | **LOW** | Two values, moved during the lights test. |
+| 65381 | 39 | 3 | 2 | 243–255 | Proprietary | **SOLVED** | Bit 2 is the START BUTTON, set while pressed (2026-09-06). Rated LOW on the note "moved during the lights test" -- it had been seen and mis-scored, and a deliberate five-press run settled it in three minutes. |
 | 65386 | 39 | 1 | 2 | 252–253 | Proprietary | **LOW** | Two values, moves with the headlight. Byte 1 is the ignition/wake bit and byte 3 is the grips. |
 | 65265 | 39 | 4 | 3 | 204–220 | CCVS byte 5 — cruise Set/Decel + Resume/Accel switches | **SOLVED** | Momentary presses, understood. The decode was withdrawn because it read a button as a state — not because the state is absent. Byte 4 is the state, and it is untested: cruise was never engaged while capturing. |
 | 65382 | 0 | 1 | 12 | 0–11 | Proprietary | **SOLVED** | rpm/256. The withdrawn throttle. |

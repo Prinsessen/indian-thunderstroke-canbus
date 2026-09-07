@@ -813,3 +813,121 @@ the time". 65265 was visible this time, and `65265 b3` had demonstrably reported
 minutes earlier in the same session, so the rig was proved capable against the
 same message that was blind before.
 
+
+---
+
+# Run 10 — 2026-09-06, the kill switch
+
+**PGN 65381, SA 0 (the ECU), byte 4, bit 6. Set = RUN, clear = STOP.**
+
+## It had never been hunted
+
+Not withdrawn, not disproved -- never attempted. It sat unticked in
+REVERSE_ENGINEERING.md and was listed in this very file's run sheet, and then
+nine runs went past it. The owner remembered it; no document did.
+
+Worth recording as its own lesson: a checklist only works if something drives it.
+Four of the items still open beside it turned out to have been solved weeks ago
+and never ticked, so the list was lying in both directions at once.
+
+## The result
+
+Ten transitions for five flicks -- exactly two each, which is what "to STOP and
+back to RUN" should produce:
+
+```
+12:46:51  7F->3F        12:47:11  7F->3F   flick 3
+12:46:54  3F->7F        12:47:14  3F->7F
+12:46:58  7F->3F        12:47:22  7F->3F   flick 4
+12:47:00  3F->7F        12:47:23  3F->7F
+                        12:47:34  7F->3F   flick 5
+                        12:47:36  3F->7F
+```
+
+`65381 sa=0 b4` appears nowhere else in the run: not in the 45 s quiet phase, and
+not in the 30 s control phase while the bars, levers and switchgear were being
+worked deliberately.
+
+## The rig proved itself, and that was the owner's idea
+
+The risk in this test was specific: if the kill switch cut the ECU's supply, the
+probe would go silent at the exact moment we were watching it, and that null
+would have been indistinguishable from a control the bus does not carry.
+
+So phase 3 now opens with a prompted flash of the left indicator, which lands on
+two bytes we already know -- 65089 b1 and 65381 SA39 b1. Both answered at
+12:46:35-40. The rig was alive, so the silence in phases 1 and 2 means something.
+
+That is this project's own rule -- "the rig was proved capable in the same run as
+the null" -- and it is now built into `switch_hunt.py` rather than remembered.
+
+## And the risk did not materialise
+
+**The bus does not die when the switch goes to STOP.** Ignition read ON for the
+whole run and the ECU kept transmitting throughout. The switch cuts the engine
+without cutting the module that reports it, which is why the bit is visible at
+all.
+
+## One correction to the method
+
+The first flick's transition landed 5 s after its prompt, outside the 4 s
+response window, so the tool's table scored 4 of 5 for a byte the raw log shows
+answering all five. The window is now 6 s. A rider reaching for a switch is not
+a metronome, and 6 s is still well inside the shortest gap between prompts.
+
+---
+
+# Run 11 — 2026-09-06, the start button
+
+**PGN 65381, SA 39 (the handlebar module), byte 3, bit 2. Set = pressed.**
+
+Five presses, two transitions each -- down and up, which is what a momentary
+button looks like -- answering every prompt, and silent through both the quiet
+phase and the handling phase, including while the light switch was being worked.
+
+## It was already in the table, rated LOW
+
+`UNEXPLORED-BYTES.md` carried this byte as `65381 | 39 | 3`, two values, odds
+**LOW**, with the note *"moved during the lights test"*. It had been seen and
+mis-scored: something moved it once during an unrelated test, and that single
+coincidence set its rating for weeks.
+
+A deliberate five-press run settled it in three minutes. The lesson is not that
+the table was wrong -- it is that a byte seen moving once, during a test of
+something else, carries almost no information. Only a run designed around the
+control tells you anything.
+
+## The worry it was designed around did not materialise
+
+The run was done with the kill switch in STOP so a press could not crank the
+engine, and the preset warned that a null from that configuration would be
+ambiguous: nobody knew whether the ECU still processed the button while blocked.
+
+It reported anyway, and the reason is the source address. **SA 39, not SA 0.**
+This is the handlebar switch module, alongside the indicators and the hazard bit.
+The button never goes through the ECU, so the kill switch has no say in whether
+it is broadcast.
+
+That also completes a picture worth keeping:
+
+| control | module | location |
+|---------|--------|----------|
+| kill switch | SA 0, the ECU | 65381 byte 4 bit 6 |
+| sidestand | SA 0, the ECU | 65381 byte 7 bit 0 |
+| start button | SA 39, the handlebars | 65381 byte 3 bit 2 |
+| indicators, hazard | SA 39, the handlebars | 65381 bytes 1 and 2 |
+
+The two interlocks that can refuse to let the engine run are the ECU's. The
+things a rider presses are the handlebars'. Same PGN, different modules, and the
+split is not arbitrary.
+
+## Kept off the radio on purpose
+
+`startButton` is MQTT-only. The BLE payload sits at 514 bytes with two faults --
+exactly the ceiling -- and a momentary press reads RELEASED in almost every
+snapshot anyway. It earns a place in openHAB and none on a glanceable dial.
+
+## The checklist is empty
+
+With this, every switch in REVERSE_ENGINEERING.md is found or ruled out. What
+remains all needs wheels.
