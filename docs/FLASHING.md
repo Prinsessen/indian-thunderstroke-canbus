@@ -152,6 +152,37 @@ already-terminated bus it is a third terminator. Measured on the machine:
 > it with the meter, not the silkscreen:** 120 Ω against 1 MΩ is three orders of
 > magnitude.
 
+### Lifting `RZ2`
+
+Seconds with an ordinary iron — no hot-air station, no two-iron technique. A fine
+SMD tip at **350–400 °C**, brief contact, and the part releases and comes away.
+
+Worth stating plainly, because this job was once deferred for a fortnight on the
+strength of being described as risky rework on the only board there is. It is
+not: it is a small chip resistor and a hot tip.
+
+**Identify it with the meter, never the silkscreen.** `RZ2` reads **120 Ω**
+across CAN H / CAN L. `RY2` sits nearby, one letter away, and reads **1 MΩ** —
+that one is the bleeder from the isolated CAN ground to chassis and must stay.
+Three orders of magnitude is an easy distinction for an instrument and a hard one
+for tired eyes on a microscopic part.
+
+**Verify either side of the work**, so the result is measured rather than
+believed:
+
+| | before | after |
+|---|---|---|
+| Across the board’s CAN A terminals | 126.4 Ω | **open** |
+| Same, with the vehicle’s bus connected | 41.0 Ω | **60.5 Ω** |
+
+`RZ1` is the same part on the unused CAN B channel. Lifting it too is harmless
+and optional; `RZ2` is the one that matters.
+
+Then confirm the board still hears the bus — reception cannot be broken by
+removing a terminator, but that is a reason to expect a result, not a substitute
+for seeing one. Ignition on, and the interlock reading age should come back at
+0 s.
+
 Removing a terminator cannot break reception — termination damps reflections for
 the *transmitters* on a bus, it does not enable a receiver. Verify anyway: with
 `RZ2` off the board's terminals read open, and ~60 Ω once the vehicle's bus is
