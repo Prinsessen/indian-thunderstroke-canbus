@@ -97,6 +97,102 @@ TWAI controller — there is nothing to wire chip-to-chip. You only land the bus
 > (zero frames), and the board's **own 120 Ω terminator jumper must be opened**
 > for a mid-bus DIAG tap (the bus is already terminated — see the 60 Ω check).
 
+### T-2CANFD CAN wiring (isolated module — the board actually in use)
+
+Everything above describes the T-CAN485. The board in service is a **LilyGO
+T-2CANFD**, and it wires differently enough that following the section above
+would land the wrong things in the wrong places.
+
+**CAN A terminal — four pins, and none of them is power:**
+
+| Pin (silkscreen) | Net | What it is | Connect? |
+|---|---|---|---|
+| **D GND** | `DGNDA` | The **isolated** CAN-side ground. Not connected to the board's supply ground. | **Yes** → vehicle GND. This is the bus reference. |
+| **CAN H** | `CANHA` | CAN high | Yes |
+| **CAN L** | `CANLA` | CAN low | Yes |
+| **S GND** | `SGNDA` | Shield ground, for the screen of a shielded cable, one end only. | Normally no — leave open on unshielded wiring. |
+
+Power comes from the **separate DC input (+ / −)**, never from this terminal.
+
+> Do not go looking for a `5VDC` pin here. Earlier versions of these notes
+> described one, carried over from the T-CAN485, and warned against putting
+> voltage on it. It does not exist on this board, and the pin those notes told
+> you to leave alone is the CAN ground you actually want.
+
+**Why the ground is isolated, and why that stops mattering.** The transceiver is
+a **Mornsun TD501MCAN** module — 2500 VDC isolation with its own integrated
+DC-DC, which is why a continuity check finds nothing between the DC input's
+negative and `D GND`. On a vehicle where the board is powered from the *same*
+connector as the bus, both sides end up tied to the same ground and the barrier
+is bridged externally. That is unavoidable and costs nothing: isolation exists so
+two systems at *different* ground potentials can talk, and one machine with one
+battery has no potential difference to isolate from. What is given up is fault
+containment; the protection that matters on a permanent installation is a fuse in
+the 12 V feed. (Power the board from a *separate* source, as on a bench, and the
+isolation is real and worth keeping — leave `D GND` on the bus and the supply
+return on its own.)
+
+**The onboard terminator is soldered, and there is no jumper.** `RZ2` is a 120 Ω
+straight across CAN H / CAN L after the common-mode choke. On an
+already-terminated bus it is a third terminator. Measured on the machine:
+
+| | |
+|---|---|
+| Board alone, across the terminals | 126.4 Ω — `RZ2` in circuit |
+| Board on the vehicle's bus | **41.0 Ω** — overloaded |
+| Therefore the vehicle's own bus | 60.7 Ω — correctly terminated |
+| After lifting `RZ2` | **60.5 Ω** — back in specification |
+
+> **`RZ2`, not `RY2`.** Both exist, they sit near each other, one letter apart,
+> and they do different jobs: `RZ2` is the 120 Ω terminator, `RY2` is a 1 MΩ
+> bleeder from the isolated CAN ground to chassis, in parallel with a
+> 1000 pF/2 kV Y-capacitor. `CY`/`RY` are the Y network; `RZ` is Z for impedance.
+> Pull `RY2` by mistake and nothing breaks immediately — you have removed the
+> static drain from the isolated side, which is a slow fault to find. **Identify
+> it with the meter, not the silkscreen:** 120 Ω against 1 MΩ is three orders of
+> magnitude.
+
+Removing a terminator cannot break reception — termination damps reflections for
+the *transmitters* on a bus, it does not enable a receiver. Verify anyway: with
+`RZ2` off the board's terminals read open, and ~60 Ω once the vehicle's bus is
+connected.
+
+### The cable
+
+A **factory OBD adapter lead for the machine's service connector, 35 cm, with the
+OBD-16 end cut off** and the flying leads landed on the board. Better than a
+hand-made plug: the moulded connector has the right contacts and its own strain
+relief.
+
+It already carries **two ground conductors**, because OBD-II has two ground pins
+that exist for different jobs — and that maps straight onto what this board
+needs:
+
+| OBD pin | | Board |
+|---|---|---|
+| 5, **signal** ground | → | **D GND** — the reference for the data lines |
+| 4, **chassis** ground | → | **DC −** — the supply return |
+| 6 CAN H · 14 CAN L | → | CAN H / CAN L |
+| 16 battery + | → | DC + |
+
+Two grounds run from the connector rather than one wire and a link on the board,
+so the reference is made where it belongs and the board unplugs without leaving
+anything behind.
+
+**Length matters more once the terminator is gone**, because the board becomes a
+*stub* on the bus rather than an end node. It is still not a problem at this bit
+rate, and that was checked rather than assumed: at 250 kbit/s the bit time is
+4 µs and signal travels about 5 ns per metre, so 35 cm is 3.5 ns there and back —
+**0.088 % of one bit**, and 3.4× inside even the conservative "≤ 0.3 m at
+1 Mbit/s" rule of thumb once scaled to 250 kbit/s. A short run is also a short
+antenna beside an ignition system. At 1 Mbit/s this would have been a
+conversation.
+
+Two things worth confirming at the cut end: that the CAN pair is **twisted** (a
+decent factory cable twists it, and then nothing needs doing), and **which
+conductor is which** — aftermarket cable colours follow no standard, so the
+continuity meter decides, not the insulation colour.
+
 ---
 
 ## 5. Build, flash, monitor
