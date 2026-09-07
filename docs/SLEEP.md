@@ -103,8 +103,64 @@ of that was WiFi failing over between networks. See `wifiConnect()` — the
 winning SSID is now remembered in NVS and tried first, which removes most of it
 when the same network is used twice running.
 
-**Current draw in each mode has not been measured yet.** Until it is, the case
-for sleep rests on argument rather than numbers.
+### Measured, 2026-09-07
+
+On a Fluke 175 True RMS, in series with the **12 V** input — not the 5 V USB
+rail, so these figures include the board's own regulator losses.
+
+**Measurement conditions, stated because they are not the final installation.**
+The board was fed from a separate bench battery while CAN H and CAN L came from
+the machine, so **supply ground and bus ground were not common**. In the finished
+installation both come from the service connector and share a ground.
+
+This does not invalidate the numbers. What is being measured is the current the
+board draws from 12 V, and the bulk of it — regulator quiescent, MCP2518FD,
+transceiver, USB-serial chip — is internal and ground-referenced, unaffected by
+where the bus reference sits. The board received frames throughout, so the
+common-mode offset stayed inside the transceiver's range.
+
+The one thing that could differ is current flowing through the CAN lines
+themselves on a ground potential difference. In listen-only the transceiver never
+drives the bus, so this should be small, but the sign is unknown — the figure
+could be reading slightly high or slightly low. **Worth one re-measure in situ
+once it is wired in permanently**, which takes a minute and closes it. Nothing
+below changes unless that reading is wildly different, and the sensitivity table
+further down shows how much room there is.
+
+| | current | power |
+|---|---|---|
+| Awake | 50–73 mA, wandering | 0.6–0.9 W |
+| **Asleep** | **17 mA, steady** | **0.20 W** |
+
+**A factor of four.** Against an 18 Ah AGM that is the difference between
+reaching half charge in **five and a half days** and reaching it in **twenty-two**
+— which is the difference between a board that has to be unplugged and one that
+can stay wired in.
+
+**The awake figure wanders and should not be trusted, and it no longer matters.**
+It is widest with the bus quiet and steadies when traffic is flowing, which
+points at the WiFi duty cycle: idle, the radio drops into modem sleep between
+beacons and wakes in bursts; publishing at 1 Hz it stays busy. A handheld meter
+samples a few times a second and cannot average millisecond radio bursts, so the
+range is what the instrument wandered over, not a range the board sat in.
+
+That would be a problem if the board were awake all the time. It is awake about
+2.5 % of the time, so the uncertainty is diluted almost to nothing:
+
+| if awake really were | average | half charge |
+|---|---|---|
+| 50 mA | 17.8 mA | 21.0 days |
+| 73 mA | 18.4 mA | 20.4 days |
+| 150 mA | 20.3 mA | 18.5 days |
+| 250 mA | 22.8 mA | 16.4 days |
+
+Triple the highest reading and the answer moves by a fifth. Without deep sleep
+the same uncertainty swings it between 3.8 and 7.5 days — a factor of two on the
+number that decides everything.
+
+So the measurement that cannot be trusted is the one that stopped mattering, and
+the one that governs is 17 mA of steady DC, which is exactly what a handheld
+meter measures well. No better instrumentation is needed to settle this.
 
 ### The side benefit
 
@@ -180,42 +236,53 @@ high with `gpio_hold_en()`.
 
 ---
 
+## Settled by the measurements
+
+### The backstop stays. Question closed.
+
+This was written as an open question on the estimate that awake cost twenty
+times asleep, which would have made the hourly wake around 40 % of the total. The
+real ratio is four, and the arithmetic comes out completely differently:
+
+| awake per hour | average | cost over pure sleep |
+|---|---|---|
+| 30 s | 17.4 mA | +0.4 mA (2 %) |
+| 90 s | 18.3 mA | +1.3 mA (7 %) |
+
+**Under 1.5 mA for the one guarantee standing between a sleep bug and a ride out
+to pull a fuse.** It stays, and not as a compromise — it was never expensive, and
+the estimate that said it was is the thing that was wrong.
+
+---
+
 ## Still open
 
-**Current draw per mode — not measured.** This is the number the whole feature is
-justified by, and it is the gate on both decisions below. Measurements planned
-for 2026-09-07 afternoon: awake with WiFi and BLE up, awake idle, asleep, and
-the transient during a wake.
+### The next mA are in the transceiver — and there may be a cheap way in
 
-### The next mA are in the controller
+An ESP32-S3 in deep sleep draws tens of microamps, so essentially **all** of the
+17 mA is everything except the CPU: the CAN transceiver in normal mode, the
+MCP2518FD, the 12 V regulator's quiescent draw, the USB-serial chip and a power
+LED. That confirms what this document predicted before the numbers existed.
 
-Decided 2026-09-07, before the numbers: **there is more to take, and it is at the
-MCP2518FD and its transceiver**, which this design deliberately leaves powered.
-Everything else worth switching off is already off.
+The expensive route is raw SPI writes to wake-on-CAN registers ACAN2517FD does
+not expose, unverifiable off the bike — set out under
+[How it wakes](#how-it-wakes).
 
-The cost of going after it is set out under [How it wakes](#how-it-wakes): raw
-SPI writes to wake-on-CAN registers that ACAN2517FD does not expose, with no way
-to verify them off the bike. So the sequence is measure first, then decide
-whether the remaining draw justifies that risk — not the other way round. If the
-sleeping current is already low against the battery's self-discharge, it does
-not.
+**Check the cheap route first.** Many CAN transceivers have a hardware standby
+pin (a TJA1051T/3 has `S`). If the T-2CANFD routes it to a GPIO, standby is a
+`digitalWrite` rather than register hacking, and it is likely worth most of the
+available 8–10 mA at none of the risk. **Open question: which transceiver is
+fitted, and is that pin brought out?** Read the schematic before writing any
+code.
 
-### The backstop stays, for now
+Worth keeping in proportion, though: 17 mA already gives about three weeks to
+half charge, and anything parked longer than that wants a tender regardless of
+what this board does. This is a nice-to-have, not a gap.
 
-The hourly timer wake is not free: each one is a full WiFi bring-up. At roughly
-90 seconds awake per hour that is about 2.5 % duty, and if awake costs twenty
-times what asleep does, the backstop alone is on the order of 40 % of the total.
-Worth checking against the real figures.
+### The backstop has never actually fired
 
-It stays anyway until deep sleep has proved itself over weeks of real parking.
-It is the one guarantee standing between a sleep bug and a ride out to pull a
-fuse, and an untested safety net is not the thing to trade away for milliamps.
-Revisit once the measurements exist and wake-on-CAN has a track record — as a
-documented decision, not a quiet edit.
-
-**The backstop has also never actually fired.** It is armed on every sleep and
-has never yet been the thing that woke the board, so the recovery path it exists
-to provide is itself untested in the field.
+Armed on every sleep, but wake-on-CAN has always got there first, so the recovery
+path it exists to provide is still untested in the field.
 
 ### Other
 
