@@ -183,6 +183,7 @@ docs/         The protocol, the decode plan, and the method.
 | [`KEIS-PROTOCOL.md`](docs/KEIS-PROTOCOL.md) | The heated clothing BLE protocol |
 | [`DTC-CODES.md`](docs/DTC-CODES.md) | The fault code tables |
 | [`FLASHING.md`](docs/FLASHING.md) · [`OTA.md`](docs/OTA.md) | Getting firmware onto the board, by cable and over the air |
+| [`SLEEP.md`](docs/SLEEP.md) | Deep sleep on a permanently powered board: how it wakes, and the four faults only the bike found |
 | [`BUILD-SETUP.md`](docs/BUILD-SETUP.md) · [`WORKFLOW.md`](docs/WORKFLOW.md) | Building the app, and the traps that cost an afternoon each |
 | [`SKILLS.md`](docs/SKILLS.md) | A handover note: the machine, the bus, the method, and eight ways to be wrong |
 
