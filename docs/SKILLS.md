@@ -7,8 +7,9 @@ It deliberately does **not** repeat the reference documents. Those are listed
 below and are the authority on what has been found. This one is about **how the
 work is done, where things live, and what has already cost time.**
 
-Last revised **2026-09-05**, after a day of 37 firmware builds and six signals
-found.
+Last revised **2026-09-07**: deep sleep is running on the bike, the kill switch
+and start button are decoded, and section 8 records why the bus cannot start
+this machine.
 
 ---
 
@@ -316,7 +317,55 @@ and a USB cable attached.
 
 ---
 
-## 8. Working with the owner
+## 8. What the bus cannot do — a security note
+
+Asked directly, 2026-09-07: now that the ignition is mapped, could a start be
+emulated from openHAB? The answer is no, and the reasons are worth writing down,
+because "can someone start my bike over the network" is the real question hiding
+inside a lot of the curiosity about this project.
+
+The conclusion has two halves, and both are reassuring.
+
+**This board adds no attack surface.** It is hardware listen-only — `TX_ENABLED`
+is 0 and the controller is in ListenOnly / LISTEN_ONLY mode — so it physically
+cannot put a frame on the bus, not even an ACK. Compromise openHAB, the MQTT
+broker or the phone app and the worst anyone gets is *eavesdropping* on a
+stationary bike. There is no path from the network onto the CAN bus, by design.
+That is what makes it safe to hang this thing on a vehicle at all.
+
+**The vehicle is robust independently of us.** Even an attacker with full active
+CAN access cannot crank it, and it is not one lock but five, each sufficient
+alone:
+
+1. **You cannot transmit** without leaving listen-only (see section 7).
+2. **Ignition is not a command.** It is derived — bus activity *is* the ignition
+   (PGN-wide, not one signal). There is no frame meaning "turn on"; the modules
+   are unpowered until the physical key turns, and a frame on a dead bus reaches
+   nobody.
+3. **The start button is not on the bus for this purpose.** It is a physical
+   input to the handlebar module (SA 39) and reports *even while the kill switch
+   blocks the crank*, precisely because the ECU reads the module's hardware pin,
+   not a CAN frame. Spoofing "startBtn pressed" collides with the real module's
+   address claim and is ignored.
+4. **Interlocks.** The ECU will not crank until it has checked sidestand, kill
+   switch and gear/clutch for itself.
+5. **The immobiliser.** `CanBus_Security` tells the story — fob authorised /
+   searching / **not found**. No fob in range, no start, and the fob↔security
+   handshake is cryptographic, so a captured frame cannot be replayed.
+
+None of this is accidental difficulty. A modern motorcycle assumes its CAN bus
+can be listened to, so starting hangs deliberately on physical inputs and a
+crypto handshake rather than on frames anyone can imitate. Mapping the ignition
+*confirmed* this rather than weakening it: the ignition turned out to be a power
+state, not a command.
+
+Where remote-start attacks on vehicles actually live is the fob side — relay
+attacks that extend the key's signal — which is a different vector entirely and
+has nothing to do with this board or this bus.
+
+---
+
+## 9. Working with the owner
 
 She rides the bike, she is an electronics engineer, and she is right more often
 than the analysis is. Six corrections in one day — the cruise control, the horn,
