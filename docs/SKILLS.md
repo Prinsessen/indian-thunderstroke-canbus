@@ -101,6 +101,38 @@ Short range from handlebars to service connector, so it should hold — but that
 an expectation, not a result.
 
 
+### This machine is ridden far from home
+
+Recorded 2026-09-07, because it changes how to weigh whether something is worth
+building and cannot be inferred from anything in the repository.
+
+This is not a garage project with a motorcycle attached. The machine is taken on
+long trips into remote country — mountain roads in south-eastern Turkey at
+altitude, the Iranian border off to one side, a Kangal at your heels. In that
+setting the readings stop being telemetry and become safety information: whether
+the kill switch got knocked, whether the engine is actually turning.
+
+Several decisions made on the day this was written were argued abstractly and
+have a much better justification than the one given at the time:
+
+- **The kill switch banner** was defended as sparing the rider minutes of
+  puzzlement on a driveway. On a mountainside with a dog behind you it is not the
+  same category of problem.
+- **Engine speed snapping to zero** was argued as a matter of a number being
+  true. A tachometer frozen at 1690 while the engine is actually stopped is not
+  merely inaccurate there; it is actively misleading at the worst moment.
+- **The 17 mA sleeping current.** SLEEP.md says anything standing more than a
+  fortnight wants a maintenance charger, "which is ordinary practice for a parked
+  motorcycle". That is true in a garage at home. It is not true of three days at
+  a mountain guesthouse with no mains, and **that** is the real justification for
+  the battery work — better than the one the document currently gives.
+- **The head unit** is what puts any of it in front of the rider at the moment it
+  matters, rather than in a pocket.
+
+**How to apply it:** when weighing a feature, ask what it is worth a thousand
+miles from a workshop, not what it is worth in the drive. The answers differ, and
+the second one has been the default here for too long.
+
 **Four modules talk on the bus.** Knowing which one sent a frame matters more
 than anything else here. Several PGNs have two or three senders that disagree,
 and four decodes shipped broken because they read whichever module spoke last —
