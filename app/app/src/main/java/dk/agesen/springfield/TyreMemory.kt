@@ -93,6 +93,36 @@ object TyreMemory {
         if (fp !in PLAUSIBLE_PSI || rp !in PLAUSIBLE_PSI) return
         if (ft !in PLAUSIBLE_TEMP_C || rt !in PLAUSIBLE_TEMP_C) return
 
+        // A reading is only new if the numbers moved.
+        //
+        // The ESP32 republishes its last decode about once a second whether or
+        // not the sensors said anything -- nothing on the board clears a tyre
+        // value, resetState() runs at boot and never again -- and the sensors
+        // themselves sleep when the wheels stop. So without this check the
+        // stored timestamp was rewritten on every packet, and a pressure from
+        // last week's ride read as "just now" the moment the phone connected.
+        //
+        // That is the one direction this class must never be wrong in: it exists
+        // because a rider walks up to a parked machine and wants the pressures to
+        // pump against, and a stale reading presented as fresh is how a tyre gets
+        // left soft.
+        //
+        // Comparing the four tyre numbers rather than the packet: ambient moves
+        // on its own and must not count as a new measurement, and if it were the
+        // only thing that changed the stored ambient would drift away from the
+        // air temperature the pressures were actually taken at, which is what the
+        // cold equivalent is computed against.
+        //
+        // If a sensor genuinely reports an identical quadruple twice, the age
+        // overstates by one interval. That is the safe direction, and with two
+        // temperatures in the comparison it is vanishingly rare in motion.
+        val unchanged = prefs.contains(K_TIME) &&
+            prefs.getFloat(K_FRONT_PSI, Float.NaN) == fp.toFloat() &&
+            prefs.getFloat(K_REAR_PSI, Float.NaN) == rp.toFloat() &&
+            prefs.getFloat(K_FRONT_TEMP, Float.NaN) == ft.toFloat() &&
+            prefs.getFloat(K_REAR_TEMP, Float.NaN) == rt.toFloat()
+        if (unchanged) return
+
         prefs.edit()
             .putFloat(K_FRONT_PSI, fp.toFloat())
             .putFloat(K_REAR_PSI, rp.toFloat())
