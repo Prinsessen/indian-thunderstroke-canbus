@@ -280,11 +280,59 @@ board must be using a switching regulator or the 26 mA is high.)
 
 **The converter cannot be switched off without switching off the receiver, and
 the receiver is wake-on-CAN.** There is no firmware change that recovers this
-current. 17 mA is close to the floor for this board with the wake path intact,
-and the only route lower is different hardware.
+current. 17 mA is the floor **for as long as the bus is the thing that wakes the
+board** — and that qualifier turns out to matter.
 
-That is a better outcome than an item left open forever: it is a limit, not a
-gap.
+### There is a way lower, and it was costed rather than guessed
+
+Worked out 2026-09-07 out of curiosity, and written down because "can we get
+below 17 mA?" is a question that will be asked again.
+
+The board brings out two small JST-SH 1.0 mm headers beside the USB-C connector,
+and they are not in any of LilyGO's own notes:
+
+| | pin 1 | pin 2 | pin 3 | pin 4 |
+|---|---|---|---|---|
+| **CNC1** | GND | VDD3V3 | `Uart_TX` | `Uart_RX` |
+| **CNC2** | GND | VDD3V3 | **`IO1`** | **`IO2`** |
+
+`IO1` and `IO2` are GPIO 1 and 2, both in the ESP32-S3's **RTC domain**, so
+either can wake the chip from deep sleep with `ext0` — exactly as the
+MCP2518FD's interrupt line does today. Wake on a switched **ACC** line instead of
+on the bus, and the Mornsun module can be powered down while asleep. That takes
+17 mA to about **4 mA**, the remainder being buck quiescent, the USB-serial chip
+and the power LED, none of which can be switched.
+
+**What it would actually buy depends on a number still unmeasured** — the
+machine's own quiescent draw:
+
+| machine's own | now (17 mA) | after (~4 mA) | gain |
+|---|---|---|---|
+| 5 mA | 16.3 days | **37.5 days** | +21 (2.3×) |
+| 10 mA | 13.4 days | **25.0 days** | +12 (1.9×) |
+| 20 mA | 9.9 days | 15.0 days | +5 (1.5×) |
+| 30 mA | 7.8 days | 10.7 days | +3 (1.4×) |
+
+At 10 mA the board's share of the total falls from 61 % to 27 %, so the machine
+becomes the larger consumer and we stop being the problem. At 30 mA the whole
+exercise is worth three days. **So measure the machine first** — meter in series
+with the battery negative, ignition off, board disconnected. Thirty seconds
+decides whether this is worth twenty-one days or three.
+
+**And the cost is a different class from lifting `RZ2`.** That was seconds with a
+hot tip. This is:
+
+- ACC's 12 V cannot go straight to `IO1` — it needs a divider and clamp, or an
+  opto.
+- The module's `VCC` comes off the board's 5 V rail, so switching it means
+  **getting in between them**: lifting a pin or cutting a track and inserting a
+  load switch. That is surgery, not a desolder.
+- It trades a **proven** wake path — the MCP interrupt line, working on the
+  machine — for one you build. The timer backstop still stands behind it.
+
+So: not a gap, not a limit either, but a costed option. If the machine's own draw
+turns out to be small, this is the change worth having a spare board on the shelf
+for — which lifting `RZ2` never was.
 
 ### It draws nothing extra from the machine's side
 
