@@ -89,9 +89,57 @@ control -- flick an indicator, work the headlight -- before being believed.
 | 65265 | 0 | 6 | 2 | 240–241 | CCVS byte 7 — PTO state | **NONE** | Message counter, not a signal. Low nibble is always 0xF and it does not step sequentially. |
 | 65381 | 0 | 7 | 2 | 252–253 | Proprietary (SA 0) | **NONE** | Toggles every 15 seconds regardless of anything. A heartbeat bit. |
 
+| 65266 | 0 | 7 | 8 | 0–250 | Engine Throttle Valve 1 Position (SPN 51) | **OPEN** | Decoded and correct — but it visits two separate resting values with the engine stopped. See below. |
+
 `SOLVED` and `NONE` are listed so nobody spends an evening on them again.
 
 ---
+
+---
+
+## Open question: the throttle byte has two resting values
+
+**PGN 65266 SA 0 byte 7 (SPN 51), engine stopped.** The decode itself is settled
+and the scaling is right — 250 raw is exactly 100.0 %, which is the top of the
+J1939 single-byte percent range, and full throttle lands on it. What is not
+settled is where the plate rests when nothing is touching it.
+
+The sensor reports whenever the ignition is on; it does not need the engine
+running. The garage session of 2026-09-05 proves that on its own: 153 changes on
+this byte across nine hours with the engine never started.
+
+Measured against real engine speed from PGN 61444:
+
+| state | median | max |
+|---|---|---|
+| engine stopped, < 50 rpm | 5.6 – 6.0 % | — |
+| idle, 50–1200 rpm | 4.4 – 4.8 % | 12 % |
+| riding, > 1200 rpm | 9.6 – 11.2 % | 100 % |
+
+So a parked machine reads about 6 %, which is a throttle plate sitting on its
+idle stop rather than closed. That much is expected.
+
+**What is not expected:** in the garage the same byte also visited 0–1.6 %,
+twenty-six times, interleaved through the whole day with the normal 4.0–4.8 %
+readings. Not a separate session — the two clusters alternate. With the engine
+stopped and nobody riding, the plate should sit in one place.
+
+Three candidates, none of them tested:
+
+1. The grip was being turned and released during the tests, and the return
+   spring does not always leave the plate in the same place.
+2. The sensor or the ECU reports zero briefly across an ignition cycle, before
+   the first real reading.
+3. Something else moves the plate with the engine off — an idle actuator
+   self-checking, for instance.
+
+**The measurement that would settle it** is cheap and needs no ride: ignition on,
+hands off the machine, log PGN 65266 byte 7 for a few minutes, then cycle the
+ignition twice while still not touching the grip. If it moves on its own, it is
+(2) or (3); if it only moves when the grip does, it is (1).
+
+Worth doing because a resting value that is not stable is worth knowing about
+before anyone builds an alert on the throttle reading.
 
 ## Where the remaining value probably is
 
