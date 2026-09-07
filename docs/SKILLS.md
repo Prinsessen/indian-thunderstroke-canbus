@@ -49,8 +49,57 @@ temperature sensor either, only oil level and oil pressure. No traction control,
 no IMU. ABS with two wheel speed sensors.
 
 An ESP32-S3 (LilyGO T-2CANFD) sits on the J1939 bus in **hardware listen-only
-mode**, decodes what it understands, and publishes to MQTT and to a phone over
-BLE. It cannot transmit; that is a hardware guarantee, not a software one.
+mode**, decodes what it understands, and publishes to MQTT and over BLE. It
+cannot transmit; that is a hardware guarantee, not a software one.
+
+### The app's primary display is a head unit, not a phone
+
+Confirmed 2026-09-07. The Android app runs on a **Hugerock X70**, a 7" 1920×1080
+IPS head unit permanently mounted as the machine's navigation display. A phone is
+the secondary case now, not the primary one. Three things follow:
+
+**Landscape is the orientation that matters.** Portrait is the one nobody sees.
+That reverses the priority behind [TOOLING-GAPS.md](TOOLING-GAPS.md) item 3,
+where landscape kept being forgotten because it was the afterthought.
+
+**It has more room, and the app already uses it.** 1920×1080 at 7" is about
+315 ppi, so roughly 960 × 540 dp in landscape against a phone's ~410 dp of
+height. The custom views scale into it rather than leaving gaps, because they
+size themselves from `min(width, height)` in `onDraw` instead of fixed dp — the
+owner reports the graphics come out larger and easier to read than on the phone,
+and **no layout changes were needed**. Worth knowing that this was tested, not
+assumed: a design that scales to an unfamiliar canvas has earned some trust.
+
+**It outlives the ignition.** A 10 000 mAh internal battery keeps the head unit
+running after the key comes out, while the board sleeps five minutes later. So
+there is now a case the phone never produced: **the app running, connected to
+nothing, for hours.** That is exactly what `STALE_MS` and `TyreMemory`'s honest
+ages are for, and it is the strongest argument yet for the tyre-age fix made the
+same day — a permanently connected display is precisely where a stale reading
+stamped "just now" would have been believed.
+
+**Which Android versions it runs on, and why.** `minSdk = 31` — **Android 12**,
+not 13 — set deliberately, with the reason in `app/build.gradle.kts`: from API 31
+Bluetooth uses `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` with `neverForLocation`, so
+the app needs no location permission at all. Supporting anything older would drag
+in the legacy `BLUETOOTH_ADMIN` + `ACCESS_FINE_LOCATION` path, a second and quite
+different permission flow, for phones nobody here owns.
+
+So an Android 11 device (API 30) genuinely cannot install it, and the head unit
+on Android 13 (API 33) sits two levels above the floor. Nothing to do with
+Kotlin, which has no minimum Android version of its own — it compiles to the same
+bytecode as Java and runs on releases far older than any of this.
+
+Two things unmeasured as of 2026-09-07, both cheap to observe:
+
+- Does scanning for a sleeping board over hours drain the head unit's battery?
+- Does BLE reconnect cleanly when the board wakes, on the ignition or on the
+  hourly backstop?
+
+And one untested: BLE has held in the garage but has not yet been ridden with.
+Short range from handlebars to service connector, so it should hold — but that is
+an expectation, not a result.
+
 
 **Four modules talk on the bus.** Knowing which one sent a frame matters more
 than anything else here. Several PGNs have two or three senders that disagree,
