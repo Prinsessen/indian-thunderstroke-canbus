@@ -186,3 +186,7 @@ frames: the conditions when a fault occurred), and any parameter answered on
 demand rather than broadcast. It also means leaving hardware listen-only mode,
 which is a decision with its own weight and is recorded in `TX_ENABLED` in
 `src/config.h`.
+
+**[TRANSMIT.md](TRANSMIT.md) works that out in full**: the ranking, the cost in
+address claims and error frames, the two PGNs that must never be callable, and
+the garage protocol for a first attempt.

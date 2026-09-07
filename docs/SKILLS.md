@@ -315,6 +315,11 @@ sequence is hers and it is the right one. `TX_ENABLED` in [`src/main.cpp`](../fi
 stays 0 until she says otherwise, at a moment she chooses, with the engine off
 and a USB cable attached.
 
+**[TRANSMIT.md](TRANSMIT.md) is the plan on the shelf** — what transmitting
+would unlock ranked for this machine, what it costs, the two PGNs that must
+stay impossible to call even then, and the protocol for a first attempt. It
+changes nothing today.
+
 ---
 
 ## 8. What the bus cannot do — a security note
