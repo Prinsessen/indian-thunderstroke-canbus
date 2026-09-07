@@ -154,6 +154,16 @@ already-terminated bus it is a third terminator. Measured on the machine:
 
 ### Lifting `RZ2`
 
+![The two 120 Ω terminators on a T-2CANFD, ringed in red](images/t2canfd-terminators.png)
+
+*The two ringed parts are the **120 Ω bus terminators**, one per CAN channel, each
+sitting immediately to the right of its MORNSUN isolated module. `RZ2` is the one
+on the channel you have wired to the vehicle — **confirm which with the meter
+before heating anything**, because the silkscreen is not readable at this size and
+`RY2` is nearby. Also visible: the two MORNSUN modules (the large black blocks),
+the two four-way CAN screw terminals down the right edge, and the 12–24 V DC input
+bottom left.*
+
 Seconds with an ordinary iron — no hot-air station, no two-iron technique. A fine
 SMD tip at **350–400 °C**, brief contact, and the part releases and comes away.
 
