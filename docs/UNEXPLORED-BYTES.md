@@ -70,7 +70,7 @@ control -- flick an indicator, work the headlight -- before being believed.
 | PGN | SA | byte | values | range | what the standard says | odds | note |
 |---|---|---|---|---|---|---|---|
 | 65382 | 0 | 0 | 255 | 0–255 | Proprietary | **HIGH** | 255 values on 4,721 frames -- the busiest unexamined byte on the bus. Byte 2 of this PGN was the false throttle (rpm/256), so this message clearly carries engine data. Prime candidate for load, ignition advance or injector duty. |
-| 65382 | 0 | 3 | 80 | 29–252 | Proprietary | **HIGH** | 80 values. Same message as above, same reasoning. |
+| 65382 | 0 | 3 | 80 | 29–252 | Proprietary | **SOLVED** | **Range to empty, in km, one count per km** (2026-09-08). Paired against the dash twice on one evening. See below. |
 | 61444 | 0 | 7 | 75 | 103–185 | EEC1 byte 8 — Engine Demand Percent Torque (SPN 2432), offset -125 | **HIGH** | Negative means overrun braking. Range 103-179 reads as -22 % to +54 %, which is exactly right for a bike that coasts and pulls. Cheap: correlate against throttle now that we have it. |
 | 65215 | 11 | 4 | 88 | 39–220 | EBC2 byte 5 — Relative Speed, Rear Axle Left Wheel (SPN 907) | **HIGH** | 88 values, r = +0.84 against speed, offset 125 = zero. If that scaling holds this is the REAR wheel from the ABS module -- a third speed source, and a direct cross-check on the one the dash uses. |
 | 65265 | 11 | 0 | 2 | 63–127 | CCVS byte 1 — parking brake, two-speed axle, cruise pause | **MEDIUM** | Two values from SA 11. Two-bit fields; worth one controlled test. |
@@ -141,15 +141,114 @@ ignition twice while still not touching the grip. If it moves on its own, it is
 Worth doing because a resting value that is not stable is worth knowing about
 before anyone builds an alert on the throttle reading.
 
+## Solved: the range to empty — PGN 65382 SA 0 byte 3
+
+**One count per kilometre, unscaled, no offset.** The number the original dash
+displays as range to empty. Found 2026-09-08.
+
+The probe prints this byte as `b4`, because `probe/throttle` names bytes from one
+and this table names them from zero. Same byte.
+
+### How it was settled
+
+The candidate came out of this table: 80 distinct values over 29–252, in a
+message already known to carry engine data. It correlated with fuel level at
+r = +0.990 across both August rides, which was the reason to look and also the
+reason to distrust it — a rescaled fuel gauge would correlate just as well.
+
+Two paired readings settled it. The owner switched the ignition on, read the dash
+and reported the number; the probe logged the byte at 2 Hz over the same seconds.
+
+| when | dash | byte 3 |
+|---|---|---|
+| 2026-09-08 19:57 | 212 km | *no data — the board was still joining WiFi* |
+| 2026-09-08 20:05–20:06 | **212 km** | **212**, on all 58 samples |
+
+The first attempt is listed because it is the useful half of the lesson: WiFi
+wake takes up to a minute after the bus goes live, so a reading taken in the
+first minute of ignition-on gets nothing. Switch on, wait, then read the dash.
+
+### Why it is not simply the fuel gauge rescaled
+
+This is the part that needed proving, and the ride data initially argued against
+the hypothesis: byte 3 climbs 173 → 252 early in a ride and falls back later,
+tracking the tank sender's slosh almost exactly.
+
+The retained telemetry from the evening of the test breaks the tie:
+
+| when | fuel | byte 3 | km per fuel-% |
+|---|---|---|---|
+| 2026-08-15 13:36 | 94.4 % | 251 | 2.66 |
+| 2026-08-15 15:12 | 82.8 % | 222 | 2.68 |
+| 2026-09-08 20:05 | 100 % | **212** | **2.12** |
+
+The tank was **fuller** than at any point in August and the byte was **lower**.
+A rescaled fuel level at 100 % would have had to read at least 265, which does
+not fit in a byte at all. So byte 3 is not a function of fuel alone — and it
+agreed with the dash to the digit.
+
+The drift is itself informative. Against the 20.8 l tank, 2.66 km per fuel-%
+is 7.8 l/100 km and 2.12 is 9.8 l/100 km, while the ECU's own `fuelEconomy` in
+the same packet reads 6.6. **The dash computes range from a recent-consumption
+window, not from the lifetime average.** That is why the displayed range is
+consistently pessimistic against what the machine actually averages.
+
+### Confirmed live, 2026-09-08 20:33
+
+The decode shipped in firmware 2026.09.08-1 and was watched from openHAB at 1 Hz
+while the owner sat on the machine and started it. The log separates two causes
+that the test had expected to be tangled together:
+
+| time | what happened | range |
+|---|---|---|
+| 20:32:07 | machine righted off the stand, lean 113 -> 127, stand UPRIGHT | 212, unmoved |
+| 20:32:53 | start button, engine fires, fuel rate 0 -> 5.05 L/h | 212 |
+| 20:33:04 | eleven seconds of idling later | **211** |
+
+**Attitude does nothing.** Forty-six seconds upright and the number did not
+move, so the ECU damps the tank sender rather than reporting it raw. That was
+one of the two outcomes the test was set up to distinguish and it is worth
+having: a range reading that ignored attitude was not the safe assumption.
+
+**Idling moves it, and the arithmetic is the point.** Eleven seconds at
+2-5 L/h is about 0.015 litres burned. One count of range is roughly 0.098
+litres at the ratio measured that evening. So six times too little fuel was
+consumed to account for a 1 km drop, and the tank gauge itself never left
+100 %. The tank did not fall -- **the estimator changed its mind**, because
+idling is poor economy and the consumption window updated.
+
+That is the last thing a rescaled fuel gauge could not do, and it closes the
+question. The dash also read 211 at the same moment, so this is a second
+paired reading, and this time a paired *change* rather than a static match.
+
+The filter behaved: a one-count step is far under RANGE_STEP_KM and went
+through with no delay.
+
+### Two things a decode must handle
+
+**The 255 ceiling is reachable.** Byte 4 is 0 in all 4,721 frames, so no 16-bit
+high byte is confirmed, and the highest value ever observed is 252. At the
+lifetime 6.6 l/100 km a full tank is 315 km, which does not fit. What the ECU
+does above 255 has not been seen: it may saturate, or 255 may mean not
+available in the usual J1939 way. Do not assume — a tank filled after a gentle
+run is the measurement that would settle it.
+
+**Bursts of exactly 29.** Twelve frames across three separate moments, always in
+runs of exactly three, always the value 29, then straight back to the previous
+reading. Fuel was 56–75 % each time and nothing else moved, so it is not a real
+low-range warning. It is too clean to be noise and too regular to be a glitch;
+the cause is unknown. Any decode must reject a lone dip to 29 rather than publish
+it, or the app will show a 29 km panic three times a ride.
+
 ## Where the remaining value probably is
 
-**PGN 65382, bytes 1 and 4.** The busiest unexamined bytes on the bus -- 255 and
-80 distinct values across 4,721 frames -- in a proprietary message that already
-proved to carry engine data, since its byte 2 is engine speed over 256. Whatever
-Indian keeps private about how the engine is running is most likely here. Load,
-ignition advance and injector duty are all plausible and all testable now that
-the throttle is known: hold a steady throttle and change the load, and watch
-which byte follows the load rather than the hand.
+**PGN 65382, byte 1.** The busiest unexamined byte on the bus -- 255 distinct
+values across 4,721 frames -- in a proprietary message that has now given up two
+of its four live bytes: byte 2 is engine speed over 256, and byte 4 is the dash's
+range to empty. Whatever Indian keeps private about how the engine is running is
+most likely in what remains. Load, ignition advance and injector duty are all
+plausible and all testable now that the throttle is known: hold a steady throttle
+and change the load, and watch which byte follows the load rather than the hand.
 
 **PGN 65215 byte 5.** If the standard holds, the rear wheel speed straight from
 the ABS module -- a third speed source and an independent check on the one the

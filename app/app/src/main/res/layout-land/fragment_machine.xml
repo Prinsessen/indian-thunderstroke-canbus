@@ -45,7 +45,7 @@
             android:orientation="horizontal">
             <dk.agesen.springfield.MiniGaugeView android:id="@+id/gAmbient"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
             <dk.agesen.springfield.MiniGaugeView android:id="@+id/gEconNow"  android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gFuelRate" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <dk.agesen.springfield.MiniGaugeView android:id="@+id/gRange" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 

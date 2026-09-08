@@ -22,6 +22,14 @@ struct VehState {
     float speedFront;    // front wheel, PGN 65215 (ABS module) -- true road speed
     float fuelRate;      // L/h, PGN 65266 bytes 1-2
     float fuelEconInst;  // l/100km right now, PGN 65266 bytes 3-4
+    // Range to empty in km, exactly as the original dash shows it:
+    // PGN 65382 SA 0 byte 3, one count per km, no offset. Identified
+    // 2026-09-08 by reading the dash against the byte twice; the proof
+    // that it is not a rescaled fuel gauge is in UNEXPLORED-BYTES.md.
+    // Not cleared when the bus goes quiet: like fuel and the odometer
+    // this is a true statement about a parked machine, and it is the
+    // reading a rider walks up to.
+    float range;
     char  wheels[12];    // "OK", "FRONT LOST", "REAR LOST"; empty = not judged
     char  gear[3];       // "N","1".."6","-"
     char  headlight[6];  // "High","Low","Off"

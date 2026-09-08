@@ -190,9 +190,27 @@ data class BikeJsonState(
      * then. Found 2026-09-06.
      */
     val killSwitch: String? = null,
-    /** L/h, and instantaneous economy against the running average. */
-    val fuelRate: Double? = null,
+    /**
+     * Instantaneous economy against the running average.
+     *
+     * fuelRate (L/h) used to sit here and no longer reaches the app: it went
+     * MQTT-only in firmware 2026.09.08-2 to pay for `rangeKm` on the radio,
+     * where "fr" cost 11 bytes and "rg" costs 9. It is not gone from the
+     * project -- openHAB still charts it -- only from BLE.
+     */
     val fuelEconInst: Double? = null,
+    /**
+     * Range to empty in kilometres, as the ORIGINAL DASH computes it, not as
+     * this app estimates it. PGN 65382 SA 0 byte 3, identified 2026-09-08.
+     *
+     * This is the machine's own number and it is deliberately pessimistic: it
+     * runs on a recent-consumption window rather than the lifetime average, so
+     * it read 211 km on a full tank while the ECU's own lifetime economy said
+     * 6.6 l/100km. Do not "correct" it towards the app's arithmetic -- the
+     * whole value of the field is that it agrees with what the rider sees on
+     * the bike. [FuelRange] is still here as the fallback when it is absent.
+     */
+    val rangeKm: Int? = null,
     /** Front wheel speed from the ABS module -- the honest one. */
     val speedFrontKmh: Double? = null,
     /** "OK" / "FRONT LOST" / "REAR LOST", and the brief-dropout counters. */
@@ -277,8 +295,8 @@ data class BikeJsonState(
                 stand = s("st"),
                 standDown = s("sd"),
                 killSwitch = s("ks"),
-                fuelRate = d("fr"),
                 fuelEconInst = d("fi"),
+                rangeKm = i("rg"),
                 speedFrontKmh = d("sf"),
                 wheels = s("wh"),
                 wheelBlips = i("wf"),

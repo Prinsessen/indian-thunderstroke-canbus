@@ -144,7 +144,27 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
             // bike's own would be its own kind of lie. The range is a decision,
             // so it uses the filtered level — see FuelLevel.
             fuelPct = state?.fuelPct
-            rangeText = FuelRange.format(
+            // The MACHINE'S range when it offers one, this app's estimate only
+            // when it does not.
+            //
+            // Both are shown in the same slot and that is deliberate: there is
+            // one question here, and answering it twice in two places would
+            // invite the rider to compare them mid-corner. The dash's figure
+            // wins because it is the number on the bike -- an app that
+            // disagreed with the instrument six inches away would be its own
+            // kind of lie, which is the same argument the bar already makes for
+            // showing the sender rather than the filtered level.
+            //
+            // It also drops the band for a single figure, and the reason is
+            // provenance rather than confidence. [FuelRange] prints a band
+            // because it is COMPUTING from a whole-percent sender and a rolling
+            // average, and a band is the honest shape for that. This is not a
+            // computation, it is a report: the ECU said 211, so 211 is what it
+            // said. Rounding it to a band would invent uncertainty that is not
+            // ours to add.
+            rangeText = state?.rangeKm?.let {
+                "%.0f %s".format(Settings.distance(it.toDouble()), Settings.distanceLabel)
+            } ?: FuelRange.format(
                 FuelLevel.trusted, Settings.tankLitres,
                 { Settings.distance(it) }, Settings.distanceLabel
             )
@@ -304,10 +324,23 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
                        if (Settings.distanceUnit == Settings.Distance.IMPERIAL)
                            Settings.economy(thirsty) else Settings.economyScaleMax,
                        decimals = 1)
-        // Litres per hour. Where economy in l/100km goes to infinity -- idling,
-        // walking pace, stuck in traffic -- this one still means something.
-        v.findViewById<MiniGaugeView>(R.id.gFuelRate)
-            .configure("FUEL RATE", "L/h", 0.0, 20.0, decimals = 1)
+        // Range to empty, as the ORIGINAL DASH computes it. This slot held
+        // FUEL RATE in L/h until 2026-09-08, and the swap was the owner's call
+        // once the dash's own range was decoded: the two could not both be on
+        // the radio, "fr" cost 11 bytes and "rg" costs 9, and range is the
+        // question a rider actually asks. Litres per hour is not lost, it is
+        // on MQTT -- see the note in BikeState.
+        //
+        // 350 km rather than the 255 the byte can hold: the field saturates
+        // somewhere we have not seen, and a scale that ended at the byte's
+        // ceiling would imply we know it ends there. The caution band is the
+        // BOTTOM of the scale, unlike economy or cylinder head, because for
+        // this quantity low is the bad end.
+        v.findViewById<MiniGaugeView>(R.id.gRange).configure(
+            "RANGE", Settings.distanceLabel,
+            0.0, Settings.distance(350.0),
+            cautionFrom = 0.0, cautionTo = Settings.distance(60.0)
+        )
 
         v.findViewById<MiniGaugeView>(R.id.gFuel).value = s?.fuelEconomy?.let { Settings.economy(it) }
         v.findViewById<MiniGaugeView>(R.id.gCoolant).value = s?.coolantC?.let { t(it.toDouble()) }
@@ -315,7 +348,8 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
         v.findViewById<MiniGaugeView>(R.id.gAmbient).value = s?.ambientC?.let { t(it) }
         v.findViewById<MiniGaugeView>(R.id.gEconNow).value =
             s?.fuelEconInst?.let { Settings.economy(it) }
-        v.findViewById<MiniGaugeView>(R.id.gFuelRate).value = s?.fuelRate
+        v.findViewById<MiniGaugeView>(R.id.gRange).value =
+            s?.rangeKm?.let { Settings.distance(it.toDouble()) }
 
         v.findViewById<TextView>(R.id.odo).text = s?.odometerKm?.let {
             "%,.0f %s".format(Settings.distance(it.toDouble()), Settings.distanceLabel)

@@ -909,6 +909,7 @@ void resetState() {
     st.gripTempL = st.gripTempR = NAN;
     st.speedFront = NAN;
     st.fuelRate = st.fuelEconInst = NAN;
+    st.range = NAN;
     st.wheels[0] = 0;
     st.gear[0] = 0; st.headlight[0] = 0; st.security[0] = 0;
     st.vin[0] = st.swid[0] = st.dm1[0] = st.dm1Raw[0] = 0;
@@ -919,6 +920,15 @@ void resetState() {
     st.lean = -1;
     st.stand[0] = 0;
 }
+
+// Range-to-empty filter, PGN 65382 SA 0 byte 3. Both numbers are measured,
+// not chosen: see the decode in the 65382 case for the frame counts behind
+// them. 60 km sits between the largest genuine step (39) and the smallest
+// spurious burst (a drop of 133); 3 s is comfortably longer than a burst,
+// which is over inside one second, and short enough that a refuel shows up
+// while the rider is still putting the cap back on.
+#define RANGE_STEP_KM 60
+#define RANGE_HOLD_MS 3000UL
 
 #define SETF(f, v) do { float _v = (v); \
     if (isnan(st.f) || fabsf(st.f - _v) > 1e-4f) { st.f = _v; stateDirty = true; } } while (0)
@@ -1572,6 +1582,50 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             // hold a steady speed and blip the throttle against the clutch, and
             // roll off while the engine is still turning. A byte that moves with
             // the hand rather than with the crank is the one.
+            //
+            // Byte 3 IS decoded, and it is the range to empty in kilometres --
+            // the number on the original dash, one count per km, no offset.
+            // Settled 2026-09-08 against two dash readings; the argument that
+            // it is not simply a rescaled fuel gauge is in UNEXPLORED-BYTES.md
+            // and rests on a full tank reading LOWER than a 94 % one did.
+            //
+            // The filter is the interesting part. This byte emits bursts of
+            // exactly 29 -- four of them in the August captures, every one
+            // exactly three frames long and inside a single second, with fuel
+            // at 56-75 % and nothing else on the bus moving. Published raw they
+            // would put a 29 km panic in front of the rider three times a ride.
+            //
+            // It is filtered on STEP SIZE rather than on the value, because 29
+            // is also a range a nearly empty tank will genuinely reach and that
+            // reading must get through. The two populations do not overlap and
+            // the gap is wide: across 4,704 frame-to-frame transitions the
+            // largest genuine step is 39 km, while the SMALLEST burst is a drop
+            // of 133. RANGE_STEP_KM sits at 60, clear of both.
+            //
+            // A step beyond that is not rejected, only held until it has stood
+            // for RANGE_HOLD_MS. That is what keeps a refuel honest: filling the
+            // tank is a genuine 200 km jump and it appears three seconds later.
+            // A burst never survives, because it is over inside one second.
+            //
+            // The first reading after a boot goes through the same wait rather
+            // than being trusted on sight. It costs three seconds once and it
+            // removes the only case where a burst could be published: landing
+            // on one while there is no previous value to measure the step from.
+            if (nn >= 5 && b[3] != 0xFF) {
+                static int      rangeCand   = -1;
+                static uint32_t rangeCandAt = 0;
+                const int km = b[3];
+                if (!isnan(st.range) && abs(km - (int)st.range) <= RANGE_STEP_KM) {
+                    rangeCand = -1;                 // ordinary walk down the tank
+                    SETF(range, (float)km);
+                } else if (km != rangeCand) {
+                    rangeCand = km;                 // a big step; start the clock
+                    rangeCandAt = millis();
+                } else if (millis() - rangeCandAt >= RANGE_HOLD_MS) {
+                    rangeCand = -1;                 // it stood its ground
+                    SETF(range, (float)km);
+                }
+            }
             break;
         case 61445:  // ETC1 gear ASCII in byte5 (canbus_gear.js)
             if (nn >= 6) { uint8_t ch = b[5]; char g[2] = { '-', 0 };
@@ -2270,6 +2324,25 @@ static void clearLiveValues() {
     //
     // The interlocks and the tyres survive instead as value plus age; see
     // interlockAge / tyreAge above and automation/js/canbus-clear-live-values.js.
+    // DERIVED, and it must be said out loud: nothing on the bus reports these
+    // zeros. They are inferred from the bus being silent, which is the same
+    // inference already behind CanBus_Ignition -- the bus is powered by the
+    // ignition, so silence means the engine is not running and the machine is
+    // not moving.
+    //
+    // Keeping the last measured value instead does not work, and the machine
+    // showed why on 2026-09-07: switched off from idle, the ECU stopped
+    // transmitting before engine speed had wound down, and the reading sat at
+    // 1180 rpm on a parked motorcycle for as long as it stayed parked. "A parked
+    // machine reads zero revs" is true of the machine and not always true of the
+    // last frame it sent.
+    //
+    // Only the values that are PHYSICALLY zero on a parked machine belong here.
+    // The throttle plate really does rest at its idle stop around 6 %, and the
+    // gearbox really is in whatever gear it was left in, so those keep their
+    // last reading -- see the three categories in
+    // automation/js/canbus-clear-live-values.js.
+    st.rpm = st.speed = st.speedFront = st.fuelRate = 0.0f;
     st.fuelEconInst = NAN;
     st.brakeRear = st.indLeft = st.indRight = -1;
     st.cruiseEnable = st.cruiseSw = st.hazard = st.startBtn = -1;
@@ -2315,6 +2388,11 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     if (!isnan(st.odometer))     doc[K("odometer","od")]     = (int)lroundf(st.odometer);
     if (!isnan(st.trip))         doc[K("trip","tp")]         = roundf(st.trip * 10) / 10.0;
     if (!isnan(st.fuelEcon))     doc[K("fuelEconomy","fe")]  = roundf(st.fuelEcon * 10) / 10.0;
+    // On the radio since 2026.09.08-2, paid for by taking fuelRate off it.
+    // The swap was measured before it was made: "fr" costs 11 bytes and "rg"
+    // costs 9, so the two-fault case went 503 -> 501 against the 514 ceiling
+    // and the budget came out two bytes BETTER than before either field moved.
+    if (!isnan(st.range))        doc[K("range","rg")]        = (int)lroundf(st.range);
     if (!isnan(st.battery))      doc[K("battery","bv")]      = roundf(st.battery * 10) / 10.0;
     if (!isnan(st.ambient))      doc[K("ambient","am")]      = roundf(st.ambient * 10) / 10.0;
     if (!isnan(st.tyreFront))    doc[K("tyreFront","tf")]    = roundf(st.tyreFront * 10) / 10.0;
@@ -2342,7 +2420,14 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     if (st.indRight >= 0)        doc[K("indRight","ir")]     = st.indRight ? "ON" : "OFF";
     if (st.grips >= 0)           doc[K("grips","gr")]        = st.grips;
     if (!isnan(st.speedFront))   doc[K("speedFront","sf")]   = roundf(st.speedFront * 10) / 10.0;
-    if (!isnan(st.fuelRate))     doc[K("fuelRate","fr")]     = roundf(st.fuelRate * 100) / 100.0;
+    // MQTT only since 2026.09.08-2. It is not gone -- openHAB still gets it,
+    // and it earned its keep the same evening it came off the radio: the idle
+    // burn at 5.05 L/h is what proved the range estimator had changed its mind
+    // rather than the tank falling. What it lost was the app, where the owner
+    // chose range in its place on the Machine page. If it ever goes back on
+    // BLE, note that the gauge rendered one decimal while this sent two, so
+    // the width can drop from 5 to 4 for free.
+    if (includeVin && !isnan(st.fuelRate)) doc[K("fuelRate","fr")] = roundf(st.fuelRate * 10) / 10.0;
     if (!isnan(st.fuelEconInst)) doc[K("fuelEconInst","fi")] = roundf(st.fuelEconInst * 10) / 10.0;
     { const char *wc = wheelCheck(); if (wc) doc[K("wheels","wh")] = wc; }
     // Always published, including zero. These were sent only when above zero,

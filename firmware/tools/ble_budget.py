@@ -20,15 +20,47 @@ import re, sys, pathlib
 CEILING = 514
 
 # Widest each value can render, in characters, as JSON writes it.
+#
+# AUDITED 2026-09-06 against src/main.cpp and the buffer sizes in vehstate.h,
+# after "wh" was found at twice its real width. Three were wrong:
+#
+#   br  9 -> 10    "RELEASED" is eight characters. Under-stated, which is the
+#                  direction that matters: the model said the payload fitted when
+#                  it was a byte larger than claimed.
+#   si  22 -> 113  swid[112], and the real record read off the bike is about 110
+#                  characters of '|'-joined identity. MQTT-only, so the radio was
+#                  never at risk, but the MQTT figure was nonsense.
+#   dr  40 -> 21   dm1Raw[20]. Over-stated by nineteen. MQTT-only.
+#
+# The rest check out against their literals or their buffers. Two notes for
+# whoever audits next: "ln" looks like a string in a naive scan because the line
+# carries a comment quoting one, and it is an integer; and "g" is 3 here for the
+# single character the gear decode actually emits, while gear[3] would allow two.
 W = {
     "r": 4, "th": 3, "g": 3, "ot": 3, "sp": 5, "fl": 3, "od": 6, "tp": 5,
     "fe": 5, "bv": 4, "am": 5, "tf": 4, "tr": 4, "tft": 5, "trt": 5,
-    "br": 9, "cc": 9, "cl": 8, "ce": 5, "cs": 9, "hz": 5, "se": 11,
-    "hl": 6, "il": 5, "ir": 5, "gr": 1, "sf": 5, "fr": 5, "fi": 5,
-    "wh": 24, "wf": 5, "wr": 5, "gg": 3, "ln": 3, "st": 9, "ig": 5,   # st: "UPRIGHT"
-    "gl": 5, "gR": 5, "sk": 6, "fw": 15, "sd": 6,   # "DOWN"/"UP"
+    "br": 10, "cc": 9, "cl": 8, "ce": 5, "cs": 9, "hz": 5, "se": 11,
+    "hl": 6, "il": 5, "ir": 5, "gr": 1, "sf": 5, "fr": 4, "fi": 5,
+    # "wh" was 24 until 2026-09-06 and had never been checked against the source.
+    # wheelCheck() returns only "OK", "REAR LOST" and "FRONT LOST" -- twelve bytes
+    # quoted, exactly half what the model claimed. Over-stating is the safe
+    # direction to be wrong in and it is still wrong: it said the payload was at
+    # its ceiling with two faults when it had twelve bytes to spare, and that
+    # nearly bought an app change nobody needed.
+    "wh": 12, "wf": 5, "wr": 5, "gg": 3, "ln": 3, "st": 9, "ig": 5,   # st: "UPRIGHT"
+    "gl": 5, "gR": 5, "sk": 6, "fw": 15, "sd": 6, "ks": 6,   # "DOWN"/"UP", "RUN"/"STOP"
+    # Ages in seconds. Both are MQTT-only, so they cost the radio nothing -- but
+    # the model still needs a width or the MQTT worst case is understated. Six
+    # digits is eleven days, which a board with deep sleep switched off can reach
+    # while the machine sits over a winter.
+    "ia": 6, "ta": 6,
+    # Range to empty, km. A single byte on the bus, so three digits is the
+    # true ceiling and not a guess. ON the radio since 2026-09-08, paid for
+    # by moving fuelRate off it: "fr" cost 11 bytes and this costs 9, so the
+    # trade came out two bytes ahead rather than level.
+    "rg": 3,
     # MQTT-only; never on the radio.
-    "vn": 19, "si": 22, "dr": 40,
+    "vn": 19, "si": 113, "dr": 21, "sb": 10,
 }
 # The two DM1 encodings, measured per fault rather than as one lump.
 DM1_LAMPS_LONG   = len(" | MIL:off Stop:off Warn:off Prot:off")
@@ -41,6 +73,19 @@ src = (pathlib.Path(__file__).parent.parent / "src/main.cpp").read_text()
 body = src[src.index("size_t buildStateJson("):]
 fields, mqtt_only = [], set()
 for line in body.splitlines():
+    # Skip comments. One describing the parser was enough to crash it on
+    # 2026-09-06, because it quoted the very text being searched for.
+    if line.lstrip().startswith("//"):
+        continue
+    # A gate wrapped onto its own line would hide from the check below and the
+    # field would be counted against the radio. Refuse to guess: this tool exists
+    # to produce a number that can be trusted, so it stops rather than quietly
+    # returning the wrong one. Happened 2026-09-06 with startButton.
+    if line.strip().startswith("if (includeVin") and "doc[K(" not in line:
+        sys.exit("tools/ble_budget.py: an includeVin gate is on its own line:\n"
+                 "    %s\n"
+                 "  Put the gate and the field on ONE line, or this tool cannot\n"
+                 "  tell an MQTT-only field from one on the radio." % line.strip())
     if "doc[K(" not in line:
         continue
     long_k, short_k = re.search(r'K\("([^"]+)"\s*,\s*"([^"]+)"\)', line).groups()
