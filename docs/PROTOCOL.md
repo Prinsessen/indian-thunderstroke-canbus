@@ -445,10 +445,48 @@ position (SPN 51) are two different numbers. Only the valve is on the bus.
 The test that separates them is better than the clutch-blip described here, and
 it came from the owner: **cruise holding the speed with the grip released.**
 Demand goes to zero while the valve stays open. Nothing else on an ordinary ride
-does that — not a hill, not a blip. PGN 65382 bytes 1 and 4 are the standing
-candidates (255 and 80 distinct values across 4,721 frames), and firmware
-`2026.09.05-46` added `probe/throttle` above the stationary gate to watch them
+does that — not a hill, not a blip. PGN 65382 **byte 1** is the standing
+candidate (255 distinct values across 4,721 frames), and firmware
+`2026.09.05-46` added `probe/throttle` above the stationary gate to watch it
 while moving.
+
+Byte 4 of the same message was the other candidate and it is no longer open: it
+is the dash's **range to empty**, decoded 2026-09-08. See below.
+
+### Range to empty, PGN 65382 SA 0 byte 3 — decoded
+
+**One count per kilometre, no offset, no scaling.** The number the original
+instrument shows. Byte 4 in the probe's one-based naming, byte 3 counting from
+zero as this document does.
+
+Settled 2026-09-08 by reading the dash against the byte twice on one evening,
+and confirmed the same night by a paired *change*: the dash and the item both
+went 212 to 211 together.
+
+**It is not a rescaled fuel gauge**, which is the trap this candidate was built
+to fall into — it correlates with fuel level at r = +0.990. The proof is a full
+tank reading 212 when a 94 % tank had read 251 in August. A rescaled gauge would
+need 265 at 100 %, which does not fit in a byte.
+
+**It is pessimistic on purpose.** 212 km on 20.8 litres implies 9.8 l/100 km,
+while the ECU's own lifetime `fuelEconomy` in the same packet reads 6.6. The
+dash computes from a recent-consumption window. Do not "correct" it — agreeing
+with the instrument on the machine is the whole value of the field.
+
+**Two things a decode must handle**, both measured rather than assumed:
+
+- The byte emits bursts of exactly **29**, three frames long and inside a single
+  second, with nothing else on the bus moving. The firmware filters on step
+  size rather than on the value, because 29 is also a range an empty tank
+  genuinely reaches: the largest real step across 4,704 transitions is 39 km and
+  the smallest burst is a drop of 133, so the threshold sits at 60 with a
+  three-second hold for anything larger. A refuel still gets through.
+- **The 255 ceiling is reachable and unexplored.** Highest ever seen is 252, and
+  byte 4 is 0 in all 4,721 frames so no 16-bit high byte is confirmed. At the
+  lifetime 6.6 l/100 km a full tank would be 315 km, which does not fit. Nobody
+  has seen what happens up there.
+
+Full evidence in [UNEXPLORED-BYTES.md](UNEXPLORED-BYTES.md).
 
 ### Cruise control — the state is not transmitted, so it is derived
 

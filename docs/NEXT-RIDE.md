@@ -41,10 +41,18 @@ Either answer is useful. The wrong name is the only bad outcome.
 
 **2. Steady throttle, changing load — 2 minutes, anywhere with a hill**
 
-PGN 65382 bytes 1 and 4 are the busiest unexamined bytes on the bus: 255 and 80
-distinct values across 4,721 frames, in a proprietary message already known to
-carry engine data. Now that the throttle is decoded they can finally be
-separated from it.
+PGN 65382 **byte 1** is the busiest unexamined byte on the bus: 255 distinct
+values across 4,721 frames, in a proprietary message already known to carry
+engine data. Now that the throttle is decoded it can finally be separated
+from it.
+
+Byte 4 was the other half of this task and it is done: it turned out to be the
+dash's range to empty (2026-09-08). One byte left in this message.
+
+**Switch `probe/throttle` back on before riding.** All four probes were turned
+off on 2026-09-08 once the range was settled, so this ride reports nothing
+unless one is re-enabled — the retained topic is `probe/en/throttle`. A ride
+spent with the probe silent is the exact failure this file exists to prevent.
 
 Hold the throttle at a **constant** opening and let the load change -- up a rise
 and down the other side is ideal. A byte that follows the *hill* rather than the

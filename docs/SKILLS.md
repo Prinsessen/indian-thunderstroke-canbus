@@ -377,7 +377,10 @@ line a candidate falls on before spending an evening on it — and check the man
 for an FMI 9, "Abnormal Update Rate", which is the manufacturer saying out loud
 that a signal is expected over the network.
 
-**Open and worth doing:** PGN 65382 bytes 1 and 4 — now with a sharp test, since
+**Open and worth doing:** PGN 65382 byte 1 — its byte 4 fell on 2026-09-08 and
+was the dash's range to empty, so this message has now given up two of its four
+live bytes and the last one is the busiest byte on the bus. The sharp test still
+applies, since
 cruise holding with the grip released separates the rider's demand (SPN 91, not
 on the bus) from the valve (SPN 51, decoded); the immobiliser's relation to
 SPN 520330; and the compact DM1 encoding.

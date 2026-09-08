@@ -116,9 +116,9 @@ instrument and a layout engine has nothing to contribute to a needle.
 
 | | |
 |---|---|
-| **Ride** | Speedometer with the gear window and turn arrows on the face, a digital rev readout with the ignition and ABS lamps beside it, fuel, grip heaters, and a row of tell-tales |
+| **Ride** | Speedometer with the gear window and turn arrows on the face, a digital rev readout with the ignition and ABS lamps beside it, fuel with the dash's own range beside it, grip heaters, and a row of tell-tales |
 | **Tyres** | Both wheels: what is in the tyre now, what that would be cold, the temperature that separates them, and the target. Plus a slow-leak trend measured across weeks on cold-corrected figures, since raw readings taken at different temperatures mostly describe the weather |
-| **Machine** | Cylinder head, battery, ambient, odometer, service interval, fuel economy |
+| **Machine** | Cylinder head, battery, ambient, odometer, service interval, fuel economy, and range to empty as the factory instrument computes it |
 | **Heat** | The rider's own clothing — see below |
 
 **A fault banner across the top of every page.** The diagnostics were decoded and

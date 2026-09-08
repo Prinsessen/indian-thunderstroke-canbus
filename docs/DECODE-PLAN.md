@@ -184,9 +184,11 @@ finding. Recorded as an anomaly rather than explained away.
 
 **Shipped (16 PGNs)** — 61444, 61445, 65089, 65217, 65226, 65262, 65265, 65266,
 65268, 65269, 65271, 65276, 65381, 65382, 65386, 65390. Not all of these still
-decode something: 65390 and 65382 are present as documented withdrawals, which
-is deliberate — the comment is what stops the same wrong decode being written a
-third time.
+decode something: 65390 is present as a documented withdrawal, which is
+deliberate — the comment is what stops the same wrong decode being written a
+third time. 65382 carried a withdrawal too until 2026-09-08, when its byte 3
+turned out to be the dash's range to empty; the withdrawn throttle note stays
+beside the working decode, for the same reason.
 
 **Transport, not data (4 PGNs)** — 59904 (request), 60160 (TP.DT), 60416
 (TP.CM), 60928 (address claimed). Already handled by the reassembly layer.
