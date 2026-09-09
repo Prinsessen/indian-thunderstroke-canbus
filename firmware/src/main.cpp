@@ -876,7 +876,9 @@ void publishHeartbeat() {
         bus["state"] = health.state;
         bus["tec"]   = health.tec;
         bus["rec"]   = health.rec;
-        bus["berr"]  = health.busErrors;
+        bus["rxerr"] = health.rxErr;
+        bus["txerr"] = health.txErr;
+        bus["efmsg"] = health.efMsgs;
         // ALWAYS present, and "none" when clean rather than omitted.
         //
         // The state payload omits unavailable keys, and copying that here would

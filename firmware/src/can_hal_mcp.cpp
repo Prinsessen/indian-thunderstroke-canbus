@@ -169,9 +169,26 @@ bool canHealth(CanHealth &h) {
     const uint32_t trec   = s_can.errorCounters();
     const uint32_t bdiag1 = s_can.diagInfos(1);
 
-    h.rec       = (uint16_t)(trec & TREC_REC_MASK);
-    h.tec       = (uint16_t)((trec >> TREC_TEC_SHIFT) & 0xFFu);
-    h.busErrors = (uint16_t)(bdiag1 & 0xFFFFu);
+    const uint32_t bdiag0 = s_can.diagInfos(0);
+
+    h.rec   = (uint16_t)(trec & TREC_REC_MASK);
+    h.tec   = (uint16_t)((trec >> TREC_TEC_SHIFT) & 0xFFu);
+    // C1BDIAG0: the nominal-bitrate error counts. These are the real error
+    // numbers on this controller -- TEC and REC above may never move at all in
+    // listen-only, since the node never transmits an error frame.
+    h.rxErr = (uint16_t)(bdiag0 & 0xFFu);
+    h.txErr = (uint16_t)((bdiag0 >> 8) & 0xFFu);
+
+    // C1BDIAG1 low half is EFMSGCNT -- error-FREE messages, and it is 16 bits,
+    // so at the ~197 msg/s this bus runs it wraps every five and a half
+    // minutes. Accumulating across the wrap is what turns it from a sawtooth
+    // into a per-ride total, which is the only form in which it is useful.
+    static uint16_t lastEf = 0;
+    static uint32_t efTotal = 0;
+    const uint16_t ef = (uint16_t)(bdiag1 & 0xFFFFu);
+    efTotal += (uint16_t)(ef - lastEf);     // unsigned wrap does the arithmetic
+    lastEf = ef;
+    h.efMsgs = efTotal;
 
     // Worst state first: bus-off is terminal, error-passive means the node has
     // stopped being trusted by itself, warning is the early one that matters.

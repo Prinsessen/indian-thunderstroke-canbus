@@ -132,10 +132,12 @@ bool canHealth(CanHealth &h) {
     twai_status_info_t st;
     if (twai_get_status_info(&st) != ESP_OK) return false;
 
-    h.tec       = (uint16_t)st.tx_error_counter;
-    h.rec       = (uint16_t)st.rx_error_counter;
-    h.busErrors = (uint16_t)st.bus_error_count;
-    h.errs[0]   = 0;                       // no per-type breakdown on this silicon
+    h.tec     = (uint16_t)st.tx_error_counter;
+    h.rec     = (uint16_t)st.rx_error_counter;
+    h.rxErr   = (uint16_t)st.bus_error_count;   // the peripheral's one error total
+    h.txErr   = 0;
+    h.efMsgs  = 0;                 // no error-free message counter on this silicon
+    h.errs[0] = 0;                 // and no per-type breakdown either
 
     const char *state = "OK";
     if      (st.state == TWAI_STATE_BUS_OFF)    state = "BUSOFF";

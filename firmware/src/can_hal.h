@@ -104,9 +104,23 @@ bool canRunning();
 // ---------------------------------------------------------------------------
 struct CanHealth {
     bool     valid;        // false = the backend cannot report, do not publish
-    uint16_t tec;          // transmit error counter
-    uint16_t rec;          // receive error counter
-    uint16_t busErrors;    // bus errors detected since the controller started
+    uint16_t tec;          // transmit error counter (C1TREC)
+    uint16_t rec;          // receive error counter (C1TREC)
+    uint16_t rxErr;        // nominal-bitrate RECEIVE error count (C1BDIAG0)
+    uint16_t txErr;        // nominal-bitrate TRANSMIT error count (C1BDIAG0)
+    // Error-FREE messages seen this ride, accumulated across the hardware
+    // counter's 16-bit wrap.
+    //
+    // This field was briefly published as "bus errors" and it is the opposite.
+    // C1BDIAG1's low half is EFMSGCNT, not an error count, and the mistake was
+    // caught within a minute of the first reading: it climbed by about 197 a
+    // second on a healthy bus while every genuine error indicator sat at zero.
+    // That is the J1939 message rate. A bus with 197 errors a second is dead.
+    //
+    // Correctly named it is the more useful number of the two, because it is a
+    // DENOMINATOR. Errors per million messages says something across rides of
+    // different lengths; a raw error count only says how far you rode.
+    uint32_t efMsgs;
     char     state[8];     // "OK", "WARN", "PASSIVE", "BUSOFF"
     // Comma-separated error TYPES seen since the controller started, e.g.
     // "STUFF,CRC". Empty when clean. This is the field worth reading: a rising
