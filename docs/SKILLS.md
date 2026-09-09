@@ -336,6 +336,29 @@ and the firmware version already sent rarely. Adding a field is not free; run
 `python3 tools/ble_budget.py` before you do. [PROTOCOL.md](PROTOCOL.md) has the
 budget and what gets sacrificed when it still does not fit.
 
+**Decoding a signal and keeping it are two different jobs, and this project
+did only the first one for weeks.** On 2026-09-09 an audit found 46 of 68
+decoded openHAB items with no persistence at all: every value read, published,
+displayed — and then discarded. The three that mattered most were the three this
+particular motorcycle has a history with.
+
+`CanBus_SpeedFront` was the expensive one. The rear wheel was stored and the
+front was not, so the RATIO of the two could not be computed at all — and that
+ratio is the ratio of rolling circumferences, which moves slowly and smoothly as
+a tyre wears and noisily as a sensor starts to fail. This bike destroyed a front
+wheel-speed sensor by running it without its shim. The instrument that would
+have seen it coming was one line of configuration away the whole time.
+
+The glitch and dropout counters were worse in a quieter way. A tally with no
+history says "twenty-three" and cannot say when, or whether it is getting worse.
+That is the difference between a note and a warranty case.
+
+**So when a new signal is decoded, the work is not finished until it is also
+persisted** — or until there is a written reason not to. Those reasons exist and
+are in `influxdb.persist` beside the entries: lean changes five times a second,
+the age counters tick by construction and describe the link rather than the
+bike, and the board's own state is not a fact about the machine.
+
 **Firmware and app drift apart silently, in three directions.** Nothing crashes
 and nothing logs — a gauge just quietly stops meaning anything:
 

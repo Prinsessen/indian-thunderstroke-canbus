@@ -148,7 +148,7 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `rpm` | int | rpm | |
 | `throttle` | int | % | |
 | `gear` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
-| `gearGlitches` | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly |
+| `gearGlitches` | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly. **MQTT only since 2026.09.09-3.** It is the counter behind three gear position sensors replaced under warranty, so it went to the transport that KEEPS it: openHAB holds and persists the history, which is what a service desk has to be shown. The radio bytes went to the engine data still being decoded |
 | `coolant` | int | °C | **Cylinder head temperature.** The key is a misnomer kept for continuity: this engine is air-cooled and has no coolant, and no oil temperature sensor either — the manual lists exactly one engine temperature sensor, the CHT on the front cylinder head. |
 | `speed` | float | km/h | 1 decimal. From the ABS module, and the figure the dash shows |
 | `speedFront` | float | km/h | The front wheel, from the same module. Kept separate on purpose: comparing the two is how a failing wheel-speed sensor is caught before the ABS decides anything is wrong |
@@ -168,7 +168,7 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `tyreRearTemp` | float | °C | 1 decimal |
 | `tyreAge` | int | s | Seconds since the last TPMS frame arrived. **MQTT only.** The pressures are retained and republished at 1 Hz, so a value alone cannot say whether it is fresh -- a week-old reading looks identical to one taken a second ago. This is what separates them. Absent until a frame has been seen |
 | `brakeRear` | string | | `"PRESSED"` / `"RELEASED"`. One brake signal, SPN 597, which either control operates — the name is historical. `brakeFront` was removed 2026-09-05. |
-| `clutch` | string | | `"PULLED"` / `"out"` (SPN 598) |
+| `clutch` | string | | `"PULLED"` / `"out"` (SPN 598). **MQTT only since 2026.09.09-3** -- 14 bytes, the most expensive of the unread fields, because `"PULLED"` is a long string for a one-bit fact. It does not weaken cruise: the derivation that needs the clutch runs in the firmware and still does |
 | `cruise` | string | | `"HOLDING"` / `"off"` — **derived, not measured.** SPN 595 is not transmitted on this bus. The vocabulary differs from the fields around it on purpose, so the value itself says what kind of fact it is. |
 | `cruiseEnable` | string | | `"ON"` / `"OFF"` (SPN 596, the rocker) |
 | `cruiseSw` | string | | `"SET/DEC"`, `"RES/ACC"` or `"none"` — the legend printed on the rocker |
@@ -177,7 +177,7 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `ignition` | string | | `"ON"` / `"OFF"`. Derived from whether the bus is alive, not from a signal -- pressing wake is what starts the traffic |
 | `grips` | int | | Heated grips, 0 for off through 10. Ten detents, and the byte moves in exact steps of 25 |
 | `gripTempL`, `gripTempR` | float | °C | What each grip has actually reached. Left is byte 0 -- confirmed by holding a bare hand on it with the heat off, which is the only way to be sure |
-| `lean` | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it |
+| `lean` | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it. **MQTT only since 2026.09.09-3.** Read `stand` instead, which is derived from this and is what a client actually wants |
 | `stand` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`**, and it answers whether the machine is RESTING on the stand, not where the stand is. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
 | `startButton` | string | | `"PRESSED"` / `"RELEASED"` -- PGN 65381 SA 39 byte 3 bit 2, set for pressed. **MQTT only, never on BLE**: a momentary press is almost never caught in a snapshot, and the radio payload has no byte to spare. SA 39 is the handlebar module, not the ECU, which is why it reports even with the kill switch blocking the crank. Found 2026-09-06 |
 | `killSwitch` | string | | `"RUN"` / `"STOP"` -- the red run/stop switch on the right bar, PGN 65381 SA 0 byte 4 bit 6, set for RUN. Two bytes from `standDown` in the same ECU message: the two interlocks that can refuse to let the engine run, side by side. Absent with the ignition off. Found 2026-09-06 |
@@ -189,7 +189,7 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `indLeft` | string | | `"ON"` / `"OFF"` |
 | `indRight` | string | | `"ON"` / `"OFF"` |
 | `dm1` | string | | Decoded active DTC summary, e.g. `"No active DTC \| MIL:off"` |
-| `dm1Raw` | string | | Raw DM1 hex |
+| `dm1Raw` | string | | Raw DM1 hex. **MQTT only, and always was** -- this table failed to say so, and the Android app consequently parsed a field that could never arrive. It was dead from the day it was written and nobody could see it, because a null field looks exactly like a field with nothing to report. Removed from the app 2026-09-09. Use `dm1` |
 | `fw` | string | | Firmware version, e.g. `"2026.09.02-4"`. **Always present** from that build onwards — a client that cannot say which firmware it is talking to makes every report of odd behaviour start with a guess. |
 
 ### Deliberately absent over BLE
@@ -199,11 +199,19 @@ They are permanent vehicle identity, not telemetry, and BLE advertises to
 whoever is within range in a car park. A client must not expect them, and adding
 them back would need a firmware change, not a client one.
 
-`startButton`, `interlockAge`, `tyreAge` and — since 2026.09.08-2 — `fuelRate`
-are MQTT-only for a different reason: **the payload has a hard 514-byte ceiling**
-and each of them costs more than it buys on the radio. `fuelRate` is the one to
-watch, because it was on BLE and was traded away deliberately rather than never
-having fitted. Anything moved back on must be measured with
+`startButton`, `interlockAge`, `tyreAge`, `dm1Raw`, and — since 2026.09.08-2 and
+2026.09.09-3 — `fuelRate`, `clutch`, `lean` and `gearGlitches` are MQTT-only for
+a different reason: **the payload has a hard 514-byte ceiling** and each of them
+costs more than it buys on the radio.
+
+Three of those were found by `tools/sync_check.py` on its first run, transmitting
+to nobody: 32 bytes of a 514-byte payload, six percent, spent on fields no
+consumer had ever read. Removing them is what finally made four simultaneous
+fault codes fit — 479/490/501/**523 over** became 447/458/469/**491**.
+
+`fuelRate` is the one to watch, because it was on BLE and was traded away
+deliberately rather than never having fitted. Anything moved back on must be
+measured with
 [`tools/ble_budget.py`](../firmware/tools/ble_budget.py) **in the same change**,
 not after it.
 
