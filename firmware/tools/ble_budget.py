@@ -94,7 +94,13 @@ for line in body.splitlines():
     if short_k not in W:
         sys.exit(f"tools/ble_budget.py: no worst-case width for '{short_k}' "
                  f"({long_k}) -- add it to W and re-run")
-    if "includeVin &&" in line:
+    # Any includeVin gate makes the field MQTT-only, not just the "&&" form.
+    # This matched only `includeVin &&` until 2026-09-09, so a field written
+    # `if (includeVin) doc[K(...)]` -- which is what you write when the gate
+    # is the ONLY condition -- was silently counted against the radio. The
+    # error is in the safe direction, overstating the payload rather than
+    # understating it, but it hid 9 bytes of a saving that had been made.
+    if re.search(r"\bincludeVin\b", line):
         mqtt_only.add(short_k)
     fields.append((long_k, short_k))
 

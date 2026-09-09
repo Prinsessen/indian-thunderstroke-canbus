@@ -220,7 +220,12 @@ data class BikeJsonState(
     /** "ON"/"OFF" -- bus activity, which is the ignition. */
     val ignition: String? = null,
     val dm1: String? = null,
-    val dm1Raw: String? = null,
+    // dm1Raw was here and was always null. The firmware gates it behind the
+    // MQTT path, so it never reached BLE and this app could never have shown
+    // it -- dead from the day it was written. Found 2026-09-09 by
+    // tools/sync_check.py, which is what that tool is for. The raw hex is a
+    // diagnostic for openHAB; the decoded summary in `dm1` is what a rider
+    // needs, and that one does arrive.
     /** Firmware version, present from 2026.09.02-4 onwards. */
     val fw: String? = null
 ) {
@@ -303,7 +308,6 @@ data class BikeJsonState(
                 wheelBlipsRear = i("wr"),
                 ignition = s("ig"),
                 dm1 = s("d1"),
-                dm1Raw = s("dr"),
                 fw = s("fw")
             )
         }

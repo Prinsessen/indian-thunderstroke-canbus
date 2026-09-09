@@ -2438,7 +2438,16 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     // "HOLDING" rather than "ON", so the value itself says this is not the same
     // kind of fact as the fields around it: it is worked out, not read.
     if (st.cruiseHold >= 0)      doc[K("cruise","cc")]       = st.cruiseHold ? "HOLDING" : "off";
-    if (st.clutch >= 0)          doc[K("clutch","cl")]       = st.clutch ? "PULLED" : "out";
+    // MQTT only from 2026.09.09-3. The app never read it, and it was the
+    // most expensive of the three unread fields at 14 bytes, because
+    // "PULLED" is a long string for a one-bit fact.
+    //
+    // It does NOT weaken cruise. The derivation that needs the clutch is
+    // right here in the firmware -- see the hard exit in cruiseTick() --
+    // and st.clutch is still decoded and still used. What stops is sending
+    // the raw position to a phone, which nothing displayed and nobody can
+    // read faster than the lever in their own hand.
+    if (includeVin && st.clutch >= 0) doc[K("clutch","cl")] = st.clutch ? "PULLED" : "out";
     if (st.cruiseEnable >= 0)    doc[K("cruiseEnable","ce")] = st.cruiseEnable ? "ON" : "OFF";
     // The legend printed on the rocker itself: SET/DEC below, RES/ACC above --
     // and the manual names the switches Set/Decel (599) and Resume/Accel (601).
@@ -2477,8 +2486,19 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     // seeing a line of over a season.
     doc[K("wheelBlips","wf")]     = counterGet(CNT_WHEEL_FRONT);
     doc[K("wheelBlipsRear","wr")] = counterGet(CNT_WHEEL_REAR);
-    doc[K("gearGlitches","gg")]   = counterGet(CNT_GEAR_GLITCH);
-    if (st.lean >= 0)            doc[K("lean","ln")]         = st.lean;   // app reads "stand", not this
+    // MQTT only from 2026.09.09-3, and this one was a judgement rather than
+    // an oversight. It is the evidence counter behind three gear position
+    // sensors replaced under warranty, so it is not unimportant -- it is
+    // simply better placed. openHAB holds it and now persists it, which is
+    // where a history that has to be shown to a service desk belongs. The
+    // owner chose the radio bytes instead, for the engine data that PGN
+    // 65382 byte 0 is expected to carry.
+    if (includeVin) doc[K("gearGlitches","gg")] = counterGet(CNT_GEAR_GLITCH);
+    // MQTT only from 2026.09.09-3, for the reason the old comment on this
+    // line already gave: the app reads "stand", the DERIVED string, and
+    // never touched the raw tilt. The derivation happens here and is
+    // unaffected -- st.lean still produces st.stand every pass.
+    if (includeVin && st.lean >= 0) doc[K("lean","ln")] = st.lean;
     { const char *sd = standState(); if (sd) doc[K("stand","st")] = sd; }
     // Ignition, from bus activity rather than any decoded bit.
     //

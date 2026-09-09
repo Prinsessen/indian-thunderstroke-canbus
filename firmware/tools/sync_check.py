@@ -44,7 +44,12 @@ def firmware_keys():
         if not m:
             continue
         long_k, short_k = m.groups()
-        out[short_k] = (long_k, "includeVin &&" in line)
+        # Any includeVin gate means MQTT-only. Matching only the "&&" form
+        # misses `if (includeVin) doc[K(...)]`, which is what gets written
+        # when the gate is the only condition -- and that field would then
+        # be reported as an unread BLE key that the app should consume,
+        # which is exactly backwards.
+        out[short_k] = (long_k, bool(re.search(r"\bincludeVin\b", line)))
     return out
 
 
