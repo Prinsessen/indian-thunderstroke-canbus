@@ -158,13 +158,15 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `trip` | float | km | 1 decimal |
 | `fuelEconomy` | float | l/100 km | 1 decimal, the bike's own average |
 | `fuelEconInst` | float | l/100 km | Instantaneous |
-| `fuelRate` | float | L/h | SPN 183. The discriminator for anything that might be injector duty |
+| `fuelRate` | float | L/h | SPN 183. The discriminator for anything that might be injector duty. **MQTT only since 2026.09.08-2**, and one decimal rather than two: it was traded off the radio so `range` could go on, because "fuelRate" costs 11 bytes and "range" costs 9. It is not gone -- it is what proved the range estimator changes its mind rather than the tank falling |
+| `range` | int | km | **Range to empty, exactly as the original dash shows it.** PGN 65382 SA 0 byte 3, one count per km, no offset, identified 2026-09-08. Deliberately pessimistic -- it runs on a recent-consumption window, so it read 212 on a full tank while `fuelEconomy`, the lifetime average, said 6.6. Not cleared when the bus goes quiet: like `fuel` and `odometer` it is a true statement about a parked machine. Bursts of exactly 29 are filtered on step size; see the decoded-signal entry below |
 | `battery` | float | V | 1 decimal. >13.5 V ⇒ engine running/charging |
 | `ambient` | float | °C | 1 decimal |
 | `tyreFront` | float | PSI | 1 decimal |
 | `tyreRear` | float | PSI | 1 decimal |
 | `tyreFrontTemp` | float | °C | 1 decimal |
 | `tyreRearTemp` | float | °C | 1 decimal |
+| `tyreAge` | int | s | Seconds since the last TPMS frame arrived. **MQTT only.** The pressures are retained and republished at 1 Hz, so a value alone cannot say whether it is fresh -- a week-old reading looks identical to one taken a second ago. This is what separates them. Absent until a frame has been seen |
 | `brakeRear` | string | | `"PRESSED"` / `"RELEASED"`. One brake signal, SPN 597, which either control operates — the name is historical. `brakeFront` was removed 2026-09-05. |
 | `clutch` | string | | `"PULLED"` / `"out"` (SPN 598) |
 | `cruise` | string | | `"HOLDING"` / `"off"` — **derived, not measured.** SPN 595 is not transmitted on this bus. The vocabulary differs from the fields around it on purpose, so the value itself says what kind of fact it is. |
@@ -180,6 +182,7 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `startButton` | string | | `"PRESSED"` / `"RELEASED"` -- PGN 65381 SA 39 byte 3 bit 2, set for pressed. **MQTT only, never on BLE**: a momentary press is almost never caught in a snapshot, and the radio payload has no byte to spare. SA 39 is the handlebar module, not the ECU, which is why it reports even with the kill switch blocking the crank. Found 2026-09-06 |
 | `killSwitch` | string | | `"RUN"` / `"STOP"` -- the red run/stop switch on the right bar, PGN 65381 SA 0 byte 4 bit 6, set for RUN. Two bytes from `standDown` in the same ECU message: the two interlocks that can refuse to let the engine run, side by side. Absent with the ignition off. Found 2026-09-06 |
 | `standDown` | string | | `"DOWN"` / `"UP"` -- the sidestand **switch**, PGN 65381 SA 0 byte 7 bit 0, clear for extended. The measured fact, as against `stand` above, which is inferred from tilt. Absent with the ignition off, because the ECU is not transmitting 65381 then. Found 2026-09-06 after being ruled off this bus twice; see GARAGE-RUN run 9 |
+| `interlockAge` | int | s | Seconds since the last PGN 65381 frame from SA 0 -- the message carrying `killSwitch` and `standDown`. **MQTT only**, and the same argument as `tyreAge`: an interlock reading with no age cannot be told from a stale one. Absent until a frame has been seen |
 | `wheels` | string | | `"OK"`, `"FRONT LOST"`, `"REAR LOST"`. Continuous comparison of the two wheel speeds |
 | `wheelBlips`, `wheelBlipsRear` | int | | Brief dropouts counted per sensor since the board was last erased. Survives reboots and OTA |
 | `headlight` | string | | `"High"` / `"Low"` / `"Off"` |
@@ -195,6 +198,14 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 They are permanent vehicle identity, not telemetry, and BLE advertises to
 whoever is within range in a car park. A client must not expect them, and adding
 them back would need a firmware change, not a client one.
+
+`startButton`, `interlockAge`, `tyreAge` and — since 2026.09.08-2 — `fuelRate`
+are MQTT-only for a different reason: **the payload has a hard 514-byte ceiling**
+and each of them costs more than it buys on the radio. `fuelRate` is the one to
+watch, because it was on BLE and was traded away deliberately rather than never
+having fitted. Anything moved back on must be measured with
+[`tools/ble_budget.py`](../firmware/tools/ble_budget.py) **in the same change**,
+not after it.
 
 ### The DM1 lamps, and which one is the ABS lamp
 
