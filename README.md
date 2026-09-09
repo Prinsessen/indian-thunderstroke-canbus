@@ -5,10 +5,27 @@ an Android instrument cluster, and how each signal was found.**
 
 Developed and verified on a **2017 Indian Springfield**. The service manual it was
 worked from is the *2017 Indian Motorcycle (Full-Size)* volume, which covers the
-Chief, Dark Horse, Vintage, Springfield, Chieftain, Roadmaster and Elite — they
-share the engine and the bus, so most of this should apply to all of them. None of
-it has been tested on anything but the Springfield. Scout and FTR are a different
-engine and are out of scope.
+Chief, Dark Horse, Vintage, Springfield, Chieftain, Roadmaster and Elite. Scout
+and FTR are a different engine and are out of scope.
+
+**What differs between those models is equipment, not the bus.** The owner rides
+one and is certain of it: as far as the network is concerned, Chieftain,
+Roadmaster and Vintage are the same machine as the Springfield. What changes is
+which *optional* parts are fitted, and therefore which signals exist at all — a
+Vintage has no heated grips, so `grips` and the two grip temperatures are simply
+absent, and a Chieftain or Roadmaster has a powered windshield the Springfield
+does not, so those bikes should carry a signal this project has never seen.
+
+That is an owner's knowledge of the model line rather than a measurement, and it
+is worth saying which. But it makes the transferability concrete instead of
+hopeful: **a missing field on another model is far more likely to be equipment
+that was never fitted than a decode that is wrong.**
+
+It is also a testable prediction. SPN 520294/520295 name a windshield motor and
+switch, so a Roadmaster should show movement in a byte that is dead here —
+plausibly one [UNEXPLORED-BYTES.md](docs/UNEXPLORED-BYTES.md) still lists as
+unexamined. A single capture from such a bike would settle it, and would be the
+first data this project has that its own motorcycle cannot produce.
 
 ---
 
