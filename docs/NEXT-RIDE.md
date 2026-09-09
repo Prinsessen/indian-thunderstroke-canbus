@@ -80,31 +80,6 @@ Just ride, and these answer themselves from the log afterwards:
 
 ---
 
-## One thesis the ride settles by itself
-
-`Warn:ON` has appeared in DM1 all day alongside `No active DTC`. It was written
-up as the low fuel warning, on the evidence that the tank read 10 % with LOW
-FUEL on the dash at the same moment.
-
-The owner's explanation is better: it is the **amber ABS lamp**, which stays lit
-from power-up until the ABS completes its self-test, and that test needs the
-wheels turning at 8-10 km/h. The bike has been stationary all day, so the lamp
-had no opportunity to go out — which fits a constant `Warn:ON` far better than a
-fuel level that has not changed either.
-
-**The ride answers it without anyone doing anything.** Watch the flag as you
-pass walking pace:
-
-- Goes off around 8-10 km/h → the ABS self-test, and the thesis holds.
-- Stays on with the tank still low → the fuel warning after all.
-
-Either way it is worth knowing, because a lamp that is lit before every single
-ride is not a warning, and should not be read as one.
-
-*(It does not currently affect the app's alert banner: `Dtc.healthy()` matches
-on "No active", so with no fault code there is no banner regardless of the
-lamps. The lamps only shift severity when a real fault is present.)*
-
 ## Cruise control — SETTLED 2026-09-05, no ride needed
 
 Everything that was open here has been answered, and this section is kept only so
@@ -133,10 +108,11 @@ enable rocker is byte 4 bit 0.
 the presses, the brake, the clutch and road speed. It is honest about being a
 derivation: the vocabulary differs from the measured fields around it on purpose.
 
-## Two thirty-second tests, stationary, whenever convenient
+## Two stationary tests — both closed, kept so they are not run again
 
-Neither needs a ride. Both need the change detector, which is in the firmware
-while `PROBE_CHANGES` is 1.
+Neither is outstanding. They are listed because both look like obvious things to
+go and try, and each would cost half an hour to re-establish something already
+known.
 
 **Fog lamps -- DONE 2026-09-06, and they are not on the bus.** Six transitions,
 nothing answered, with PGN 65265 visible this time (it was masked when the first
@@ -170,3 +146,11 @@ Every look we had ever taken was at a parked bike, where the ABS has not
 self-tested yet and cannot. So the lamp was doing exactly the right thing the
 whole time, and the only way to see it was to be moving -- which no amount of
 analysis on stationary captures was going to deliver.
+
+*(It does not affect the app's alert banner: `Dtc.healthy()` matches on
+"No active", so with no fault code there is no banner regardless of the lamps.
+The lamps only shift severity when a real fault is present.)*
+
+This section used to have a twin earlier in the file, written before the ride,
+asking the rider to go and settle it. Removed 2026-09-09 — a task list that
+still asks for an answer it already has costs the reader a ride.
