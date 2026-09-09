@@ -336,6 +336,22 @@ and the firmware version already sent rarely. Adding a field is not free; run
 `python3 tools/ble_budget.py` before you do. [PROTOCOL.md](PROTOCOL.md) has the
 budget and what gets sacrificed when it still does not fit.
 
+**Firmware and app drift apart silently, in three directions.** Nothing crashes
+and nothing logs — a gauge just quietly stops meaning anything:
+
+- the firmware sends a key the app never reads (new data, invisible)
+- the app reads a key the firmware stopped sending (the gauge goes blank)
+- the app reads a key that is MQTT-only (null for ever)
+
+`python3 tools/sync_check.py` diffs both sides and exits non-zero on any of
+them. **Run it before every OTA that touches `buildStateJson()` or
+`BikeState.kt`.** The second case nearly shipped on 2026-09-08, when `fuelRate`
+was moved off BLE to make room for `range`: had the app not been changed in the
+same commit, its FUEL RATE gauge would have read `--` with nothing to say why.
+
+Its first run found four live mismatches that had been there for weeks, three of
+them costing radio bytes for fields nothing reads.
+
 **Landscape has its own layout files.** Three views shipped portrait-only in one
 day. Check `layout-land/` every single time.
 
