@@ -169,7 +169,7 @@ the reasoning for each. If you read only one other file, read that one.
 | [PROTOCOL.md](PROTOCOL.md) | The BLE contract — UUIDs, byte layout, the payload budget |
 | [TOOLING-GAPS.md](TOOLING-GAPS.md) | Three things missing from how we work, and what each has cost |
 | [OTA.md](OTA.md) · [FLASHING.md](FLASHING.md) | Updating over the air, and recovering a dead board over USB |
-| [README.md](README.md) | Long-form background |
+| [README.md](../README.md) | Long-form background |
 | [../source-code/indian-canbus-app/WORKFLOW.md](WORKFLOW.md) | How the app gets from this server to the phone |
 
 ---

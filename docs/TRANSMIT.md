@@ -1,6 +1,6 @@
 # If the sniffer ever transmits
 
-> **Nothing here is in effect.** `TX_ENABLED` in [`src/main.cpp`](src/main.cpp)
+> **Nothing here is in effect.** `TX_ENABLED` in [`src/main.cpp`](../firmware/src/main.cpp)
 > is 0 and the controller runs in hardware listen-only mode. This document
 > describes what *would* become possible, what it would cost, and what must stay
 > impossible even then. It is a plan on a shelf, written 2026-09-07 because the

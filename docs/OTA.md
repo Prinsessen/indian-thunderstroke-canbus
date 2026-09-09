@@ -50,7 +50,7 @@ outbound connection to fetch the image, which sails straight through NAT.
 > OTA.** OTA is delivered over WiFi, so a change that breaks the WiFi link takes
 > the recovery path with it. This applies to anything touching WiFi/BLE
 > coexistence — notably the first firmware with `ENABLE_BLE 1` (see the "BLE
-> phone link" section in [README.md](README.md)). Confirm it on the bench with
+> phone link" section in [README.md](../README.md)). Confirm it on the bench with
 > `pio run -e sniffer-t2can -t upload -t monitor`, then go back to OTA for the
 > iterations after that.
 

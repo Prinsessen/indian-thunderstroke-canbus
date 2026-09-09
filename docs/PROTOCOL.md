@@ -3,7 +3,7 @@
 Everything a client (Android app, script, nRF Connect) needs to talk to the
 firmware, written so it can be implemented **without reading the firmware
 source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
-lives in the "BLE phone link" section of [README.md](README.md).
+lives in the "BLE phone link" section of [README.md](../README.md).
 
 Firmware from `2026.09.02-2` onwards. Verified on the bike 2026-09-02.
 
