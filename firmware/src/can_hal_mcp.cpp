@@ -131,4 +131,73 @@ bool canTransmit(const CanFrame &in) {
 
 bool canRunning() { return s_running; }
 
+// ---------------------------------------------------------------------------
+// Bus health, from the MCP2518FD's three diagnostic registers.
+//
+// ACAN2517FD exposes them as two public reads and nothing else, which is all
+// that is needed: errorCounters() returns C1TREC and diagInfos(n) returns
+// C1BDIAG0 or C1BDIAG1. There is no write, so the latching flags in C1BDIAG1
+// cannot be cleared -- and they do not need to be, because canInit() runs
+// begin() from scratch on every boot and deep sleep restarts the chip. Each
+// wake is therefore a fresh window covering one ride.
+//
+// THE BIT POSITIONS BELOW COME FROM THE MCP2518FD DATA SHEET, not from the
+// library, which defines no names for them. That is worth saying out loud: a
+// wrong offset here would produce confident nonsense rather than an error. The
+// empirical check is that a healthy bus must report NOTHING -- if a flag is
+// lit on a bus that is working, the decode is wrong, not the wire.
+// ---------------------------------------------------------------------------
+// C1TREC (0x034)
+static const uint32_t TREC_REC_MASK  = 0x000000FFu;   // bits  0-7   receive error counter
+static const uint32_t TREC_TEC_SHIFT = 8;             // bits  8-15  transmit error counter
+static const uint32_t TREC_EWARN     = 1u << 16;      // either counter >= 96
+static const uint32_t TREC_RXBP      = 1u << 19;      // receiver error passive
+static const uint32_t TREC_TXBP      = 1u << 20;      // transmitter error passive
+static const uint32_t TREC_TXBO      = 1u << 21;      // bus off
+// C1BDIAG1 (0x03C) -- low 16 bits are BERRCNT, the rest are latching error types
+static const uint32_t D1_NBIT0ERR = 1u << 16;
+static const uint32_t D1_NBIT1ERR = 1u << 17;
+static const uint32_t D1_NACKERR  = 1u << 18;
+static const uint32_t D1_NFORMERR = 1u << 19;
+static const uint32_t D1_NSTUFERR = 1u << 20;
+static const uint32_t D1_NCRCERR  = 1u << 21;
+
+bool canHealth(CanHealth &h) {
+    h.valid = false;
+    if (!s_running) return false;
+
+    const uint32_t trec   = s_can.errorCounters();
+    const uint32_t bdiag1 = s_can.diagInfos(1);
+
+    h.rec       = (uint16_t)(trec & TREC_REC_MASK);
+    h.tec       = (uint16_t)((trec >> TREC_TEC_SHIFT) & 0xFFu);
+    h.busErrors = (uint16_t)(bdiag1 & 0xFFFFu);
+
+    // Worst state first: bus-off is terminal, error-passive means the node has
+    // stopped being trusted by itself, warning is the early one that matters.
+    const char *st = "OK";
+    if      (trec & TREC_TXBO)                    st = "BUSOFF";
+    else if (trec & (TREC_RXBP | TREC_TXBP))      st = "PASSIVE";
+    else if (trec & TREC_EWARN)                   st = "WARN";
+    snprintf(h.state, sizeof(h.state), "%s", st);
+
+    // Types, most diagnostic first. STUFF and CRC are the two that a loosening
+    // connector produces; ACK and BIT errors would point at us transmitting,
+    // which in listen-only would itself be the finding.
+    h.errs[0] = 0;
+    struct { uint32_t bit; const char *name; } kinds[] = {
+        { D1_NSTUFERR, "STUFF" }, { D1_NCRCERR,  "CRC"  },
+        { D1_NFORMERR, "FORM"  }, { D1_NACKERR,  "ACK"  },
+        { D1_NBIT0ERR, "BIT0"  }, { D1_NBIT1ERR, "BIT1" },
+    };
+    for (const auto &k : kinds) {
+        if (!(bdiag1 & k.bit)) continue;
+        if (h.errs[0]) strncat(h.errs, ",", sizeof(h.errs) - strlen(h.errs) - 1);
+        strncat(h.errs, k.name, sizeof(h.errs) - strlen(h.errs) - 1);
+    }
+
+    h.valid = true;
+    return true;
+}
+
 #endif // CAN_BACKEND == CAN_BACKEND_MCP2518

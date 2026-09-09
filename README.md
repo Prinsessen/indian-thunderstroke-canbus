@@ -22,6 +22,18 @@ is running anyway.
 That was the first decision made and it has never been relaxed. Nothing here can
 send a command, clear a fault, or change a setting on the bike.
 
+**And it checks that claim rather than making it.** The CAN controller keeps its
+own error registers, and they are read and published alongside everything else:
+the error counters, the bus state, and — this is the useful part — which *kind*
+of error the bus has seen. Stuff and CRC errors are what a chafing wire or a
+loosening splice produce, and they rise long before anything visible fails,
+because CAN retransmits and the other modules recover.
+
+Every other number this thing reads describes the motorcycle. That one describes
+the wire you spliced into it, on a machine that vibrates, feeding a bus that
+carries ABS data. If you bolt this to your own bike, it is the reading that tells
+you whether *you* are the problem.
+
 ---
 
 ## What it reads that the factory dash does not

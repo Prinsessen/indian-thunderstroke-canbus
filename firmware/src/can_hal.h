@@ -86,3 +86,40 @@ bool canTransmit(const CanFrame &f);
 
 // True once canInit() has succeeded and the controller is running.
 bool canRunning();
+
+// ---------------------------------------------------------------------------
+// Bus health — the only thing in this project that measures OUR OWN
+// installation rather than the motorcycle.
+//
+// Every other signal describes the machine. These describe the wire we spliced
+// into it: a T-tap and a length of cable on something that vibrates, feeding a
+// bus that carries ABS data. We believe the board is passive. This is how that
+// belief gets checked rather than asserted.
+//
+// The counters are per-CONTROLLER-START, not lifetime. canInit() reconfigures
+// the controller from scratch and deep sleep restarts the whole chip, so every
+// wake opens a clean window -- which is one ride, and exactly the granularity
+// wanted. It also removes any need to clear the latching flags, which the
+// MCP2518FD driver does not expose a way to do.
+// ---------------------------------------------------------------------------
+struct CanHealth {
+    bool     valid;        // false = the backend cannot report, do not publish
+    uint16_t tec;          // transmit error counter
+    uint16_t rec;          // receive error counter
+    uint16_t busErrors;    // bus errors detected since the controller started
+    char     state[8];     // "OK", "WARN", "PASSIVE", "BUSOFF"
+    // Comma-separated error TYPES seen since the controller started, e.g.
+    // "STUFF,CRC". Empty when clean. This is the field worth reading: a rising
+    // stuff or CRC count is the signature of a connector working loose or a
+    // wire chafing, and it appears long before anything visible fails, because
+    // CAN retransmits and the other modules recover.
+    //
+    // Only the MCP2518FD backend fills it -- the ESP32 TWAI peripheral counts
+    // bus errors but does not break them down by type, so there it stays empty
+    // and that is a limit of the silicon, not a fault.
+    char     errs[64];
+};
+
+// Read the controller's error state. Returns false if the backend cannot report
+// or the controller is not running.
+bool canHealth(CanHealth &h);

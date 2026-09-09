@@ -112,4 +112,40 @@ bool canTransmit(const CanFrame &in) {
 
 bool canRunning() { return s_running; }
 
+// ---------------------------------------------------------------------------
+// Bus health on the ESP32's native TWAI peripheral.
+//
+// twai_get_status_info() gives the same three numbers the MCP does -- both
+// error counters and a count of bus errors -- but NOT the breakdown by error
+// type, because the peripheral does not latch one. So `errs` stays empty here,
+// and that is a limit of the silicon rather than a fault to chase: the counts
+// still rise when the wiring degrades, they just do not say which way.
+//
+// Kept in step with the MCP backend on purpose. The board that is fitted today
+// is the T-2CANFD, and a health field that existed on one board and silently
+// vanished on the other would look like a broken sensor to whoever swapped.
+// ---------------------------------------------------------------------------
+bool canHealth(CanHealth &h) {
+    h.valid = false;
+    if (!s_running) return false;
+
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK) return false;
+
+    h.tec       = (uint16_t)st.tx_error_counter;
+    h.rec       = (uint16_t)st.rx_error_counter;
+    h.busErrors = (uint16_t)st.bus_error_count;
+    h.errs[0]   = 0;                       // no per-type breakdown on this silicon
+
+    const char *state = "OK";
+    if      (st.state == TWAI_STATE_BUS_OFF)    state = "BUSOFF";
+    else if (st.state == TWAI_STATE_RECOVERING) state = "PASSIVE";
+    else if (st.tx_error_counter >= 96 ||
+             st.rx_error_counter >= 96)         state = "WARN";
+    snprintf(h.state, sizeof(h.state), "%s", state);
+
+    h.valid = true;
+    return true;
+}
+
 #endif // CAN_BACKEND == CAN_BACKEND_TWAI

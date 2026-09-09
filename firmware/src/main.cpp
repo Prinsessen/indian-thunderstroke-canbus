@@ -858,6 +858,39 @@ void publishHeartbeat() {
     char buf[260];
     size_t n = serializeJson(meta, buf, sizeof(buf));
     mqtt.publish(topic("meta").c_str(), (const uint8_t *)buf, n, true);
+
+    // Bus health, on its own retained topic rather than in `state`.
+    //
+    // `state` describes the MOTORCYCLE. This describes the wire we spliced into
+    // it, and mixing the two would put a fact about our own hardware in the
+    // payload every consumer treats as vehicle telemetry. It also keeps the
+    // whole thing off the 514-byte BLE ceiling without needing a gate.
+    //
+    // Riding the heartbeat's 30 s rather than adding a timer: these are
+    // cumulative counters, not transients. Nothing here can happen and be gone
+    // again inside half a minute -- a latched error type stays latched until
+    // the controller is reconfigured, and that only happens on a wake.
+    CanHealth health;
+    if (canHealth(health) && health.valid) {
+        JsonDocument bus;
+        bus["state"] = health.state;
+        bus["tec"]   = health.tec;
+        bus["rec"]   = health.rec;
+        bus["berr"]  = health.busErrors;
+        // ALWAYS present, and "none" when clean rather than omitted.
+        //
+        // The state payload omits unavailable keys, and copying that here would
+        // have been wrong for the one consumer that matters. openHAB's MQTT
+        // binding DISCARDS a null JSONPATH result rather than clearing the item
+        // (ChannelState.processMessage), so an omitted key leaves the last value
+        // standing. A STUFF flag from one bad ride would then sit on the item for
+        // ever, surviving every clean ride afterwards, because the clean rides
+        // say nothing at all. Established the hard way on 2026-09-07.
+        bus["errs"] = health.errs[0] ? health.errs : "none";
+        char hb[160];
+        size_t hn = serializeJson(bus, hb, sizeof(hb));
+        mqtt.publish(topic("bus/health").c_str(), (const uint8_t *)hb, hn, true);
+    }
 }
 
 #if FIRMWARE_MODE == MODE_PRODUCTION
