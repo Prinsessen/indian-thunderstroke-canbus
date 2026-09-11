@@ -69,9 +69,15 @@ was wanted.
 | Hardware | The CAN interface, powered from the motorcycle |
 | Optional | One or two Keis heated-clothing controllers |
 
-On first launch the app scans for the interface and connects by itself. There is
-no pairing code and nothing to type: the bike's interface is identified by its
-advertised name.
+On first launch the app asks for the two Bluetooth permissions. Grant them and it
+starts scanning by itself — there is no pairing code, no bond, and nothing to
+type.
+
+**It finds the interface by the service UUID in the advertising packet, not by
+device name.** That is deliberate: a name filter breaks the moment the firmware's
+Bluetooth device name is changed, and the UUID does not move. So renaming the
+interface costs nothing, and no device name has to be kept in step between the
+firmware and the phone.
 
 Set these before the first real ride, all under the gear icon at the end of the
 tab row:
