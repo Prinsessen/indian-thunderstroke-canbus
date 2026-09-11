@@ -70,8 +70,20 @@ was wanted.
 | Optional | One or two Keis heated-clothing controllers |
 
 On first launch the app asks for the two Bluetooth permissions. Grant them and it
-starts scanning by itself — there is no pairing code, no bond, and nothing to
-type.
+starts scanning by itself.
+
+**The motorcycle interface requires pairing.** The first time a phone connects,
+Android shows its own pairing dialog and you type the **six-digit passkey** set
+in the firmware. This is a real bond with MITM protection, not a formality: the
+characteristics are readable only over an encrypted and authenticated link, and
+a phone that does not pair is dropped rather than served unencrypted. Pair once;
+Android remembers it.
+
+If the phone ever *connects but shows nothing*, that bond is the first thing to
+suspect — see [troubleshooting](#12-troubleshooting).
+
+The heated-clothing controllers are the opposite case and pair with nothing at
+all; see [8.2](#82-setting-up).
 
 **It finds the interface by the service UUID in the advertising packet, not by
 device name.** That is deliberate: a name filter breaks the moment the firmware's
@@ -257,9 +269,11 @@ Under settings → heated clothing:
 3. **Set each zone's curve** — its off-at and full-at temperatures, in felt
    degrees. Defaults are off at 25 °C, full heat at 10 °C.
 
-There is no pairing code. The "press the button on the controller" step in the
-Keis manual is part of *their* app's first-time setup, not a Bluetooth bond; a
-controller that has been added once accepts a plain connection.
+**The clothing needs no pairing code**, unlike the motorcycle interface — the two
+are opposites in this respect and it is easy to expect the wrong one. The "press
+the button on the controller" step in the Keis manual is part of *their* app's
+first-time setup, not a Bluetooth bond; a controller that has been added once
+accepts a plain connection.
 
 ### 8.3 The curve
 
@@ -588,7 +602,7 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
 | **Fuel reads low on the side stand** | Expected, and ignored: only moving readings count — see [9.5](#95-fuel-level) |
 | **A level change lags a settings change** | A single-step change is held for 45 seconds to prevent flapping |
 | **Both controllers assigned to one garment** | They look identical over the air. Re-assign with only one switched on |
-| **Connects but shows nothing** | A link-key mismatch. Forget the device in Android's Bluetooth settings — not just in the app |
+| **Connects but shows nothing** | The pairing bond is stale or was never made. The link stays unencrypted, so the characteristics read as empty. Forget the device in Android's Bluetooth settings — **not just in the app** — and pair again with the passkey |
 
 ---
 
