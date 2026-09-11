@@ -96,8 +96,9 @@ tab row:
 
 1. **Front and rear tyre targets** — the cold pressures your tyres are judged
    against. Defaults are 36 PSI front, 41 PSI rear.
-2. **Tank capacity**, in litres. This is the one figure the bus cannot supply,
-   and without it there is no fuel range.
+2. **Tank capacity**, in litres. Only needed for the app's fallback range
+   estimate — the motorcycle usually reports its own range and that is what you
+   will see. See [9.3](#93-fuel-range).
 3. **Units** — speed and distance, temperature, and tyre pressure are chosen
    separately, because riders mix them. Kilometres and Celsius alongside PSI is a
    normal combination, not a mistake.
@@ -446,15 +447,29 @@ and it is only visible across weeks.
 
 ### 9.3 Fuel range
 
-**Inputs:** filtered fuel level ([9.5](#95-fuel-level)), tank capacity from
-settings, and the economy actually seen over roughly the last three minutes.
+Two sources, and which one you are looking at changes what the number means.
 
-**Reported as a band, not a figure.** A sender that reads in whole percent and a
-rolling economy average do not between them support "183 km". Printing that would
-claim a precision neither input has.
+**First choice: the motorcycle's own range to empty.** The bike broadcasts the
+same figure its dash shows, and when it is there the app prints it exactly —
+"211 km", not a band. This is a *report*, not a calculation: the ECU said 211, so
+211 is what it said, and rounding it into a band would invent uncertainty that is
+not the app's to add.
 
-The band is derived from recent economy, so a headwind or a spell of town riding
-**widens it honestly** rather than being averaged away.
+That figure is deliberately pessimistic. It runs on a recent-consumption window,
+so it reads low on a full tank after a spell of hard riding. It is also not
+cleared when the bus goes quiet — like the fuel level and the odometer it remains
+a true statement about a parked machine.
+
+**Fallback, when the bike does not report it:** the app computes its own from the
+filtered fuel level ([9.5](#95-fuel-level)), the tank capacity from settings, and
+the economy actually seen over roughly the last three minutes.
+
+**That one is a band, not a figure.** A sender reading in whole percent and a
+rolling average do not between them support "183 km", and printing it would claim
+a precision neither input has. The band comes from recent economy, so a headwind
+or a spell of town riding **widens it honestly** rather than being averaged away.
+
+So: an exact figure is the bike's, a range of figures is the app's.
 
 ### 9.4 Felt temperature
 
@@ -551,7 +566,7 @@ can, and it is the only control here you have a chance of using with gloves on.
 |---|---|
 | Front / rear tyre target | The cold pressures each wheel is judged against. Bike- and tyre-specific; the app has no business guessing them |
 | Redline | Read by the dial, the edge glow **and** the haptic — one number where there were three constants that could drift apart |
-| Tank capacity | Litres. The one figure the bus cannot supply, and without it there is no range estimate |
+| Tank capacity | Litres. Only used for the app's own range estimate, which is the fallback when the motorcycle does not report its own — see [9.3](#93-fuel-range) |
 | Tyre pressure units | PSI, kPa or bar — independent of the other units |
 | Speed and distance | km/h and kilometres, or mph and miles |
 | Temperature | °C or °F, for coolant, ambient and tyres |
