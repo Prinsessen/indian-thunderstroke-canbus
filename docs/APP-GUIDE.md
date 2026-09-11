@@ -24,7 +24,7 @@ with its formula, its inputs and the assumptions it rests on.
 8. [Heated clothing](#8-heated-clothing)
 9. [Calculated figures, in full](#9-calculated-figures-in-full)
 10. [Settings reference](#10-settings-reference)
-11. [Diagnostics and the ride log](#11-diagnostics-and-the-ride-log)
+11. [About, diagnostics and the ride log](#11-about-diagnostics-and-the-ride-log)
 12. [Troubleshooting](#12-troubleshooting)
 13. [Known limits](#13-known-limits)
 
@@ -580,11 +580,30 @@ can, and it is the only control here you have a chance of using with gloves on.
 | Curve endpoints | Off-at and full-at per zone, in felt degrees |
 | Fault codes | Review, and name a code so it is recognisable next time |
 | All-time records | Reset the highest speed and rpm ever seen |
-| Bluetooth pairing | Opens the system screen. The only cure for a link-key mismatch is forgetting the device, so the app points at the door rather than describing where it is |
+| Bluetooth pairing | Opens the system screen. The only cure for a stale bond is forgetting the device, so the app points at the door rather than describing where it is |
+| Firmware line | **Long-press** for diagnostics — see [11](#11-about-diagnostics-and-the-ride-log) |
+| Maker's plate | **Press** the copyright line for About: licence, hardware, why it cannot transmit, and the app and firmware versions together |
 
 ---
 
-## 11. Diagnostics and the ride log
+## 11. About, diagnostics and the ride log
+
+### About
+
+**Press the maker's plate** — the copyright line at the foot of the settings
+page. A plain press, and it opens a plain page: the licence, what the machine is,
+what the hardware is, why it cannot transmit, the bus and its speed, how the link
+works, and the app and firmware versions side by side.
+
+It is a short press on purpose, where diagnostics below is a long one. Diagnostics
+is for whoever is debugging this; About is for anyone holding the phone and
+wondering what it is wired to.
+
+**The versions are the useful part in practice.** App and firmware are shown
+together, which is the first thing to check when a phone and a motorcycle
+disagree about a figure.
+
+### Diagnostics
 
 **Long-press the firmware line** in settings to open a raw view: firmware
 versions, link state, signal strength, MTU, the last fast packet in hex with its
