@@ -303,6 +303,72 @@ under a seat with a torch, and black is ground on the same plug. **Confirm it
 with the meter before trusting an eye**, every time, exactly as it was confirmed
 here.
 
+#### Where it lives
+
+**Under the seat, on the left** with the rider facing forward — there is a space
+there that takes the board without fouling anything.
+
+The board itself is sealed inside a **52 mm heat-shrink sleeve, closed at both
+ends.** That is the enclosure: no box, no gland, no fasteners. A sleeve shrunk
+onto the board is lighter than any housing, cannot rattle because nothing inside
+it can move, and has no seam for water to find. It also cannot be opened without
+cutting, which is the honest cost — this is a sealed assembly, and servicing it
+means rebuilding that part of it.
+
+Worth saying because the alternative looks more professional and is not: a
+screwed enclosure under a seat on a V-twin is four fasteners working loose, a
+gasket ageing, and a volume of air for condensation to collect in.
+
+#### Power, and why there is no inline fuse
+
+The 12 V comes from the service connector and is protected by **the machine's own
+5 A fuse** in the main fuse box, under the LH upper side cover — the same place
+the service connector itself sits. There is **no additional inline fuse, and that
+is deliberate.**
+
+The reasoning, written down because the instinct runs the other way:
+
+- **5 A on 0.5 mm² is correct**, not a compromise. That conductor carries 5–9 A
+  depending on bundling and ambient, so the factory fusing matches the factory
+  wire — and the added tail is the same gauge, protected to the same standard as
+  the loom beside it. There is nothing to improve.
+- **An inline fuse holder is itself a failure mode.** It adds two contact faces
+  under a seat on a V-twin, where vibration and corrosion make intermittent
+  connections. An ESP32 on a marginal supply looks exactly like a firmware
+  fault, and that is an evening spent in the wrong file.
+- **The board draws 17 mA asleep and 73 mA awake.** The only scenario an inline
+  fuse addresses is a dead short, and the mechanical protection here is already
+  better than factory: joints sleeved individually, one sleeve over the whole
+  splice, the bundle taped.
+
+The one thing that would change this: if the branch is ever asked to feed
+something larger than the board — a display, a pump, anything with inrush. Then a
+separate fuse is the right conversation. At 73 mA it is not.
+
+> An earlier draft of this section recommended a 1 A inline fuse. That was
+> written against an **assumed** 15–20 A circuit fuse, and the owner challenged
+> it on the right grounds: the factory conductors to the service connector are
+> 0.5 mm² or thinner, so the fuse protecting them cannot be that large. Reading
+> it off the box settled it at 5 A, and the recommendation was withdrawn. Kept
+> here because the reasoning is worth more than the conclusion, and because a
+> future reader will have the same instinct.
+
+#### If the board has to be replaced
+
+**LilyGO T-2CANFD**, the ESP32-S3 + MCP2518FD variant — ordered as
+`T-2CAN-FD` from [this listing](https://www.aliexpress.com/item/1005011768206516.html).
+The same page sells a plain `T-2CAN`; the FD part is the one that matters,
+because the pin map, the oscillator value and the driver in this firmware are all
+written for the MCP2518FD.
+
+A replacement is not plug-and-play. Before it will work on this machine:
+
+1. **Lift `RZ2`** — the 120 Ω terminator on the channel wired to the vehicle. See
+   the section above; identify it with the meter, never the silkscreen.
+2. **Flash over USB** before fitting. See the emergency-recovery path in OTA.md.
+3. **Re-check the CAN pair with the meter.** The adapter's colours are recorded
+   above, but a new board's terminals are the half of the joint that changed.
+
 **Status: built in, tested, and in production.** Not a bench rig — the assembly
 above is on the machine and running.
 
