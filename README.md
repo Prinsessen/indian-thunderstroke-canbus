@@ -137,6 +137,10 @@ Only the rule is inferred. Every input is measured, and the published value says
 
 ## The app
 
+> Full user guide: **[docs/APP-GUIDE.md](docs/APP-GUIDE.md)** — every page
+> field by field, every control, and the formula behind each figure the app
+> calculates rather than reads from the motorcycle.
+
 An instrument cluster rather than a data readout. Around 10,000 lines of Kotlin,
 plain Views and Canvas — no Compose — because everything on screen is a drawn
 instrument and a layout engine has nothing to contribute to a needle.
