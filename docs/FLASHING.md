@@ -271,18 +271,40 @@ conductor backing out mid-ride looks exactly like a bus fault. The cost is that
 they are now semi-permanent: warm the screw before turning it if one ever has to
 come off, rather than rounding the head against set compound.
 
-> **What the photographs do not settle, and cannot.** Which conductor of the
-> adapter lead carries CAN H and which carries CAN L is not readable from the
-> insulation, here or anywhere: the lead is aftermarket and those colours follow
-> no standard. The photographs record which colours ended up on which terminals,
-> not what the colours mean. **The continuity meter decided that at build time
-> and is the only thing that should decide it again** — see the note at the end
-> of the cable section above.
->
-> Note also that neither the machine's documented CAN colours — **YE for CAN-H,
-> DG for CAN-L** — appears anywhere in the splice photograph. That is not a
-> discrepancy: the splice is into the OBD adapter's own conductors, one remove
-> from the loom, and the adapter's plug is what meets the bike's colours.
+**Then it was made to survive a motorcycle.** A single larger sleeve goes over
+the whole splice up to the service adapter plug, so the individually-sleeved
+joints sit inside one continuous skin rather than as a row of lumps. The finished
+five-conductor bundle is then wrapped in **3M fabric tape** — the same tape
+Indian use throughout the machine. Not decoration: it is what the loom beside it
+is wrapped in, it damps vibration against the frame instead of polishing a hole
+in itself, and in five years nobody will wonder which bundle was added later.
+
+#### The adapter's colours, resolved with the meter
+
+The lead is aftermarket and its colours mean nothing until measured, so the
+three-part service plug was **ohmed through end to end**:
+
+| Adapter conductor | Signal |
+|---|---|
+| **Red** | +12 V |
+| **Black** | Ground |
+| **Blue** | CAN-L |
+| **Green** | CAN-H — dark, and genuinely hard to read against black |
+
+Those land on the machine's female service connector on **pins verified as the
+correct ones**, not assumed from the colour. Which is the whole point of the
+exercise: the machine's own documented colours are YE for CAN-H and DG for
+CAN-L, and neither appears anywhere in the splice photograph. That is not a
+discrepancy — the splice is into the adapter's conductors, one remove from the
+loom, and the adapter's plug is what meets the bike's colours.
+
+Green for CAN-H is worth flagging on its own. It is dark enough to read as black
+under a seat with a torch, and black is ground on the same plug. **Confirm it
+with the meter before trusting an eye**, every time, exactly as it was confirmed
+here.
+
+**Status: built in, tested, and in production.** Not a bench rig — the assembly
+above is on the machine and running.
 
 ---
 
