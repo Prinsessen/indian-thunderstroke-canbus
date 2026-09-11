@@ -234,6 +234,56 @@ decent factory cable twists it, and then nothing needs doing), and **which
 conductor is which** — aftermarket cable colours follow no standard, so the
 continuity meter decides, not the insulation colour.
 
+### As built — the three photographs
+
+The plan above is what the cable is *for*. These are what it became, and they
+exist because a wiring table is read once and a photograph settles an argument
+two years later.
+
+![The 12–24 V input on a T-2CANFD, black on GND and orange on the 24 V screw](images/t2canfd-power-input.jpg)
+
+*The supply end. Two-way screw terminal at the board edge, **black on GND,
+orange on 24 V** — the silkscreen reads `GND` above and `24 V` below, and the
+board takes anything from 12 to 24, so the machine's 12 V lands on a terminal
+labelled for more. Also in frame: the ESP32-S3-WROOM module, the USB-C socket
+used for flashing, the 50 V 230 µF electrolytic, and the two-way DIP switch
+beside the breakout pads.*
+
+![The CAN screw terminals on a T-2CANFD, three wires landing on block A](images/t2canfd-can-terminals.jpg)
+
+*The bus end. Two four-way blocks, one per channel: **`DGNDB` `CANHB` `CANLB`
+`SGNDB`** above, completely free, and **`DGNDA` `CANHA` `CANLA` `SGNDA`** below
+with three conductors landing on it. Channel B is spare and staying that way,
+which is the argument for the two-channel board rather than an accident of it.*
+
+![The splice into the OBD adapter lead, each joint individually heat-shrunk](images/loom-splice.jpg)
+
+*The splice into the factory OBD lead. Each joint is soldered and sleeved
+**individually** before the bundle is re-sheathed — so a single joint can be
+opened without disturbing its neighbours, and a chafe cannot short two
+conductors to each other. One conductor of the lead is surplus and has been
+**capped with its own heat-shrink and laid aside** rather than cut back flush:
+it can be recovered later, and it cannot touch anything meanwhile.*
+
+**The screw terminals have a drop of thread-lock on them.** Ten thousand
+kilometres of a V-twin will undo a terminal that is merely tight, and a CAN
+conductor backing out mid-ride looks exactly like a bus fault. The cost is that
+they are now semi-permanent: warm the screw before turning it if one ever has to
+come off, rather than rounding the head against set compound.
+
+> **What the photographs do not settle, and cannot.** Which conductor of the
+> adapter lead carries CAN H and which carries CAN L is not readable from the
+> insulation, here or anywhere: the lead is aftermarket and those colours follow
+> no standard. The photographs record which colours ended up on which terminals,
+> not what the colours mean. **The continuity meter decided that at build time
+> and is the only thing that should decide it again** — see the note at the end
+> of the cable section above.
+>
+> Note also that neither the machine's documented CAN colours — **YE for CAN-H,
+> DG for CAN-L** — appears anywhere in the splice photograph. That is not a
+> discrepancy: the splice is into the OBD adapter's own conductors, one remove
+> from the loom, and the adapter's plug is what meets the bike's colours.
+
 ---
 
 ## 5. Build, flash, monitor
