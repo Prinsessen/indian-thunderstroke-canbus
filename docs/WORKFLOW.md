@@ -623,14 +623,24 @@ MAC, a broker hostname and a broker password went to a public repository.
 Remembering is not a process.
 
 ```bash
-tools/make-public.sh                  # redacted copy in a fresh temp dir
-tools/make-public.sh /path/to/clone   # or straight into the public clone
+# the published repository is app/ + docs/ + firmware/ + tools/, built from BOTH
+# private trees by one script that lives with the firmware:
+/etc/openhab-firmware/indian-canbus/tools/publish-public.sh /path/to/public/clone
 ```
 
-It copies the tree (minus `.git`, `build`, `.gradle`, `.idea`,
-`local.properties`), applies the redaction map to every **text** file, then runs
-`check-public.sh` **on the copy** — the source is allowed to hold these strings;
-the copy is not. It exits non-zero on any hit.
+It stages the public layout from explicit lists (what is published is a
+decision, not "everything"), applies the redaction map to every **text** file,
+rewrites the links the flat private trees use into the public layout, reports
+any link that would dangle, and runs `check-public.sh` **on the staged tree** —
+the source is allowed to hold these strings; the copy is not. Only a clean stage
+is written into the clone, and it never commits or pushes. `tools/make-public.sh`
+in this directory is the older app-only version and is kept for the app tree
+alone.
+
+Checked 2026-09-14 against the published copy: the pattern list caught 4 of 11
+categories the old checker had covered, so both the list and the map were
+extended (bare house domain, SSID, Windows user path, SSH key name, BLE
+pairing PIN, MQTT username, public IP) and re-tested at 11 of 11.
 
 The map lives at `~/.config/indian-canbus-app/redactions.sed`, **outside this
 repository**, because a list of the things you must not publish is itself a thing
