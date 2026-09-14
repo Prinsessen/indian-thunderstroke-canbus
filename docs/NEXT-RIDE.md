@@ -63,27 +63,34 @@ Fixes, in increasing thoroughness:
    scan. Twenty lines, and it delivers what the comment above already promises.
 3. Make `wifiConnect()` non-blocking. Cleanest, largest.
 
-### 2. Range to empty wraps at 256
+### 2. Range to empty wraps at 256 — decoded as 16 bits in 2026.09.14-4, proof at the next fill-up
 
-`b[3]` of PGN 65382 is a single byte, one km per count. The dash goes past 350.
-Above 255 the app shows the dash reading minus 256.
+`b[3]` of PGN 65382 is one byte, one km per count, and the dash goes past 350.
+Above 255 the app showed the dash reading minus 256. **The ride proves it:**
+612 `CanBus_Range` samples over 1000 km, `min 0, max 254`; after the 12:32
+fill-up (19 % → 100 %) it read **85** — a real 341 — and at **21:40:20** it
+jumped **0 → 254**, which is exactly what a byte does at the boundary.
 
-Settled on 2026-09-08 against two dash readings — both of which must have been
-under 255, or this would have surfaced then.
+**The high byte is `b[4]`, not `b[0]` as this file first guessed.** Settled on
+2026-09-14 from 4,728 raw 65382 frames in the August TPMS captures, which carry
+all eight bytes:
 
-**The ride proves it.** 612 `CanBus_Range` samples over 1000 km including a
-refuel: `min 0, max 254`. The reported range never once exceeded 254 on a
-machine whose dash shows 350+. That ceiling is the byte.
+| byte | in 4,728 frames | verdict |
+|---|---|---|
+| `b[0]` | 255 distinct values; 90 of them while range stood at 242 | a live engine quantity — cannot be a range high byte |
+| `b[1]` | 0–11 | rpm/256, known |
+| `b[2]`, `b[5..7]` | always 255 | J1939 "not available" |
+| `b[3]` | 29–252 | range, low byte |
+| `b[4]` | **always 0**, with range never above 252 | what a high byte looks like below 256 |
 
-**The high byte is probably already on screen.** `probe/throttle` prints `b1`
-(= `b[0]`) beside the range byte, and calls it one of "the two unexplained
-bytes". A range high byte would look exactly like that: **zero almost always,
-one only above 255 km** — the kind of byte that reads as boring and gets
-deprioritised.
+J1939 lays two-byte values out little-endian, so `2026.09.14-4` decodes
+`km = b[3] | (b[4] << 8)` (0xFF in `b[4]` counts as no high byte), and
+`probe/throttle` now prints `b5` (= `b[4]`) beside the other two.
 
-**Test, thirty seconds, no ride:** enable `probe/throttle`, ignition on with a
-tank showing over 255 km, read one line. `b1=1` with `b4` = dash minus 256
-settles it, and the fix is `const int km = b[0] * 256 + b[3];`
+**Still unproven above 255.** The tank was at 20 % when this shipped. At the
+next fill-up, ignition on in the garage: `CanBus_Range` should match the dash
+(~340). If it reads the dash minus 256, `b[4]` is not it either — enable
+`probe/throttle` and the line shows every candidate at once.
 
 ### 3. The capture never ran
 

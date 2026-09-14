@@ -268,6 +268,7 @@ OTA.
 
 | Version | Notes |
 |---------|-------|
+| `2026.09.14-4` | Range to empty decoded as 16 bits (`b[3] | b[4]<<8`); it wrapped at 256 and a full tank read 85. `probe/throttle` prints `b5`. Proof waits for the next fill-up. Rollback image: `releases/…-2026.09.14-3.bin`. |
 | `2026.09.14-3` | State JSON buffer 900 → 1536 with a tripwire (the 900-byte cut froze openHAB items for ~6 h on the Zealand ride, silently); TLS connect/handshake bounded at 5 s / 10 s (were 30 s / 120 s, blocking BLE+CAN 30 s of every 35 with the hotspot up and cellular down); one 5-s MQTT retry cadence for every caller; CAN drained and BLE fed inside the WiFi and NTP waits via `drainCan()` (no more frozen needle during a scan). Rollback image: `releases/…-2026.09.14-2.bin`. |
 | `2026.08.17-1` | **CAN HAL abstraction** — one firmware now runs on both LilyGO T-CAN485 (ESP32, native TWAI) and T-2CAN (ESP32-S3 + MCP2518FD/SPI), selected by `CAN_BACKEND` in `config.h`. The CAN controller + pin map moved out of `main.cpp` into `can_hal_twai.cpp` / `can_hal_mcp.cpp` behind a board-agnostic `CanFrame` interface. **No behaviour change on T-CAN485**: byte-for-byte identical decode/publish, verified live (250 kbps auto-detect, full `/state` telemetry). MCP2518FD backend compiled-out on the TWAI build. |
 | `2026.08.16-4` | PRODUCTION `/state` publish cap raised to 5 Hz (`STATE_PUBLISH_INTERVAL_MS` 200 ms) — safe because production sends one ~390 B JSON per cycle, not the per-ID fan-out DISCOVERY does. DISCOVERY stays at 1 Hz. |

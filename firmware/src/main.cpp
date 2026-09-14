@@ -1487,8 +1487,8 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
             //   rpm      because advance depends on revs as well as load
             char msg[96];
             snprintf(msg, sizeof(msg),
-                     "b1=%3u b4=%3u trq=%+4d thr=%3d%% fuel=%4.1f rpm=%4d %3d km/h",
-                     b[0], b[3],
+                     "b1=%3u b4=%3u b5=%3u trq=%+4d thr=%3d%% fuel=%4.1f rpm=%4d %3d km/h",
+                     b[0], b[3], b[4],
                      lastTorque == 0xFF ? -999 : (int)lastTorque - 125,
                      isnan(st.throttle) ? -1 : (int)st.throttle,
                      isnan(st.fuelRate) ? -1.0f : st.fuelRate,
@@ -1709,7 +1709,26 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             if (nn >= 5 && b[3] != 0xFF) {
                 static int      rangeCand   = -1;
                 static uint32_t rangeCandAt = 0;
-                const int km = b[3];
+                // Sixteen bits, little-endian, the way J1939 lays a two-byte
+                // value out: b[3] low, b[4] high. b[3] alone wrapped at 256 --
+                // a full tank showing 341 on the dash read 85 here, and the
+                // Zealand ride has the 0 -> 254 jump at 21:40:20 to prove it.
+                //
+                // Why b[4] and not b[0], which NEXT-RIDE guessed: 4,728 raw
+                // frames from the August TPMS rides show b[0] taking 90
+                // different values while the range stood still at 242 (it is
+                // a live engine quantity), and b[4] at exactly 0 in every one
+                // of them, with the range between 29 and 252. A high byte is
+                // zero below 256; nothing else in that frame is. 0xFF is the
+                // J1939 "not available" and is treated as no high byte rather
+                // than as 255 * 256.
+                //
+                // Unproven above 255 until the next fill-up: the tank was at
+                // 20 % when this was written. If the dash then shows ~340 and
+                // this reads ~85, b[4] is not it either and the probe line
+                // below will say what is.
+                const int hi = (b[4] == 0xFF) ? 0 : b[4];
+                const int km = b[3] | (hi << 8);
                 if (!isnan(st.range) && abs(km - (int)st.range) <= RANGE_STEP_KM) {
                     rangeCand = -1;                 // ordinary walk down the tank
                     SETF(range, (float)km);
