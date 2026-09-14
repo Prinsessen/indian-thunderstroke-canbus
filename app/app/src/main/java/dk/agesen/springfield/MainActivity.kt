@@ -15,6 +15,9 @@ import android.view.View
 import android.animation.ObjectAnimator
 import android.content.Intent
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Hosts the three pages and owns nothing else.
@@ -27,7 +30,7 @@ import android.view.WindowManager
 class MainActivity : AppCompatActivity(), BikeRepository.Observer {
 
     private lateinit var pager: ViewPager2
-    private lateinit var statusView: TextView
+    private lateinit var statusView: LinkStripView
     private lateinit var tabs: List<TextView>
     private lateinit var splash: SplashView
 
@@ -52,7 +55,7 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
             if (bluetoothOk) {
                 BleService.start(this)
             } else {
-                statusView.text = "Bluetooth permission denied — cannot connect"
+                statusView.status = "Bluetooth permission denied — cannot connect"
             }
         }
 
@@ -65,6 +68,7 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
         // to bumps and lean angle as readily as to intent.
         requestedOrientation = Settings.requestedOrientation
         setContentView(R.layout.activity_main)
+        applyImmersive()
 
         statusView = findViewById(R.id.status)
         pager = findViewById(R.id.pager)
@@ -156,16 +160,53 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
         // ride is over.
     }
 
+    /**
+     * The cluster takes the whole screen, both ways up.
+     *
+     * Landscape is where it was found. Measured on the X70, 393 dp tall on its
+     * side: the status bar and the navigation bar take 72 of it, the tab row 46,
+     * the link strip 26, the fragment padding 16 and the tell-tale row 66 —
+     * leaving about 167 dp for the two dials the page exists for. Both gauges
+     * size on min(width, height) and draw every caption off that size, so a
+     * short dial does not just look small, it crowds. Reclaiming the two bars
+     * puts the dials near 240, and costs no layout at all.
+     *
+     * Portrait was left alone at first on the grounds that it is not squeezed,
+     * which was answering the wrong question. It is the same app doing the same
+     * job: a phone on a handlebar mount running an instrument cluster with the
+     * screen forced on is not a phone at that moment, and a notification bar
+     * across the top of it is clutter whichever way up it is. Two behaviours is
+     * also one more thing to have learnt. So both.
+     *
+     * TRANSIENT_BARS_BY_SWIPE rather than a hard hide, which is what makes that
+     * defensible: a swipe from the edge still brings the bars back for a few
+     * seconds, so the clock and the back gesture are a gesture away rather than
+     * gone. They then hide themselves again, which is what onWindowFocusChanged
+     * below is for — returning from settings or the notification shade otherwise
+     * leaves them up. Settings, diagnostics and about are separate activities
+     * and keep their bars, because those ARE a phone.
+     */
+    private fun applyImmersive() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersive()
+    }
+
     override fun onBikeUpdate() {
         // Signal strength alongside the status: a link that is about to drop
         // looks exactly like a healthy one until it does, and -90 dBm on the
         // status line is the only warning available.
-        val rssi = BikeRepository.rssi
-        statusView.text = when {
-            rssi == null -> BikeRepository.status
-            BikeRepository.isLive -> "Linked · $rssi dBm"
-            else -> "${BikeRepository.status} · $rssi dBm"
-        }
+        // The strip draws the number and the bars itself, so it is handed the
+        // facts rather than a sentence someone has already formatted.
+        statusView.rssi = BikeRepository.rssi
+        statusView.live = BikeRepository.isLive
+        statusView.status = if (BikeRepository.isLive) "Linked" else BikeRepository.status
     }
 
     private fun highlightTab(active: Int) {

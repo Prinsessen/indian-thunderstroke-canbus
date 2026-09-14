@@ -62,6 +62,19 @@ class TellTaleView @JvmOverloads constructor(
     /** How long a rocker press stays readable after the button is released. */
     private val PRESS_HOLD_MS = 1500L
 
+    /**
+     * The cruise needle's rest angle, and how far a rocker press swings it.
+     *
+     * The dial's scale runs 145 degrees to 35 through the top, so a bigger angle
+     * is a higher speed on this face: RES/ACC swings the needle up the scale and
+     * SET/DEC swings it down, which is what the buttons do to the motorcycle.
+     * That correspondence is the whole point -- the rider is not being shown a
+     * code to learn, they are being shown the thing itself.
+     */
+    private val CRUISE_BASE_DEG = -58f
+    private val CRUISE_SWING_DEG = 30f
+
+
     var brakeRear: Boolean? = null
 
     /**
@@ -187,6 +200,14 @@ class TellTaleView @JvmOverloads constructor(
         val intro = Cluster.introProgress(introStart, Cluster.STAGGER_MINOR)
         if (intro != null) postInvalidateOnAnimation()
 
+        // One clock for every lamp's fade, advanced once a frame rather than
+        // once a lamp, so six lamps changing together stay in step.
+        val nowMs = System.currentTimeMillis()
+        val dtMs = if (lampAt == 0L) 16L else (nowMs - lampAt).coerceIn(0, 64)
+        lampAt = nowMs
+        lampStep = dtMs / LAMP_FADE_MS
+        val fading = intro == null
+
         fun state(index: Int, real: Boolean?): Boolean? =
             if (intro != null) Cluster.introLamp(intro, index, slots) else real
 
@@ -207,22 +228,29 @@ class TellTaleView @JvmOverloads constructor(
         // the lamp size is min(cellWidth, height), so height was already the
         // binding constraint at three -- going to five takes the lamps from
         // 76 to about 67, and nothing else on the page moves.
-        drawHeadlight(canvas, cellW * 0.5f, cy, unit, beam)
-        drawBrake(canvas, cellW * 1.5f, cy, unit, state(1, brakeRear), "")
+        lamp(canvas, 0, beam, fading) { drawHeadlight(canvas, cellW * 0.5f, cy, unit, it) }
+        lamp(canvas, 1, state(1, brakeRear), fading) {
+            drawBrake(canvas, cellW * 1.5f, cy, unit, it, "")
+        }
         drawCruise(canvas, cellW * 2.5f, cy, unit,
                    if (intro != null) Cluster.introLamp(intro, 2, slots) else cruise,
-                   if (intro != null) true else cruiseEnable)
-        drawHazard(canvas, cellW * 3.5f, cy, unit, state(3, hazard))
+                   if (intro != null) true else cruiseEnable,
+                   live = intro == null)
+        lamp(canvas, 3, state(3, hazard), fading) {
+            drawHazard(canvas, cellW * 3.5f, cy, unit, it)
+        }
         // The switch lamp goes to the LEFT of the drawing, so the leaning
         // motorcycle keeps the right-hand end of the row where the owner reads
         // it. Six cells rather than five: the lamps lose a few dp and nothing
         // else on the page moves.
-        drawSidestand(canvas, cellW * 4.5f, cy, unit,
-                      if (intro != null) true else when (sidestand) {
-                          "DOWN" -> true
-                          "UP" -> false
-                          else -> null
-                      })
+        val sidestandState = if (intro != null) true else when (sidestand) {
+            "DOWN" -> true
+            "UP" -> false
+            else -> null
+        }
+        lamp(canvas, 4, sidestandState, fading) {
+            drawSidestand(canvas, cellW * 4.5f, cy, unit, it)
+        }
         drawStand(canvas, cellW * 5.5f, cy, unit,
                   if (intro != null) "STAND" else stand)
 
@@ -266,6 +294,68 @@ class TellTaleView @JvmOverloads constructor(
      */
     private var standAngle = 0f
     private var standAngleAt = 0L
+
+    private var cruiseNeedleDeg = CRUISE_BASE_DEG
+    private var cruiseNeedleAt = 0L
+
+    /**
+     * How long a lamp takes to come up or go out.
+     *
+     * They snapped, which is what a row of booleans looks like rather than what
+     * a row of bulbs looks like -- and a lamp that arrives over a tenth of a
+     * second reads as the cluster reacting, where one that appears between two
+     * frames reads as a redraw. 120 ms is long enough to be seen as movement and
+     * short enough that nobody waiting for a brake lamp is kept waiting.
+     */
+    private val LAMP_FADE_MS = 120f
+
+    private val lampFrom = arrayOfNulls<Any>(slots)
+    private val lampTo = arrayOfNulls<Any>(slots)
+    private val lampLevel = FloatArray(slots) { 1f }
+    private var lampAt = 0L
+    private var lampStep = 1f
+
+    /**
+     * Draw one lamp, crossfading from whatever it was showing.
+     *
+     * The old state is drawn, then the new one over it inside a layer whose
+     * alpha rises from nothing -- so the six draw functions below stay exactly
+     * as they were and know nothing about any of this. The layer costs an
+     * offscreen buffer, and it is only taken during the 120 ms a lamp is
+     * actually changing; the rest of the time this is one ordinary draw.
+     *
+     * Only the four lamps that are simply on or off go through here. Cruise has
+     * its own breath and its own needle, and the stand drawing already eases its
+     * angle -- putting a crossfade over either would be two animations arguing
+     * about the same pixels.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> lamp(canvas: Canvas, i: Int, state: T, fading: Boolean, draw: (T) -> Unit) {
+        if (!fading) {
+            // The lamp test owns every lamp and steps them deliberately; a
+            // crossfade there would blur the one sequence meant to be crisp.
+            lampFrom[i] = state; lampTo[i] = state; lampLevel[i] = 1f
+            draw(state); return
+        }
+        if (lampTo[i] != state) {
+            lampFrom[i] = lampTo[i]
+            lampTo[i] = state
+            lampLevel[i] = 0f
+        }
+        if (lampLevel[i] >= 1f) { draw(state); return }
+
+        lampLevel[i] = (lampLevel[i] + lampStep).coerceAtMost(1f)
+        postInvalidateOnAnimation()
+
+        val cellW = width / slots.toFloat()
+        draw(lampFrom[i] as T)
+        val save = canvas.saveLayerAlpha(
+            cellW * i, 0f, cellW * (i + 1), height.toFloat(),
+            (255 * lampLevel[i]).toInt()
+        )
+        draw(state)
+        canvas.restoreToCount(save)
+    }
 
     private fun drawStand(canvas: Canvas, cx: Float, cy: Float, unit: Float, st: String?) {
         val target = when (st) {
@@ -347,10 +437,11 @@ class TellTaleView @JvmOverloads constructor(
         textPaint.letterSpacing = 0f
     }
 
-    private fun glow(canvas: Canvas, cx: Float, cy: Float, unit: Float, colour: Int) {
+    private fun glow(canvas: Canvas, cx: Float, cy: Float, unit: Float, colour: Int,
+                     alphaByte: Int = 0x55) {
         glowPaint.shader = RadialGradient(
             cx, cy, unit * 0.34f,
-            intArrayOf(colour and 0x00FFFFFF or 0x55000000, Color.TRANSPARENT),
+            intArrayOf(colour and 0x00FFFFFF or (alphaByte shl 24), Color.TRANSPARENT),
             null, Shader.TileMode.CLAMP
         )
         canvas.drawCircle(cx, cy, unit * 0.34f, glowPaint)
@@ -410,18 +501,56 @@ class TellTaleView @JvmOverloads constructor(
      * speed is held, green when it is actually holding. The needle only appears
      * once it IS holding, so the difference reads at a glance without needing
      * the colour: an empty dial means armed, a dial with a needle means working.
+     *
+     * Holding is not a still state, so the lamp does not sit still for it. The
+     * green breathes on the app's heartbeat -- the same 1700 ms that moves the
+     * grips' top detent and the fuel bar's leading block, so a rider who has
+     * learnt that rhythm anywhere on this cluster reads it here too. Amber
+     * deliberately does NOT breathe: the pulse is what makes "it is holding your
+     * speed" different from "it is armed and waiting", and if both moved the
+     * movement would stop meaning anything.
+     *
+     * And the rocker is drawn, not just named. A press swings the needle up or
+     * down the scale and flares the tick at that end of it, which answers the
+     * question a rider actually has mid-press -- did that register, and which
+     * way -- without looking away from the road long enough to read a word. The
+     * tick flares whether or not a speed is being held, because SET is pressed
+     * from the armed state and that press deserves the same confirmation.
      */
     private fun drawCruise(canvas: Canvas, cx: Float, cy: Float, unit: Float,
-                           engaged: Boolean?, enabled: Boolean?) {
+                           engaged: Boolean?, enabled: Boolean?, live: Boolean = true) {
         val colour = when {
             engaged == true -> colCruiseSet
             enabled == true -> colCruiseOn
             else -> colOff
         }
-        if (engaged == true || enabled == true) glow(canvas, cx, cy, unit, colour)
+
+        // Which way the rocker was last pushed, for as long as the label holds
+        // it. Suppressed during the lamp test, which owns every lamp.
+        val pressing = if (live && System.currentTimeMillis() - lastPressAt < PRESS_HOLD_MS)
+                           lastPress else null
+        val accel = pressing == "RES/ACC"
+        val decel = pressing == "SET/DEC"
+        val holding = engaged == true
+        val breath = Cluster.pulse(Cluster.PULSE_CALM)
+
+        // A press outshines the breath, so the confirmation is never delivered
+        // at the dim end of a cycle -- the one moment it would be missed.
+        val symbolAlpha = when {
+            pressing != null -> 255
+            holding -> (200 + 55 * breath).toInt()
+            else -> 255
+        }
+        val glowAlpha = when {
+            pressing != null -> 0x8C
+            holding -> (0x46 + 0x3C * breath).toInt()
+            else -> 0x55
+        }
+        if (engaged == true || enabled == true) glow(canvas, cx, cy, unit, colour, glowAlpha)
 
         val r = unit * 0.24f
         strokePaint.color = colour
+        strokePaint.alpha = symbolAlpha
         strokePaint.strokeWidth = unit * 0.040f
 
         // The dial: an arc open at the bottom, the way a speedometer scale sits.
@@ -429,27 +558,65 @@ class TellTaleView @JvmOverloads constructor(
         canvas.drawArc(box, 145f, 250f, false, strokePaint)
 
         // Ticks at the ends of the sweep, so it reads as a scale and not a ring.
-        strokePaint.strokeWidth = unit * 0.030f
+        // The one at the end being asked for grows out past the arc, which is
+        // visible from the corner of an eye in a way a colour change is not.
         for (deg in intArrayOf(145, 270, 35)) {
+            val flare = (accel && deg == 35) || (decel && deg == 145)
+            strokePaint.strokeWidth = if (flare) unit * 0.055f else unit * 0.030f
+            strokePaint.alpha = if (flare) 255 else symbolAlpha
+            val inner = if (flare) 0.56f else 0.62f
+            val outer = if (flare) 1.14f else 0.90f
             val rad = Math.toRadians(deg.toDouble())
-            val ix = cx + (r * 0.62f) * kotlin.math.cos(rad).toFloat()
-            val iy = cy + (r * 0.62f) * kotlin.math.sin(rad).toFloat()
-            val ox = cx + (r * 0.90f) * kotlin.math.cos(rad).toFloat()
-            val oy = cy + (r * 0.90f) * kotlin.math.sin(rad).toFloat()
+            val ix = cx + (r * inner) * kotlin.math.cos(rad).toFloat()
+            val iy = cy + (r * inner) * kotlin.math.sin(rad).toFloat()
+            val ox = cx + (r * outer) * kotlin.math.cos(rad).toFloat()
+            val oy = cy + (r * outer) * kotlin.math.sin(rad).toFloat()
             canvas.drawLine(ix, iy, ox, oy, strokePaint)
         }
+        strokePaint.alpha = symbolAlpha
 
-        // The needle appears only when a speed is actually being held.
+        // The needle appears only when a speed is actually being held, and it
+        // leans the way the rider is pushing. Eased at a fixed rate per frame,
+        // the same way the leaning motorcycle below is, so the travel takes the
+        // same time from wherever it starts.
         if (engaged == true) {
+            val target = CRUISE_BASE_DEG + when {
+                accel -> CRUISE_SWING_DEG
+                decel -> -CRUISE_SWING_DEG
+                else -> 0f
+            }
+            val now = System.currentTimeMillis()
+            val dt = if (cruiseNeedleAt == 0L) 16L else (now - cruiseNeedleAt).coerceIn(0, 64)
+            cruiseNeedleAt = now
+            val step = dt * 0.20f
+            cruiseNeedleDeg = when {
+                kotlin.math.abs(target - cruiseNeedleDeg) <= step -> target
+                target > cruiseNeedleDeg -> cruiseNeedleDeg + step
+                else -> cruiseNeedleDeg - step
+            }
+            if (cruiseNeedleDeg != target) postInvalidateOnAnimation()
+
             strokePaint.strokeWidth = unit * 0.042f
-            val rad = Math.toRadians(-58.0)
+            val rad = Math.toRadians(cruiseNeedleDeg.toDouble())
             canvas.drawLine(cx, cy,
                 cx + (r * 0.74f) * kotlin.math.cos(rad).toFloat(),
                 cy + (r * 0.74f) * kotlin.math.sin(rad).toFloat(), strokePaint)
             paint.color = colour
+            paint.alpha = symbolAlpha
             paint.style = Paint.Style.FILL
             canvas.drawCircle(cx, cy, unit * 0.032f, paint)
+            paint.alpha = 255
+        } else {
+            // Nothing to hold the needle out, so it is back at rest next time a
+            // speed is set rather than starting from wherever it was left.
+            cruiseNeedleDeg = CRUISE_BASE_DEG
+            cruiseNeedleAt = 0L
         }
+        strokePaint.alpha = 255
+
+        // The breath and the press both want the next frame; the needle asks
+        // for its own above while it is still travelling.
+        if (holding || pressing != null) postInvalidateOnAnimation()
 
         // Struck only when NEITHER half has ever been reported. Parked, the
         // engaged half is legitimately unknown while the rocker still answers,

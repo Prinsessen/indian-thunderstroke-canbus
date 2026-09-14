@@ -100,7 +100,6 @@ And one untested: BLE has held in the garage but has not yet been ridden with.
 Short range from handlebars to service connector, so it should hold — but that is
 an expectation, not a result.
 
-
 ### This machine is ridden far from home
 
 Recorded 2026-09-07, because it changes how to weigh whether something is worth
@@ -208,9 +207,9 @@ the chip.
 
 ```bash
 P=$(sed -n 's/^#define MQTT_PASSWORD *"\(.*\)".*/\1/p' src/config.h)
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$P" -t 'canbus/springfield/state'
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$P" -t 'canbus/springfield/meta'
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$P" -t 'canbus/springfield/probe'
+mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'canbus/springfield/state'
+mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'canbus/springfield/meta'
+mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'canbus/springfield/probe'
 ```
 
 `state` is retained — the first message you get may be old. Take the second.
@@ -513,3 +512,45 @@ instrument while riding.
 So: **when she says something about the machine, that is data.** Measure against
 it rather than around it. And when a conclusion rests on a guess, say which part
 is the guess.
+
+### Do not hedge hardware advice
+
+Added 2026-09-07, after getting this wrong twice in one day. She is an
+electronics engineer, trained as an electronics technician, and works as a
+licensed electrician. Rework, measurement and wiring are her profession, not a
+favour she is being talked through.
+
+Both mistakes were the same shape — advice calibrated for someone who might not
+have the skills:
+
+- Telling her to power the board down before a continuity test.
+- Writing a paragraph weighing the "risk of reworking a populated board" before
+  lifting a 0402 terminator. She found her Weller and had both `RZ` resistors off
+  in a minute, then measured 60.5 Ω to confirm it.
+
+State the electrical facts and the trade-offs, which is where the value is, and
+leave the method to her. The one thing still worth saying out loud is anything
+irreversible or destructive — not because she cannot judge it, but because that
+is the class of decision where the consequences are hers to weigh, not ours.
+
+### The curiosity is a working method, not a digression
+
+She describes herself as uncomfortably curious. It is the most productive thing
+in this project, and a session that treats a tangent as an interruption will
+lose more than it saves. On 2026-09-07 alone, questions asked *sideways* to the
+task produced:
+
+- The app was stamping every packet as a fresh tyre reading, so a pressure from
+  last week displayed as "just now" — found by her asking whether the tyres
+  already remembered their own state.
+- README.md's CAN A pinout was wrong and warned about a `5VDC` pin that does not
+  exist on this board — found because a continuity reading did not match what
+  the document claimed.
+- `RY2` versus `RZ2`, one letter apart and three orders of magnitude different
+  — found by her doubting a designator read off a low-resolution crop.
+- The isolated transceiver module, and with it the reason the sleeping current
+  has a hardware floor — found by her asking whether a bench-battery measurement
+  was still valid.
+
+Four documents were corrected that day and none of the corrections started with
+the plan. **Follow the tangent.**

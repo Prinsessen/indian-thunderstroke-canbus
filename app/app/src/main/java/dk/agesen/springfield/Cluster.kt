@@ -177,6 +177,32 @@ object Cluster {
         instruments.toList().forEach { it.playIntro() }
     }
 
+    /**
+     * The cluster's three pulse rates, and what each one is allowed to mean.
+     *
+     * They started as private constants in the fuel bar and are shared because
+     * the whole value of a rate is that it means the same thing everywhere: a
+     * rider who has learnt the slow one on the grips must not have to learn it
+     * again on a tyre. Nothing on this cluster should breathe at a rate that is
+     * not one of these three.
+     *
+     *   CALM     something is live and working. Life, not warning.
+     *   CAUTION  something to plan for -- fuel under a quarter, a tyre drifting.
+     *   URGENT   something to act on now -- reserve, a tyre out of tolerance.
+     */
+    const val PULSE_CALM = 1700L
+    const val PULSE_CAUTION = 1100L
+    const val PULSE_URGENT = 700L
+
+    /**
+     * A breathing alpha: [base] at the trough, base + [span] at the peak.
+     *
+     * Clamped, so a caller can ask for more span than the headroom allows and
+     * get a flat top rather than a wrapped-around byte and a strobing lamp.
+     */
+    fun breath(base: Int, span: Int, periodMs: Long): Int =
+        (base + span * pulse(periodMs)).toInt().coerceIn(0, 255)
+
     /** 0..1..0 triangle, for pulsing a redline or a caution band. */
     fun pulse(periodMs: Long = 900L): Float {
         val phase = (System.currentTimeMillis() % periodMs).toFloat() / periodMs

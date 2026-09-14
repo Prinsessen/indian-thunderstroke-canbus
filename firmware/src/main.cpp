@@ -203,6 +203,12 @@ uint32_t detectedBitrate = 0;
 const char *detectedName = "?";
 bool haveSpeed = false;
 
+// Both defined further down; declared here because the WiFi and NTP waits above
+// them now keep the bike's own work going while the radio is busy. See the
+// comment on drainCan() and the 2026-09-14 entries in OTA.md.
+extern VehState st;
+void drainCan();
+
 // When a CAN frame was last seen. The bus is silent with the ignition off and
 // busy the moment it comes on, so this IS the ignition, read straight off the
 // wire without decoding anything.
@@ -364,7 +370,12 @@ bool waitForClockSync(uint32_t timeoutMs = 20000) {
     uint32_t start = millis();
     time_t now = time(nullptr);
     while (now < minValidEpoch && millis() - start < timeoutMs) {
-        delay(250);
+        // Up to twenty seconds here, after every association. It used to be
+        // twenty seconds of nothing: no phone packets, no bus. Same treatment
+        // as the WiFi wait in wifiConnect(), for the same reason.
+        drainCan();
+        bleUpdate(st);
+        delay(50);
         now = time(nullptr);
     }
     if (now < minValidEpoch) {
@@ -575,8 +586,18 @@ void onMqttMessage(char* inTopic, byte* payload, unsigned int length) {
     }
 }
 
+// One backoff for every caller. ensureNetwork() already spaced its own calls
+// by 5 s, but publishState() and publishHeartbeat() retry inline with no spacing
+// at all -- on a parked bike with the hotspot up and no cellular, that was one
+// blocking connect attempt per loop pass, back to back. wifiConnect() resets
+// this the moment a link comes up, so a fresh association is never made to
+// wait out a backoff earned by the previous one.
+static uint32_t sMqttLastTry = 0;
+
 void mqttConnect() {
     if (mqtt.connected()) return;
+    if (sMqttLastTry != 0 && millis() - sMqttLastTry < 5000) return;
+    sMqttLastTry = millis();
     String willTopic = topic("status");
     Serial.printf("[mqtt] connecting to %s:%d as clientId=%s ...\n",
                   MQTT_BROKER, MQTT_PORT, mqttClientId());
@@ -616,7 +637,15 @@ void mqttConnect() {
 
 void wifiConnect() {
     WiFi.mode(WIFI_STA);
-    const uint32_t WIFI_TIMEOUT_MS = 10000;  // 10 seconds per SSID
+    // Twenty, not ten. The board runs BLE and WiFi on one radio with no
+    // coexistence tuning at all, and association has to share it with a
+    // connected phone. Ten seconds was enough on a cold boot, where nothing has
+    // paired yet -- which is exactly why a power cycle out of range worked on
+    // the Zealand ride while the automatic failover never did.
+    //
+    // Only safe because the wait above no longer blocks BLE. Doubling a
+    // blocking timeout would have doubled the outage.
+    const uint32_t WIFI_TIMEOUT_MS = 20000;  // 20 seconds per SSID
     const char* ssidList[] = {WIFI_SSID, WIFI_SSID2, WIFI_SSID3};
     const char* passList[] = {WIFI_PASSWORD, WIFI_PASSWORD2, WIFI_PASSWORD3};
     
@@ -655,8 +684,29 @@ void wifiConnect() {
         delay(200);              // let the WiFi driver settle into idle
         WiFi.begin(ssidList[idx], passList[idx]);
         uint32_t start = millis();
+        // Service BLE while WiFi hunts.
+        //
+        // This function BLOCKS loop(), and loop() is where bleUpdate() lives.
+        // On the Zealand ride (2026-09-13) that meant the phone lost the stream
+        // for the whole scan: roughly thirty seconds dead, thirty alive, over
+        // and over, until the rider pulled over and power-cycled the board.
+        //
+        // bleUpdate() rate-limits itself at BLE_FAST_MS (100 ms), so calling it
+        // every 50 ms here costs nothing and gives the phone its normal service
+        // even while the radio is busy associating. The dot is printed on the
+        // old cadence so the serial log stays readable.
+        uint32_t lastDot = 0;
         while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
-            delay(300); Serial.print(".");
+            // Drain first, then send: the packet the phone gets is then the
+            // bus as it is now, not as it was when the scan started. Without
+            // the drain the fast packet carried frozen values for the whole
+            // wait, and the app -- which calls anything arriving within 2.5 s
+            // "live" -- showed a needle stuck at the last speed for up to
+            // forty seconds. Dashes would have been honest; that was not.
+            drainCan();
+            bleUpdate(st);
+            delay(50);
+            if (millis() - lastDot >= 300) { lastDot = millis(); Serial.print("."); }
         }
         Serial.println();
         
@@ -686,6 +736,16 @@ void wifiConnect() {
             waitForClockSync();
 
             wifiClient.setCACert(MQTT_ROOT_CA);
+            // Bound the two things that can block loop() when the hotspot is
+            // up but the cellular link is not: the core's defaults are 30 s
+            // for the TCP connect and 120 s for the TLS handshake, and
+            // ensureNetwork() retries every 5 s -- so the board was dead for
+            // 30 of every 35 seconds, BLE and CAN included. A SYN/ACK over
+            // cellular is well under a second; a handshake with a 2048-bit
+            // key on this chip is two to three. Milliseconds, both.
+            wifiClient.setConnectionTimeout(5000);
+            wifiClient.setHandshakeTimeout(10000);
+            sMqttLastTry = 0;                // a fresh link earns an immediate try
             mqtt.setServer(MQTT_BROKER, MQTT_PORT);
             mqtt.setBufferSize(3072);        // room for reassembled TP messages
             // Keepalive well ABOVE the 30 s heartbeat so a single slow/dropped
@@ -2615,8 +2675,29 @@ void publishState() {
     lastStatePub = millis();
     stateDirty = false;
 
-    char payload[900];
+    // 1536, not 900. Measured on the Zealand ride, 2026-09-13: with the ten
+    // momentary rider inputs present the state JSON is about 947 bytes, and
+    // softwareId alone is 111. At 900 ArduinoJson truncated it silently, and
+    // openHAB's JSONPATH then fails on EVERY key -- rpm included, tested on the
+    // server 2026-09-14 -- without logging a word. That was three stretches of
+    // about two hours each with WiFi up, MQTT up, decode alive and not one item
+    // moving; it cleared only on a wake, because a boot empties vin/swid/dm1
+    // and the JSON fits again until the identity messages arrive.
+    //
+    // The MQTT client buffer is 3072, so there is room. And a tripwire: if it
+    // ever truncates again, say so and do NOT publish -- a cut JSON is worse
+    // than none, because it looks like data and updates nothing.
+    char payload[1536];
     size_t n = buildStateJson(payload, sizeof(payload), true /*includeVin*/);
+    if (n >= sizeof(payload) - 1) {
+        static uint32_t lastWarn = 0;
+        if (millis() - lastWarn > 60000) {
+            lastWarn = millis();
+            logEventf("[state] JSON truncated at %u bytes -- NOT published", (unsigned)n);
+        }
+        stateDirty = true;               // try again as soon as something shrinks
+        return;
+    }
     mqtt.publish(topic("state").c_str(), (const uint8_t *)payload, n, true);
 }
 #endif  // FIRMWARE_MODE == MODE_PRODUCTION
@@ -3208,6 +3289,57 @@ void ensureNetwork() {
 }
 #endif
 
+/**
+ * Empty the CAN receive queue and decode what was in it. At most
+ * MAX_FRAMES_PER_PASS per call, so a saturated bus can never starve the
+ * network stack (that starvation is what caused the MQTT flapping).
+ *
+ * This WAS the top of loop(). It is a function now because loop() is not the
+ * only place that needs the bus read: wifiConnect() and waitForClockSync()
+ * block for up to twenty seconds each, and during the Zealand ride that meant
+ * the bus went unread and the phone was fed frozen values for the whole wait.
+ * Both now call this. Guarded on haveSpeed, so it is a no-op from setup()
+ * before the bus has been found -- wifiConnect() runs before scanAndEnterBus()
+ * there -- and a no-op whenever the bus is asleep.
+ */
+void drainCan() {
+    if (!haveSpeed) return;
+    CanFrame frame;
+    int processed = 0;
+    while (processed < MAX_FRAMES_PER_PASS && canReceive(frame, 0)) {
+        processed++;
+        lastFrameMs = millis();
+        sleepNoteFrame();          // the bus is alive; the sleep timer restarts
+        bool ext = frame.extd;
+        uint32_t id = frame.identifier;
+#if DEBUG_USB_FRAMES
+        printFrame(frame, id, ext);       // bench-only: floods Serial @115200
+#endif
+#if FIRMWARE_MODE == MODE_PRODUCTION
+        decodeState(id, ext, frame);      // in-firmware decode -> one state JSON
+#if ENABLE_MQTT && TP_REASSEMBLY
+        if (ext) {                        // stitch VIN/SW/DM1 multi-packet msgs
+            J1939 jt = decodeJ1939(id, ext);
+            if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
+                handleTransport(jt, frame);
+        }
+#endif
+#else
+        updateTable(id, ext, frame);      // table for MQTT (changes only)
+#if ENABLE_MQTT && TP_REASSEMBLY
+        if (ext) {                        // stitch multi-packet TP/BAM messages
+            J1939 jt = decodeJ1939(id, ext);
+            if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
+                handleTransport(jt, frame);
+        }
+#endif
+#if TPMS_DISCOVERY
+        discFeed(id, ext, frame);         // >>> REMOVE ON CLEANUP <<<
+#endif
+#endif  // FIRMWARE_MODE
+    }
+}
+
 void loop() {
 #if ENABLE_MQTT
     ensureNetwork();
@@ -3282,42 +3414,7 @@ void loop() {
         return;
     }
 
-    // Drain the RX queue, but cap the work per pass so a saturated bus can
-    // never starve the WiFi/MQTT stack (that starvation caused the flapping).
-    CanFrame frame;
-    int processed = 0;
-    while (processed < MAX_FRAMES_PER_PASS && canReceive(frame, 0)) {
-        processed++;
-        lastFrameMs = millis();
-        sleepNoteFrame();          // the bus is alive; the sleep timer restarts
-        bool ext = frame.extd;
-        uint32_t id = frame.identifier;
-#if DEBUG_USB_FRAMES
-        printFrame(frame, id, ext);       // bench-only: floods Serial @115200
-#endif
-#if FIRMWARE_MODE == MODE_PRODUCTION
-        decodeState(id, ext, frame);      // in-firmware decode -> one state JSON
-#if ENABLE_MQTT && TP_REASSEMBLY
-        if (ext) {                        // stitch VIN/SW/DM1 multi-packet msgs
-            J1939 jt = decodeJ1939(id, ext);
-            if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
-                handleTransport(jt, frame);
-        }
-#endif
-#else
-        updateTable(id, ext, frame);      // table for MQTT (changes only)
-#if ENABLE_MQTT && TP_REASSEMBLY
-        if (ext) {                        // stitch multi-packet TP/BAM messages
-            J1939 jt = decodeJ1939(id, ext);
-            if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
-                handleTransport(jt, frame);
-        }
-#endif
-#if TPMS_DISCOVERY
-        discFeed(id, ext, frame);         // >>> REMOVE ON CLEANUP <<<
-#endif
-#endif  // FIRMWARE_MODE
-    }
+    drainCan();
 
 #if FIRMWARE_MODE == MODE_DISCOVERY && TPMS_DISCOVERY
     discPoll();                           // >>> REMOVE ON CLEANUP <<< : z=reset r=report

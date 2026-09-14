@@ -33,10 +33,14 @@ object IgnitionLamp {
     /**
      * @param on true = bus alive, false = quiet, null = never heard from
      * @param r  radius of the ring; the label sits below it
+     * @param drawLabel false where the caller has already captioned the lamp.
+     *        RideStripView does: its two columns share one row of captions at
+     *        the top, so a second IGN hanging under the ring would put the
+     *        strip's left half and right half on different lines.
      */
     fun draw(
         canvas: Canvas, cx: Float, cy: Float, r: Float,
-        on: Boolean?, fill: Paint, text: Paint
+        on: Boolean?, fill: Paint, text: Paint, drawLabel: Boolean = true
     ) {
         val colour = when (on) {
             true -> colOn
@@ -66,6 +70,8 @@ object IgnitionLamp {
             canvas.drawLine(cx - d, cy + d, cx + d, cy - d, fill)
         }
         fill.style = Paint.Style.FILL
+
+        if (!drawLabel) return
 
         val align = text.textAlign
         text.textAlign = Paint.Align.CENTER

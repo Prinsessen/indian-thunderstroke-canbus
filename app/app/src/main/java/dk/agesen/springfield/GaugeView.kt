@@ -51,6 +51,16 @@ class GaugeView @JvmOverloads constructor(
          * keeps them doing.
          */
         private const val HUB_CLEARANCE = 0.075f
+
+        /**
+         * The needle's spring, as stiffness and damping.
+         *
+         * omega 19 rad/s with zeta 0.7: k = omega squared, c = 2 zeta omega.
+         * Turn omega up for a snappier needle, zeta up towards 1 for less
+         * overshoot and none at all at 1.0.
+         */
+        private const val NEEDLE_K = 361f
+        private const val NEEDLE_C = 26.6f
     }
 
     private val dialPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -77,6 +87,21 @@ class GaugeView @JvmOverloads constructor(
     private val colOff = Color.parseColor("#1E242C")
     private val colStrike = Color.parseColor("#39414D")
 
+    /**
+     * What a lit figure throws onto the face behind it.
+     *
+     * Amber because the instrument lighting on this cluster is amber -- the gear
+     * window already is -- so a white number sitting in a faint amber halo reads
+     * as a backlit instrument rather than as text on a screen. A figure past the
+     * redline passes its own red instead: red numerals inside an amber glow
+     * would be two warnings arguing with each other.
+     */
+    private val glowInk = Color.parseColor("#4AE8A33D")
+    private val glowHot = Color.parseColor("#66D2452F")
+
+    private val speedInk = Ink()
+    private val revInk = Ink()
+
     /** Which instrument this dial is. */
     var dial: Dial = Dial.RPM
         set(v) { field = v; invalidate() }
@@ -89,6 +114,18 @@ class GaugeView @JvmOverloads constructor(
      * lamp, same meaning, wherever the rev counter happens to be.
      */
     var ignition: Boolean? = null
+        set(v) { field = v; invalidate() }
+
+    /**
+     * Whether this dial draws the ignition lamp itself.
+     *
+     * Landscape now has a strip in the side column that carries the lamp and
+     * the ride figure together, so the dial hands both over and keeps its face
+     * for the needle and the number. Cleared by [RideFragment] when that strip
+     * is present -- a flag rather than a null ignition, because null already
+     * means "never heard from" and is drawn as a struck-through ring.
+     */
+    var showIgnition: Boolean = true
         set(v) { field = v; invalidate() }
 
     /**
@@ -151,6 +188,30 @@ class GaugeView @JvmOverloads constructor(
     }
 
     private var displayed = 0f          // in the dial's own units
+
+    /**
+     * Where the NEEDLE is, which is not the same as what the dial reads.
+     *
+     * A real instrument needle has mass. It lags the signal, runs past the value
+     * on a quick change and settles back -- and that overshoot is most of what
+     * makes a mechanical cluster look alive rather than plotted. [displayed] is
+     * smoothed but never overshoots, so the needle got a spring of its own.
+     *
+     * The split is the whole point, and it is not decoration: **the analogue
+     * half has mass, the digital half does not.** The needle, and the lit arc it
+     * sits at the end of, run on this. The figures in the hub keep reading
+     * [displayed] -- a number that ran past 80 to 83 and came back would be
+     * plain wrong, and a speedometer that lies for 200 ms is worse than one that
+     * looks plotted. Same for the redline: `hot` is judged on [displayed]
+     * everywhere, so a needle swinging through the red cannot raise a warning
+     * the engine has not earned.
+     *
+     * Critically under-damped on purpose. zeta 0.7 gives about 4.6 % overshoot
+     * and settles inside 0.3 s, which is roughly what a cable-driven needle
+     * does; anything looser wallows and reads as a broken instrument.
+     */
+    private var needleValue = 0f
+    private var needleVel = 0f
     private var lastFrameNs = 0L
     private var introStart = 0L
 
@@ -211,26 +272,42 @@ class GaugeView @JvmOverloads constructor(
         drawTicks(canvas, cx, cy, radius, stroke, size)
 
         val intro = Cluster.introProgress(introStart, introDelay)
-        val fraction: Float?
+        val live: Boolean
         if (intro != null) {
-            fraction = Cluster.introSweep(intro)
-            displayed = fraction * maxValue
+            displayed = Cluster.introSweep(intro) * maxValue
+            live = true
             postInvalidateOnAnimation()
         } else {
             val target = liveValue
             if (target == null) {
                 displayed = 0f
-                fraction = null
+                live = false
             } else {
                 displayed = Cluster.ease(displayed, target, dt, tau)
                 if (kotlin.math.abs(target - displayed) > 0.4f) postInvalidateOnAnimation()
-                fraction = (displayed / maxValue).coerceIn(0f, 1f)
+                live = true
             }
         }
 
-        if (fraction != null) {
+        if (live) {
+            // The needle chases what the dial reads, with mass. dt is clamped
+            // because a spring integrated across a dropped frame -- or across
+            // the gap left by a screen that was off -- does not merely lag, it
+            // launches.
+            val h = dt.coerceIn(0f, 0.05f)
+            needleVel += ((displayed - needleValue) * NEEDLE_K - needleVel * NEEDLE_C) * h
+            needleValue += needleVel * h
+            if (kotlin.math.abs(displayed - needleValue) > maxValue * 0.0015f ||
+                kotlin.math.abs(needleVel) > maxValue * 0.0015f) postInvalidateOnAnimation()
+
+            val fraction = (needleValue / maxValue).coerceIn(0f, 1f)
             drawLitArc(canvas, stroke, fraction)
             drawNeedle(canvas, cx, cy, radius, size, fraction)
+        } else {
+            // Nothing to point at, so the needle is at rest rather than wherever
+            // the link dropped it.
+            needleValue = 0f
+            needleVel = 0f
         }
 
         drawTurnSignals(canvas, cx, cy, radius, size, intro)
@@ -249,8 +326,10 @@ class GaugeView @JvmOverloads constructor(
         // a rider actually reads at speed.
         if (dial == Dial.RPM) {
             drawThrottleArc(canvas, radius, stroke)
-            IgnitionLamp.draw(canvas, cx, cy + size * 0.222f,
-                              size * 0.070f, ignition, bezelPaint, labelPaint)
+            if (showIgnition) {
+                IgnitionLamp.draw(canvas, cx, cy + size * 0.222f,
+                                  size * 0.070f, ignition, bezelPaint, labelPaint)
+            }
         } else {
             drawRide(canvas, cx, cy, size)
         }
@@ -565,7 +644,9 @@ class GaugeView @JvmOverloads constructor(
             speedKmh != null -> String.format("%.0f", displayed)
             else -> "---"
         }
+        speedInk.on(textPaint, cy + size * 0.132f, size * 0.092f, colInk, glowInk)
         canvas.drawText(shown, cx, cy + size * 0.132f, textPaint)
+        speedInk.off(textPaint)
 
         textPaint.color = colMuted
         textPaint.textSize = size * 0.034f
@@ -618,26 +699,57 @@ class GaugeView @JvmOverloads constructor(
             rpm != null -> rpm.toString()
             else -> "----"
         }
-        textPaint.color = when {
+        val unknown = rpm == null && intro == null
+        val tint = when {
             hot -> colRedline
-            rpm == null && intro == null -> colMuted
+            unknown -> colMuted
             else -> colInk
         }
+        textPaint.color = tint
         if (hot) textPaint.alpha = (150 + 105 * Cluster.pulse()).toInt()
         textPaint.textSize = size * 0.140f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        // Baseline above the pivot: the figure sits clear of the hub cap rather
-        // than across it, which is where it was.
-        canvas.drawText(shown, cx, cy - size * HUB_CLEARANCE - size * 0.014f, textPaint)
+        // Dashes get the ramp but no halo: they are the absence of a reading,
+        // and a placeholder that glows would be claiming to be lit.
+        revInk.on(textPaint, cy + size * figureBase, size * 0.140f, tint,
+                  if (unknown) Color.TRANSPARENT else if (hot) glowHot else glowInk)
+        canvas.drawText(shown, cx, cy + size * figureBase, textPaint)
+        revInk.off(textPaint)
         textPaint.alpha = 255
 
         textPaint.color = colMuted
         textPaint.textSize = size * 0.046f
         textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
         textPaint.letterSpacing = 0.20f
-        canvas.drawText("RPM", cx, cy + size * 0.140f, textPaint)
+        canvas.drawText("RPM", cx, cy + size * labelBase, textPaint)
         textPaint.letterSpacing = 0f
     }
+
+    /**
+     * Where the rev figure and its caption sit, measured from the pivot.
+     *
+     * The figure used to sit ABOVE the pivot at -0.089 while the caption stayed
+     * below it at +0.140, so the hub cap sat between a number and its own unit
+     * and pushed them 0.229 of the dial apart. The speedometer's pair are 0.048
+     * apart. The owner spotted it from the saddle before any of this was
+     * measured: 0.197 of clear space between the rev figure and the word RPM,
+     * against 0.024 on the speedometer -- eight times the gap, on two dials
+     * sitting side by side.
+     *
+     * So the rev stack moves below the pivot and reads down the centre line the
+     * way the speedometer's does: number, then unit. 0.190 is the first baseline
+     * that clears the hub cap for a figure this size (0.075 clearance plus about
+     * 0.098 of cap height), and +0.056 puts the same 0.024 of white space under
+     * it that the speedometer has.
+     *
+     * The old positions survive for one case: a landscape layout with no ride
+     * strip, where the dial still draws the ignition lamp itself at +0.222 and
+     * the readout would be sitting in its lap. Nothing ships that way -- the
+     * only landscape layout has the strip -- but a latent collision waiting for
+     * the next layout variant is not worth saving four lines.
+     */
+    private val figureBase: Float get() = if (showIgnition) -HUB_CLEARANCE - 0.014f else 0.190f
+    private val labelBase: Float get() = if (showIgnition) 0.140f else 0.246f
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

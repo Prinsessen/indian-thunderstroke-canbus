@@ -353,7 +353,7 @@ factory flash wipes.
 
 ## What the captures corrected, and what they could not
 
-Read back from four ride captures, 42,365 frames. The captures are not published — they carry the VIN of one motorcycle.
+Read back from `captures/tpms_ride_2026-08-15*.log` — four rides, 42,365 frames.
 The TPMS decode those were taken for is correct and untouched.
 
 ### Headlight, PGN 65381 — fixed

@@ -35,6 +35,12 @@ class DigitalReadoutView @JvmOverloads constructor(
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val colInk = Color.parseColor("#F2F5F9")
+
+    /** The cluster's instrument lighting, behind a lit figure. See Ink. */
+    private val glowInk = Color.parseColor("#4AE8A33D")
+    private val glowHot = Color.parseColor("#66D2452F")
+    private val revInk = Ink()
+    private val rideInk = Ink()
     private val colAccent = Color.parseColor("#E8A33D")
     private val colRedline = Color.parseColor("#D2452F")
     private val colMuted = Color.parseColor("#7C8797")
@@ -247,14 +253,21 @@ class DigitalReadoutView @JvmOverloads constructor(
             canvas.drawRoundRect(x - mw, barY, x + mw, barY + barH * 1.30f, mw, mw, barPaint)
         }
 
-        textPaint.color = when {
+        val unknown = v == null && intro == null
+        val tint = when {
             hot -> colRedline
-            v == null && intro == null -> colDim
+            unknown -> colDim
             else -> colInk
         }
+        textPaint.color = tint
         textPaint.textSize = h * 0.50f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        // Same treatment as the landscape dials, so the rev figure is the same
+        // object in both orientations rather than two that merely agree.
+        revInk.on(textPaint, h * 0.50f, h * 0.50f, tint,
+                  if (unknown) Color.TRANSPARENT else if (hot) glowHot else glowInk)
         canvas.drawText(shown, cx, h * 0.50f, textPaint)
+        revInk.off(textPaint)
 
         textPaint.color = colMuted
         textPaint.textSize = h * 0.135f
@@ -313,10 +326,12 @@ class DigitalReadoutView @JvmOverloads constructor(
             textPaint.textSize = h * 0.155f
             textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             textPaint.letterSpacing = 0f
+            rideInk.on(textPaint, h * 0.48f, h * 0.155f, colInk, glowInk)
             canvas.drawText(
                 if (v < 100) "%.1f".format(v) else "%.0f".format(v),
                 rx, h * 0.48f, textPaint
             )
+            rideInk.off(textPaint)
 
             textPaint.color = colMuted
             textPaint.textSize = h * 0.090f

@@ -52,6 +52,10 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
     private val tellTales get() = view?.findViewById<TellTaleView>(R.id.telltales)
     private val fuel get() = view?.findViewById<FuelBarView>(R.id.fuel)
     private val grips get() = view?.findViewById<GripsView>(R.id.grips)
+    // Landscape only: the ride figure and the ignition lamp, moved off the dial
+    // faces and into the side column. Nullable like the rest, so its absence is
+    // what tells the dials to keep drawing them themselves.
+    private val rideStrip get() = view?.findViewById<RideStripView>(R.id.ridestrip)
 
     // Remembered so a change can be detected; a gear or a redline crossing is an
     // event, and the app only hears a stream of states.
@@ -69,7 +73,8 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
             onBikeUpdate()
         }
         rpmDigits?.onRideReset = resetRide   // portrait: beside the rev figure
-        primary?.onRideReset = resetRide     // landscape: on the speed dial
+        rideStrip?.onRideReset = resetRide   // landscape: on the strip in the column
+        primary?.onRideReset = resetRide     // landscape fallback: on the speed dial
     }
 
     override fun onBikeUpdate() {
@@ -82,6 +87,7 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
         val fast = if (live) BikeRepository.fast else null
         val state = if (live) BikeRepository.state else null
         val twoDials = tacho != null
+        val strip = rideStrip
 
         primary?.apply {
             dial = GaugeView.Dial.SPEED
@@ -91,10 +97,12 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
             turnSide = if (twoDials) GaugeView.TurnSide.LEFT else GaugeView.TurnSide.BOTH
             speedKmh = fast?.speedKmh
             gear = fast?.gear
-            // Landscape only: portrait's speed dial has the digital readout
-            // below it carrying the same figure, and printing it twice on one
-            // screen would just be noise.
-            rideKm = if (twoDials) Settings.rideDistanceKm(BikeRepository.state?.tripKm)
+            // Only ever on the dial as a last resort. Portrait has the digital
+            // readout carrying the same figure, and landscape now has the ride
+            // strip in the side column -- printing it twice on one screen would
+            // just be noise, and on the face it crowded the speed.
+            rideKm = if (twoDials && strip == null)
+                         Settings.rideDistanceKm(BikeRepository.state?.tripKm)
                      else null
             setTurnSignals(fast?.indLeft, fast?.indRight)
         }
@@ -102,6 +110,9 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
         tacho?.apply {
             dial = GaugeView.Dial.RPM
             ignition = state?.ignitionOn
+            // Same move as the ride figure: the strip carries the lamp when the
+            // strip exists, and the dial face is left to the needle.
+            showIgnition = strip == null
             throttlePct = fast?.throttlePct ?: state?.throttlePct
             introDelay = Cluster.STAGGER_SPEEDO
             turnSide = GaugeView.TurnSide.RIGHT
@@ -168,6 +179,17 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
                 FuelLevel.trusted, Settings.tankLitres,
                 { Settings.distance(it) }, Settings.distanceLabel
             )
+        }
+
+        strip?.apply {
+            // The lamp is a live reading and goes dark with the link, like every
+            // other measured thing on this page.
+            ignition = state?.ignitionOn
+            // The distance is not, and deliberately is NOT gated on the link --
+            // the same argument as the portrait readout above. It is the app's
+            // own arithmetic over how far you have ridden, and that does not
+            // stop being true because the phone lost contact in a car park.
+            rideKm = Settings.rideDistanceKm(BikeRepository.state?.tripKm)
         }
 
         // The grips are the bike's, so they belong on the bike's page. Their two

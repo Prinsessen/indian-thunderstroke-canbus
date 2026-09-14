@@ -91,7 +91,7 @@ MrY=
 // 6-digit passkey the phone must type to bond. MITM protection is on, so an
 // unpaired phone gets nothing: the link is dropped unless it encrypts.
 // CHANGE THIS — it is a shared secret, not a placeholder to leave as-is.
-#define BLE_PASSKEY  123456   // CHANGE THIS. It is the pairing PIN.
+#define BLE_PASSKEY  123456   // CHANGE THIS. It is the pairing PIN; the real one lives in config.h, which is gitignored.
 
 // Notify intervals. The fast characteristic carries the 8 packed bytes that
 // make a gauge look alive (rpm/speed/throttle/gear/switches); the JSON one

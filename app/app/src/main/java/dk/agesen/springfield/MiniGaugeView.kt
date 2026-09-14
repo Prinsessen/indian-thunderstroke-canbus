@@ -50,6 +50,11 @@ class MiniGaugeView @JvmOverloads constructor(
     private val colCaution = Color.parseColor("#D2452F")
     private val colDim = Color.parseColor("#3A414D")
 
+    /** The instrument lighting behind a lit figure, and a caution's own red. */
+    private val glowInk = Color.parseColor("#4AE8A33D")
+    private val glowCaution = Color.parseColor("#66D2452F")
+    private val ink = Ink()
+
     private val rect = RectF()
 
     var minValue = 0.0
@@ -137,6 +142,11 @@ class MiniGaugeView @JvmOverloads constructor(
 
         val intro = Cluster.introProgress(introStart)
         val v = value
+        // Hoisted: the figure below needs it too, and during the lamp test
+        // nothing is in caution because nothing is a reading yet.
+        val inCaution = intro == null && v != null &&
+                        cFrom != null && cTo != null && v >= cFrom && v <= cTo
+
         if (intro != null) {
             displayed = Cluster.introSweep(intro)
             lit(cx, cy, colAccent)
@@ -146,22 +156,44 @@ class MiniGaugeView @JvmOverloads constructor(
             val targetFraction = fraction(v)
             displayed = Cluster.ease(displayed, targetFraction, dt, tau = 0.20f)
             if (kotlin.math.abs(targetFraction - displayed) > 0.002f) postInvalidateOnAnimation()
-            val inCaution = cFrom != null && cTo != null && v >= cFrom && v <= cTo
             lit(cx, cy, if (inCaution) colCaution else colAccent)
+            // The arc breathes with the figure, so the dial reads as one thing
+            // reacting rather than a number and a ring that happen to agree.
+            if (inCaution) valuePaint.alpha = Cluster.breath(170, 85, Cluster.PULSE_CAUTION)
             canvas.drawArc(rect, START_ANGLE, SWEEP_ANGLE * displayed, false, valuePaint)
+            valuePaint.alpha = 255
         } else {
             displayed = 0f
         }
 
-        textPaint.color = if (v == null && intro == null) colDim else colInk
+        // A needle sitting inside the caution band was, until now, a colour
+        // change and nothing else -- on a page of six dials that is easy to
+        // walk past. It breathes at the app's caution rate, the same one the
+        // fuel bar uses under a quarter of a tank, and the figure takes the
+        // caution colour rather than staying white: the number IS the reading
+        // that is out of range, and leaving it white made the ring argue with
+        // it. See Cluster.PULSE_CAUTION.
+        val unknown = v == null && intro == null
+        val tint = when {
+            unknown -> colDim
+            inCaution -> colCaution
+            else -> colInk
+        }
+        textPaint.color = tint
         textPaint.textSize = size * 0.230f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        if (inCaution) textPaint.alpha = Cluster.breath(180, 75, Cluster.PULSE_CAUTION)
         val shown = when {
             intro != null -> String.format("%.${decimals}f", minValue + (maxValue - minValue) * displayed)
             v != null -> String.format("%.${decimals}f", v)
             else -> "--"
         }
+        ink.on(textPaint, cy + size * 0.055f, size * 0.230f, tint,
+               if (unknown) Color.TRANSPARENT else if (inCaution) glowCaution else glowInk)
         canvas.drawText(shown, cx, cy + size * 0.055f, textPaint)
+        ink.off(textPaint)
+        textPaint.alpha = 255
+        if (inCaution) postInvalidateOnAnimation()
 
         textPaint.color = colMuted
         textPaint.textSize = size * 0.090f

@@ -50,6 +50,33 @@ class TyreView @JvmOverloads constructor(
     private val colUnknown = Color.parseColor("#3A414D")
     private val colWarm = Color.parseColor("#E8A33D")
 
+    /** The instrument lighting behind a lit figure, and each alert's own colour. */
+    private val glowInk = Color.parseColor("#4AE8A33D")
+    private val glowWatch = Color.parseColor("#5AE8A33D")
+    private val glowAct = Color.parseColor("#66D2452F")
+    private val ink = Ink()
+
+    /**
+     * How hard a wheel breathes.
+     *
+     * A tyre out of tolerance was a colour and nothing else, on a page the
+     * rider only opens deliberately -- so the one state worth interrupting a
+     * ride for was the quietest thing in the app. It now uses the same two
+     * rates as everything else: WATCH plans, ACT acts. OK sits still, which is
+     * what makes the other two mean something.
+     */
+    private fun breathFor(level: TyreMemory.Level): Int = when (level) {
+        TyreMemory.Level.OK -> 255
+        TyreMemory.Level.WATCH -> Cluster.breath(180, 75, Cluster.PULSE_CAUTION)
+        TyreMemory.Level.ACT -> Cluster.breath(150, 105, Cluster.PULSE_URGENT)
+    }
+
+    private fun glowFor(level: TyreMemory.Level): Int = when (level) {
+        TyreMemory.Level.OK -> glowInk
+        TyreMemory.Level.WATCH -> glowWatch
+        TyreMemory.Level.ACT -> glowAct
+    }
+
     /**
      * The cold figure runs cool, which is the owner's idea and a good one.
      *
@@ -178,10 +205,16 @@ class TyreView @JvmOverloads constructor(
         displayed = Cluster.ease(displayed, frac.toFloat(), dt, tau = 0.30f)
         if (kotlin.math.abs(frac.toFloat() - displayed) > 0.002f) postInvalidateOnAnimation()
 
+        val alpha = breathFor(data.level)
         valuePaint.color = colour
         valuePaint.shader = DialFace.litShader(cx, cy, START_ANGLE, SWEEP_ANGLE, colour)
+        valuePaint.alpha = alpha
         canvas.drawArc(rect, START_ANGLE, SWEEP_ANGLE * displayed, false, valuePaint)
         valuePaint.shader = null
+        valuePaint.alpha = 255
+        // The ring and the figure beat together, so the wheel reads as one thing
+        // asking for attention rather than two.
+        if (data.level != TyreMemory.Level.OK) postInvalidateOnAnimation()
 
         // Target notch at the ring's midpoint, so "correct" is a visible place
         // on the dial rather than a number to remember.
@@ -233,10 +266,14 @@ class TyreView @JvmOverloads constructor(
         textPaint.color = colour
         textPaint.textSize = size * 0.215f
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        textPaint.alpha = breathFor(data.level)
+        ink.on(textPaint, cy + size * 0.055f, size * 0.215f, colour, glowFor(data.level))
         canvas.drawText(
             String.format("%.${dec}f", Settings.pressure(data.psi)),
             cx, cy + size * 0.055f, textPaint
         )
+        ink.off(textPaint)
+        textPaint.alpha = 255
 
         textPaint.color = colMuted
         textPaint.textSize = size * 0.058f
@@ -290,7 +327,7 @@ class TyreView @JvmOverloads constructor(
         textPaint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         textPaint.textSize = size * 0.078f
 
-        textPaint.color = if (data.coldPsi != null) colCold else colInk
+        textPaint.color = colCold          // always a cold figure now
         canvas.drawText(
             String.format("%.${dec}f", Settings.pressure(data.judged)),
             cx - colX + optical, rowY, textPaint
@@ -314,16 +351,30 @@ class TyreView @JvmOverloads constructor(
         // four characters. They were already symmetric, and shifting them made
         // them genuinely off-centre while pushing TEMP a further 0.023 towards
         // the ring it was already close to. The owner saw both at once.
-        canvas.drawText(if (data.coldPsi != null) "COLD" else "RAW", cx - colX, rowY + size * 0.060f, textPaint)
+        canvas.drawText("COLD", cx - colX, rowY + size * 0.060f, textPaint)
         canvas.drawText("TEMP", cx + colX, rowY + size * 0.060f, textPaint)
 
         // The cold target, because the figure to its left is now a cold one.
+        //
+        // The ambient figure rides along when it is known. The big number above
+        // is referenced to a fixed 20 °C so it only moves when air is actually
+        // lost; this one is what the tyre would read out in today's weather, and
+        // it is what says whether a seasonal top-up is due. Two questions, and
+        // the rider was reading the answer to one as the answer to the other.
+        //
+        // PLACEMENT NOT SEEN. Written without the app in front of me: the line
+        // roughly doubles in width and may not sit well on the dial. Move it to
+        // its own row, shorten it, or drop it — the value is in TyreMemory's
+        // Wheel.ambientPsi either way.
         textPaint.textSize = size * 0.044f
         textPaint.color = colTarget
-        canvas.drawText(
-            String.format("TARGET %.${dec}f", Settings.pressure(data.target)),
-            cx, rowY + size * 0.130f, textPaint
-        )
+        val amb = data.ambientPsi
+        val targetText = if (amb != null)
+            String.format("TARGET %.${dec}f   OUT %.${dec}f",
+                Settings.pressure(data.target), Settings.pressure(amb))
+        else
+            String.format("TARGET %.${dec}f", Settings.pressure(data.target))
+        canvas.drawText(targetText, cx, rowY + size * 0.130f, textPaint)
         textPaint.letterSpacing = 0f
     }
 

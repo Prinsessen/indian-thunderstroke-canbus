@@ -187,6 +187,42 @@ PY
 
 ---
 
+## Rolling back (no cable needed)
+
+Every image that has been flashed is kept, exactly as served, in
+`releases/indian-canbus-firmware-<version>.bin` (git-ignored; binaries do not
+belong in history). The source it was built from carries the tag
+`known-good-<version>`. Both were introduced 2026-09-14, before the first change
+made after the Zealand ride, because **USB flashing means taking the fairing
+off** — the board is built into the motorcycle — so OTA has to be able to undo
+itself.
+
+To go back to the previous image:
+
+```bash
+cd /etc/openhab-firmware/indian-canbus
+cp releases/indian-canbus-firmware-2026.09.14-2.bin /etc/openhab/html/indian-canbus-firmware.bin
+md5sum /etc/openhab/html/indian-canbus-firmware.bin     # 3b340650feb5ade42d0dd647cce4f119
+echo "openhab:send CanBus_OTA update" | /usr/share/openhab/runtime/bin/client -p habopen
+```
+
+Then watch `OTA Status` until it reads `Running 2026.09.14-2`. To go back in
+*source*: `git checkout known-good-2026.09.14-2 -- src/main.cpp`, rebuild, deploy.
+
+**What OTA cannot undo:** an image that crashes before `mqttConnect()` has run,
+or that never joins WiFi, cannot receive the next `update`. Every change since
+2026-09-14 has therefore been reviewed against one question first — *does any
+of it run before the network is up, and can it crash there?* — and the answer
+for each is written into the commit. Keep doing that. The bootloader has no
+automatic rollback partition; the tripwires are the review and this file.
+
+### Before pressing Update
+
+1. `curl -s -o /dev/null -w "%{http_code} %{size_download}\n" http://192.0.2.10:8080/static/indian-canbus-firmware.bin` — 200, and the size of the image you just copied.
+2. `md5sum` of the served file equals `md5sum` of `.pio/build/sniffer-t2can/firmware.bin`.
+3. The previous image is in `releases/` and its md5 is written next to its tag.
+4. The bike is on home WiFi. If the new image is wrong, the rollback OTA still has to reach it.
+
 ## First flash / emergency recovery (USB cable)
 
 OTA only works once a *good* image (correct IP URL + WiFi fix) is on the device.
@@ -232,6 +268,7 @@ OTA.
 
 | Version | Notes |
 |---------|-------|
+| `2026.09.14-3` | State JSON buffer 900 → 1536 with a tripwire (the 900-byte cut froze openHAB items for ~6 h on the Zealand ride, silently); TLS connect/handshake bounded at 5 s / 10 s (were 30 s / 120 s, blocking BLE+CAN 30 s of every 35 with the hotspot up and cellular down); one 5-s MQTT retry cadence for every caller; CAN drained and BLE fed inside the WiFi and NTP waits via `drainCan()` (no more frozen needle during a scan). Rollback image: `releases/…-2026.09.14-2.bin`. |
 | `2026.08.17-1` | **CAN HAL abstraction** — one firmware now runs on both LilyGO T-CAN485 (ESP32, native TWAI) and T-2CAN (ESP32-S3 + MCP2518FD/SPI), selected by `CAN_BACKEND` in `config.h`. The CAN controller + pin map moved out of `main.cpp` into `can_hal_twai.cpp` / `can_hal_mcp.cpp` behind a board-agnostic `CanFrame` interface. **No behaviour change on T-CAN485**: byte-for-byte identical decode/publish, verified live (250 kbps auto-detect, full `/state` telemetry). MCP2518FD backend compiled-out on the TWAI build. |
 | `2026.08.16-4` | PRODUCTION `/state` publish cap raised to 5 Hz (`STATE_PUBLISH_INTERVAL_MS` 200 ms) — safe because production sends one ~390 B JSON per cycle, not the per-ID fan-out DISCOVERY does. DISCOVERY stays at 1 Hz. |
 | `2026.08.16-3` | State heartbeat: republish `/state` at least every 30 s even when no CAN value changed, so the UI never looks frozen while parked. |

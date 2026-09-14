@@ -48,6 +48,17 @@ object TyreMemory {
     /** Standard atmospheric pressure, for converting gauge to absolute. */
     private const val ATMOSPHERIC_PSI = 14.696
 
+    /**
+     * The temperature the placard figure is specified at.
+     *
+     * Targets like 36 front and 41 rear are cold pressures, and "cold" in a
+     * manual means the tyre is at rest at a nominal room temperature — the
+     * industry uses 20 °C. They are a fixed number, not one that tracks the
+     * weather, so the reading has to be brought to a fixed temperature before
+     * it can be compared with them.
+     */
+    private const val REFERENCE_C = 20.0
+
     /** How far from target counts as fine / worth noting / act on it. */
     private const val TOLERANCE_OK = 2.0
     private const val TOLERANCE_WARN = 4.0
@@ -177,31 +188,24 @@ object TyreMemory {
         val arr = try { JSONArray(prefs.getString(K_HISTORY, "[]")) } catch (e: Exception) { return null }
         if (arr.length() < 2) return null
 
-        fun coldAt(o: JSONObject, psiKey: String, tempKey: String): Double? {
-            val amb = if (o.has("amb")) o.getDouble("amb") else return null
-            return coldEquivalent(o.getDouble(psiKey), o.getDouble(tempKey), amb)
-        }
+        fun coldAt(o: JSONObject, psiKey: String, tempKey: String): Double =
+            coldEquivalent(o.getDouble(psiKey), o.getDouble(tempKey))
 
-        // The oldest and newest samples that can be corrected at all.
-        var oldest: JSONObject? = null
-        var newest: JSONObject? = null
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            if (!o.has("amb")) continue
-            if (oldest == null) oldest = o
-            newest = o
-        }
-        val a = oldest ?: return null
-        val b = newest ?: return null
-        if (a === b) return null
+        // Every sample counts now. The reference is fixed, so an entry written
+        // while the outside temperature was unknown is no longer useless — and
+        // a run of those used to be able to leave too little history to call a
+        // trend at all. Only "amb" was ever optional; t, fp, rp, ft and rt are
+        // written on every record.
+        val a = arr.getJSONObject(0)
+        val b = arr.getJSONObject(arr.length() - 1)
 
         val days = (b.getLong("t") - a.getLong("t")) / 86_400_000.0
         if (days < 3.0) return null          // too short to call a trend
 
-        val fA = coldAt(a, "fp", "ft") ?: return null
-        val fB = coldAt(b, "fp", "ft") ?: return null
-        val rA = coldAt(a, "rp", "rt") ?: return null
-        val rB = coldAt(b, "rp", "rt") ?: return null
+        val fA = coldAt(a, "fp", "ft")
+        val fB = coldAt(b, "fp", "ft")
+        val rA = coldAt(a, "rp", "rt")
+        val rB = coldAt(b, "rp", "rt")
 
         return Trend((fB - fA) / days * 7.0, (rB - rA) / days * 7.0, days)
     }
@@ -212,11 +216,12 @@ object TyreMemory {
     data class Wheel(
         val psi: Double,
         val tempC: Double,
-        val coldPsi: Double?,   // null when ambient was unknown
+        val coldPsi: Double,        // at REFERENCE_C — what the alert judges
+        val ambientPsi: Double?,    // at today's ambient — shown, never alerted on
         val target: Double
     ) {
-        /** Cold equivalent where known, otherwise the raw reading. */
-        val judged: Double get() = coldPsi ?: psi
+        /** Always available now: the reference is fixed, so ambient is not needed. */
+        val judged: Double get() = coldPsi
         val deviation: Double get() = judged - target
 
         val level: Level get() = when {
@@ -244,7 +249,7 @@ object TyreMemory {
         fun wheel(psiKey: String, tempKey: String, target: Double): Wheel {
             val psi = prefs.getFloat(psiKey, 0f).toDouble()
             val temp = prefs.getFloat(tempKey, 0f).toDouble()
-            return Wheel(psi, temp, coldEquivalent(psi, temp, amb), target)
+            return Wheel(psi, temp, coldEquivalent(psi, temp), atAmbient(psi, temp, amb), target)
         }
 
         return Reading(
@@ -258,7 +263,7 @@ object TyreMemory {
     // ------------------------------------------------------------------ math
 
     /**
-     * Gauge pressure the tyre would read once cooled to ambient.
+     * Gauge pressure this tyre would read at REFERENCE_C. **The leak number.**
      *
      * Gay-Lussac on *absolute* pressure at constant volume: P₁/T₁ = P₂/T₂ with
      * temperatures in Kelvin. Gauge pressure has to be lifted to absolute first
@@ -266,9 +271,41 @@ object TyreMemory {
      * approximates — close enough over small spans, but this costs nothing and
      * does not drift on a hot rear tyre.
      *
-     * Returns null when ambient is unknown; guessing it would defeat the point.
+     * NORMALISED TO A FIXED 20 °C, NOT TO TODAY'S AMBIENT, and that is the whole
+     * point of this function. Referenced to ambient it answered a different
+     * question — "what will it read when it cools down outside" — which is true
+     * but moves with the weather, while the target it is compared against does
+     * not. On 2026-09-13 the rider got a front-tyre alert at 11–12 °C on a tyre
+     * that had lost no air: the temperature alone accounts for −1.6 PSI against
+     * a 2.0 PSI tolerance, and below about 5 °C a perfectly correct tyre warns
+     * on its own.
+     *
+     * It also poisoned trend(). Two readings taken weeks apart, each referenced
+     * to its own ambient, carry the whole seasonal shift in the difference — so
+     * the function written to keep weather out of the leak rate reported −1.6
+     * PSI per week on a sealed tyre as autumn came in.
+     *
+     * Fixed reference fixes both, and needs no ambient at all, so a missing
+     * outside temperature no longer leaves the tyre unjudgeable.
      */
-    fun coldEquivalent(psi: Double, tyreTempC: Double, ambientC: Double?): Double? {
+    fun coldEquivalent(psi: Double, tyreTempC: Double): Double {
+        val tyreK = tyreTempC + 273.15
+        if (tyreK <= 0) return psi          // decode junk; better the raw figure
+        return (psi + ATMOSPHERIC_PSI) * ((REFERENCE_C + 273.15) / tyreK) - ATMOSPHERIC_PSI
+    }
+
+    /**
+     * Gauge pressure this tyre would read once cooled to today's ambient.
+     * **The inflation number, and information only — nothing alerts on it.**
+     *
+     * The manufacturer's convention is to set the placard pressure with the tyre
+     * at rest, whatever the weather, so on a cold day a correctly filled tyre
+     * genuinely does sit lower than its target. That is worth showing, because a
+     * rider who never sees it will spend a whole winter three PSI down without
+     * anything mentioning it. It is not worth alarming on, because the answer
+     * changes with the forecast and the rider cannot chase it.
+     */
+    fun atAmbient(psi: Double, tyreTempC: Double, ambientC: Double?): Double? {
         if (ambientC == null) return null
         val tyreK = tyreTempC + 273.15
         val ambientK = ambientC + 273.15

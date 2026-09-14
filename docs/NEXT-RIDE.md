@@ -1,10 +1,152 @@
 # Next ride — what to do, and what happens by itself
 
+## What the Zealand ride taught, 2026-09-13
+
+1000 km, and a partial success. Three findings, in the order they matter.
+
+### 1. The WiFi failover starves BLE, and everything else
+
+Reported from the road: the BLE stream to the phone went on, off, on, off,
+continuously — until the rider pulled over, unplugged the ESP32's service
+connector, and plugged it back in. After that it held for most of the trip.
+
+The cause is in `loop()`. `ensureNetwork()` runs first, and when WiFi is down it
+does three cheap reconnects ten seconds apart and then calls `wifiConnect()`,
+which **blocks for up to 30 seconds** walking three SSIDs at ten seconds each.
+Nothing else in `loop()` runs while it blocks — including `bleUpdate()` and the
+CAN drain.
+
+The rhythm matches the report exactly: **about 30 seconds alive, 30 seconds
+dead, repeating.**
+
+The code states the right intent and does not achieve it:
+
+```c
+// Deliberately outside the ENABLE_MQTT/mqtt.connected() guards below: BLE is
+// the transport that must keep working with no WiFi.
+bleUpdate(st);
+```
+
+The *logical* dependency on MQTT was removed deliberately. The *temporal* one
+was not: a 30-second blocking scan sits in front of it.
+
+Why the power cycle cured it: after a reboot `wifiConnect()` runs once from
+`setup()`, finds the hotspot, and `ensureNetwork()` then returns immediately on
+every pass. No more blocking.
+
+**Amplifier:** `YOUR_SSID` is SSID 1 and the RUTM50 is not fitted yet, so
+every full rescan burns ten seconds on a network that does not exist before it
+reaches the hotspot.
+
+**And it does NOT explain the stale openHAB items — that paragraph was wrong
+and stood here for a day.** Re-read against the InfluxDB export on 2026-09-14
+(evening): in the frozen stretches (10:30→12:25, 13:36→15:36, 23:10→01:11) MQTT
+was *up* — `bus/health` arrived every 30 s, `gear` events arrived carrying live
+`rpm=` and `speed=` in their text, the controller counted 204 frames/s — and only
+the `state` topic changed nothing in openHAB. Roughly six of fourteen riding
+hours.
+
+The cause was `char payload[900]` in `publishState()`. Rebuilt from the live
+items: 764 bytes parked, ~947 riding (ten momentary inputs present; `softwareId`
+alone is 111). ArduinoJson truncates silently at 899, and openHAB's JSONPATH then
+fails on **every** key including `rpm` — tested on the server with a JSON cut at
+899: the valid control returned `1112.5`, the cut one failed on each key, and
+`openhab.log` said nothing. It cleared only on a wake because a boot empties
+`vin`/`swid`/`dm1`; the JSON fits again until the identity messages arrive —
+wake 10:28:25, last state update 10:30:24. Fixed in `2026.09.14-3` (buffer 1536
+plus a tripwire that refuses to publish a cut JSON). See OTA.md.
+
+Fixes, in increasing thoroughness:
+
+1. Drop the dead SSID from the list until the router is fitted. Config change.
+2. Call `bleUpdate()` inside the wait loop in `wifiConnect()`, so BLE survives a
+   scan. Twenty lines, and it delivers what the comment above already promises.
+3. Make `wifiConnect()` non-blocking. Cleanest, largest.
+
+### 2. Range to empty wraps at 256
+
+`b[3]` of PGN 65382 is a single byte, one km per count. The dash goes past 350.
+Above 255 the app shows the dash reading minus 256.
+
+Settled on 2026-09-08 against two dash readings — both of which must have been
+under 255, or this would have surfaced then.
+
+**The ride proves it.** 612 `CanBus_Range` samples over 1000 km including a
+refuel: `min 0, max 254`. The reported range never once exceeded 254 on a
+machine whose dash shows 350+. That ceiling is the byte.
+
+**The high byte is probably already on screen.** `probe/throttle` prints `b1`
+(= `b[0]`) beside the range byte, and calls it one of "the two unexplained
+bytes". A range high byte would look exactly like that: **zero almost always,
+one only above 255 km** — the kind of byte that reads as boring and gets
+deprioritised.
+
+**Test, thirty seconds, no ride:** enable `probe/throttle`, ignition on with a
+tank showing over 255 km, read one line. `b1=1` with `b4` = dash minus 256
+settles it, and the fix is `const int km = b[0] * 256 + b[3];`
+
+### 3. The capture never ran
+
+`ride_capture.py` was not started. No pidfile, and `captures/` held nothing
+newer than 8 September. The probe stream from 1000 km is gone: `probe/throttle`
+is bound to no item, and mosquitto logs topics and byte counts but not payloads.
+
+The constant-throttle hill runs cannot be analysed for the load byte. That was
+the purpose of the ride.
+
+What survived is every decoded item, because `influxdb.persist` carries 48
+CanBus items on `everyChange` — 189,610 rows exported to
+`captures/ride_20260913_sjaelland_influx.csv`.
+
+**This is the failure this file already described**, in these words: *invisible
+from the saddle, identical to a good ride until you get home.* The instruction
+to run `ride_capture.py check` before setting off exists precisely for it, and
+it was not run. Writing the instruction down was not enough.
+
+---
+
 Everything waiting on wheels, in one list, so it takes one outing instead of
 three. Firmware `2026.09.04-32` or later.
 
 Most of it is passive: ride normally and the data arrives. Only two things ask
 anything of the rider, and both take four minutes.
+
+---
+
+## Before setting off — the two minutes that decide whether any of this works
+
+Ride 2 on 2026-09-05 produced nothing: 200 km past a listener subscribed to the
+wrong topic. None of what follows means anything if that repeats, so do this
+first, at the bike, with the **ignition on**.
+
+```bash
+cd /etc/openhab-firmware/indian-canbus
+/etc/openhab/.venv/bin/python tools/ride_capture.py start
+/etc/openhab/.venv/bin/python tools/ride_capture.py check     # takes ~6 s
+```
+
+**Set off only on `READY`.** Anything else exits non-zero and says which of
+four situations you are in — not connected, connected but dead, link fine with
+the ignition off, or the one that matters: link fine, ignition **on**, and the
+probes silent anyway. That last one is the fault worth catching in the drive,
+because it is invisible from the saddle and identical to a good ride until you
+get home.
+
+Verified on the bench 2026-09-05: connects with TLS, writes to `captures/`, and
+the verdict is stable across repeated runs.
+
+When you get back, **while the ride could still be repeated**:
+
+```bash
+/etc/openhab/.venv/bin/python tools/ride_capture.py stop
+git add captures/ && git commit          # it cannot be rebuilt
+```
+
+Probe configuration confirmed live tonight —
+`{"scan":"OFF","cruise":"ON","throttle":"ON","claims":"ON"}`. `scan` is off on
+purpose: `probe` and `probe/2304` are stationary-only and would spend radio
+budget a moving bike needs. `probe/throttle` (2 Hz) and `probe/cruise` publish
+at any speed, and they are the two the ride is for.
 
 ---
 
@@ -49,10 +191,43 @@ from it.
 Byte 4 was the other half of this task and it is done: it turned out to be the
 dash's range to empty (2026-09-08). One byte left in this message.
 
+> **The sitemap switch cannot reach a sleeping board.** The MQTT channel for
+> these switches has a `commandTopic` with no `retained` flag, so a press while
+> the board is asleep publishes into nothing and is lost. The switch only works
+> while the ignition is on and the board is connected.
+>
+> To set a probe that survives the next sleep, publish it retained instead:
+>
+> ```bash
+> mosquitto_pub -h <broker> -p 8884 -u <user> -P <pass> --capath /etc/ssl/certs \
+>   -t 'canbus/springfield/probe/en/claims' -m 'ON' -r
+> ```
+>
+> The board subscribes to `probe/en/+` on connect, so a retained value is applied
+> the moment it wakes. **And it keeps being applied.** Turning that probe off
+> from the sitemap later will work until the board reconnects, at which point the
+> retained ON puts it back — which looks exactly like a switch that refuses to
+> stay off. Clear it by publishing an empty retained payload to the same topic,
+> or publish a retained `OFF`.
+>
+> Done on 2026-09-12 for `claims`, before the 1000 km Zealand ride, so it did not
+> depend on remembering to flip a switch while suiting up.
+>
+> **Reading it back needs care.** The board publishes `probe/enabled` the moment
+> it connects — with the state it booted with — and only *then* receives the
+> retained `probe/en/+` values, applies them, and publishes `probe/enabled`
+> again. A check that stops at the first message reports the old state and looks
+> exactly like a retained value that failed.
+>
+> That happened on 2026-09-12: the first publish said `claims:OFF`, the second
+> said `ON`, and the first one was believed. **Wait for the second, or query the
+> retained topic a few seconds after the board is up.**
+
 **Switch `probe/throttle` back on before riding.** All four probes were turned
 off on 2026-09-08 once the range was settled, so this ride reports nothing
-unless one is re-enabled — the retained topic is `probe/en/throttle`. A ride
-spent with the probe silent is the exact failure this file exists to prevent.
+unless one is re-enabled — `CanBus_Probe_Throttle` on the Springcommand page,
+or the retained topic `probe/en/throttle`. A ride spent with the probe silent is
+the exact failure this file exists to prevent.
 
 Hold the throttle at a **constant** opening and let the load change -- up a rise
 and down the other side is ideal. A byte that follows the *hill* rather than the

@@ -23,6 +23,18 @@
   being thrown away. FuelBarView scales all of its text off its HEIGHT, so at
   873 x 46 the captions were tiny characters adrift in an enormous strip. That
   was the disproportion, and giving it height rather than width is what fixes it.
+
+  2026-09-14, and the owner saw this one from the saddle too: the ride figure and
+  the ignition lamp were still being drawn ON the dial faces, at 0.29 and 0.22 of
+  the dial size below the centre, inside a ring of radius 0.40. Nothing
+  overlapped by arithmetic, but on a short landscape dial they crowded the two
+  numbers the page exists for. Both now live in RideStripView at the foot of the
+  side column — the column is where this app already puts a reading you take
+  while stopped, and it had the room. The dials have their faces back.
+
+  Column budget: 64 + 10 + 54 + 8 + 52 = 188 dp. The gauge row is about 232 dp
+  once the system bars are gone in landscape (see MainActivity.applyImmersive),
+  so it fits with room to spare. Check this sum before adding anything else here.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -65,6 +77,14 @@
                 android:id="@+id/grips"
                 android:layout_width="match_parent"
                 android:layout_height="54dp" />
+
+            <!-- This ride and the ignition lamp, off the dials at last. Long-
+                 press the figure to start the ride again, as before. -->
+            <dk.agesen.springfield.RideStripView
+                android:id="@+id/ridestrip"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
 

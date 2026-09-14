@@ -68,17 +68,15 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <TextView
+        <!-- The link, as a dot that breathes while data is arriving and bars
+             that can be read without knowing what a dBm is. 26dp rather than
+             the 32 the old text line took, which the landscape dials get back.
+             See LinkStripView. -->
+        <dk.agesen.springfield.LinkStripView
             android:id="@+id/status"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:textColor="@color/muted"
-            android:background="@color/surface"
-            android:text="Starting…" />
+            android:layout_height="26dp"
+            android:background="@color/surface" />
     </LinearLayout>
 
     <!-- Above the cluster: redline warning as light in the periphery, which is

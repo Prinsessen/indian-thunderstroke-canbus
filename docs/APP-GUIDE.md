@@ -157,6 +157,99 @@ The tell-tale lamps take this furthest with **three** states rather than two:
 A dark lamp asserts that something is off. That is a claim the app has no right
 to make about a switch it has never heard from, so it says so instead.
 
+### The cruise lamp
+
+The one tell-tale with more than a state to report, so the only one that moves.
+
+| | what you see |
+|---|---|
+| Armed, no speed set | Amber, steady, empty dial. **Steady on purpose** — the stillness is what makes "holding" different from "armed" |
+| Holding a speed | Green, with a needle, breathing on the app's 1700 ms heartbeat |
+| RES/ACC pressed | The needle swings **up** the scale and the tick at the top end flares out past the arc |
+| SET/DEC pressed | The needle swings **down**, and the bottom tick flares |
+
+The dial's scale runs from 145° to 35° through the top, so a larger angle is a
+higher speed on that face: the needle leans the way the button moves the
+motorcycle. A press also takes the lamp to full brightness regardless of where
+the breath is in its cycle, because a confirmation delivered at the dim end of a
+pulse is one the rider misses.
+
+The swing and the flare both work from the armed state too, not only while a
+speed is held — SET is pressed *from* armed, and that press deserves the same
+confirmation as any other. The rocker's own name still appears under the lamp
+for 1.5 s, unchanged; the movement is there so it can be read without looking at
+a word.
+
+### The needle has mass, the number does not
+
+The needle and the lit arc it sits at the end of run on a spring — they lag the
+signal slightly, run past a value on a quick change and settle back, which is
+most of what makes a mechanical cluster look alive rather than plotted. About
+4.6 % overshoot, settled inside a third of a second.
+
+**The figures do not.** A number that ran to 83 and came back would simply be
+wrong, and a speedometer that lies for 200 ms is worse than one that looks
+plotted. The redline is judged on the settled value everywhere too, so a needle
+swinging through the red cannot raise a warning the engine has not earned.
+
+### Lamps arrive, they do not appear
+
+A tell-tale takes 120 ms to come up or go out, which reads as the cluster
+reacting where an instant change reads as a redraw. Cruise and the leaning
+motorcycle are left out of it: both already move on their own, and two animations
+over the same pixels argue.
+
+The start-up lamp test keeps its hard steps. That sequence is meant to be crisp.
+
+### The link strip
+
+Along the foot of every page:
+
+| | |
+|---|---|
+| **The dot** | Green and breathing on the calm rate while data is arriving — the app's only continuous proof that anything is still coming in. Amber when the bike has been heard but not linked, red when it has not |
+| **The words** | Whatever the link is doing, or a message of its own when the state is not one a dot can say |
+| **The bars** | Signal, with the dBm figure small beside them. Nobody has an intuition for −62 dBm; everybody has one for four bars |
+
+A page that has frozen and a bus that has gone quiet look identical. The dot is
+what tells them apart without reading anything.
+
+### Three pulses, and nothing else
+
+Motion is a language on this cluster, so it has exactly three words. They live in
+`Cluster` (`PULSE_CALM`, `PULSE_CAUTION`, `PULSE_URGENT`) and nothing is allowed
+to breathe at a rate that is not one of them — the whole value of a rate is that
+it means the same thing on every page.
+
+| | rate | means | where |
+|---|---|---|---|
+| Calm | 1700 ms | live and working. Life, not warning | grips' top detent, the fuel bar's leading block, cruise holding a speed |
+| Caution | 1100 ms | something to plan for | fuel under a quarter, a tyre on WATCH, a mini gauge inside its caution band |
+| Urgent | 700 ms | something to act on now | fuel reserve, a tyre on ACT |
+
+Something that is fine **sits still**. That is not an absence of design — it is
+what makes the other two readable from the corner of an eye.
+
+### Lit figures, not printed ones
+
+Every readout large enough to carry it — the speed, the revs, this ride — is
+drawn as a **lit** figure rather than a flat colour:
+
+- a vertical ramp down the glyphs, brighter than the base colour at the top and
+  darker at the bottom, which is the single difference between a painted number
+  and one catching the backlight;
+- a soft halo behind them in the cluster's amber instrument lighting, so they
+  throw a little of their own light onto the face.
+
+Both are derived from the figure's own colour, so the same code dresses the white
+speed figure, the red one past the redline — which glows red, because red
+numerals inside an amber halo would be two warnings arguing — and the muted
+dashes standing in for a reading the bus has not sent. Dashes get the ramp but no
+halo: a placeholder that glowed would be claiming to be lit.
+
+Two numbers to turn if it wants more or less of it: the halo radius in `Ink`
+(0.24 of the text size) and its alpha, set per view (`glowInk`, `glowHot`).
+
 ### Units
 
 Speed and distance, temperature, and tyre pressure each have their own setting.
@@ -176,7 +269,31 @@ The riding page, and the one that holds the main instrument in both orientations
 | **Tachometer** | A digital figure with a bar in portrait; its own dial to the right in landscape |
 | **Redline** | Set once in settings. The dial marking, the edge glow and the haptic warning all read the same number |
 | **Fuel bar** | Level as a bar, with **range remaining** beside the label — see [9.3](#93-fuel-range) |
+| **Ride strip** | This ride's distance and the ignition lamp. Portrait puts both beside the rev figure; landscape gives them their own strip at the foot of the side column |
 | **Tell-tales** | Indicators, high beam, neutral, ABS and the rest, in the three states above |
+
+**The dials carry nothing but their own reading.** The ride figure and the
+ignition lamp used to be drawn on the faces in landscape — the figure at 0.29 of
+the dial size below the centre, the lamp at 0.22, both inside a ring of radius
+0.40. Nothing overlapped by arithmetic, but on a short landscape dial they
+crowded the two numbers the page exists for. Neither is a live reading being
+chased by a needle, so both moved into the side column under the grips. The
+long-press that restarts the ride travelled with the figure, and works on the
+left of the strip only — the right half is the lamp, and a press aimed at a lamp
+must not wipe a distance.
+
+**The cluster runs fullscreen, both ways up.** The status bar and the navigation
+bar are hidden on all four pages. Sideways on the X70 the screen is about 393 dp
+tall and the two bars were taking 72 of it, on top of the tab row, the link strip
+and the tell-tale row — the dials were left with roughly 160 dp, and since every
+caption a gauge draws is scaled off `min(width, height)`, a short dial crowds its
+own face. Portrait gains the same 72 dp; the speedometer there is bound by width,
+so the room goes to the readout, the fuel bar, the grips and the tell-tales.
+
+A swipe from the edge still brings the bars back for a few seconds, then they
+hide themselves again — so the clock and the back gesture are a gesture away
+rather than gone. Settings, diagnostics and about keep their bars, because those
+are a phone rather than an instrument.
 
 ### TYRES
 
@@ -509,6 +626,29 @@ and a disbelieved warning is worse than none.
    average. Braking and accelerating throw fuel up and down the tank; a median
    ignores the sloshing entirely, where an average folds every surge into the
    answer.
+
+**How the bar is coloured.** Each block takes its colour from **where it sits in
+the tank**, not from how full the tank currently is, interpolated between the
+app's three semantic colours and pinned to the two thresholds the tank actually
+has (25 % low, 12 % reserve). The bar therefore reddens as it empties without a
+threshold ever having to be crossed — the last blocks a rider runs on were always
+the red ones. A flat green bar that flipped to flat amber at 25 % said the same
+thing later and all at once. Unlit blocks keep a faint ghost of their own colour,
+so the empty end still reads as a scale rather than as a row of holes.
+
+**Three pulses, three meanings**, readable from the corner of an eye without the
+number:
+
+| | rate | what breathes |
+|---|---|---|
+| Normal | 1700 ms | the leading block only — the app's heartbeat, the same cue the grips give their top detent. Life, not warning |
+| Low, ≤ 25 % | 1100 ms | the leading pair. Something to plan for |
+| Reserve, ≤ 12 % | 700 ms | the whole lit bar, the percentage and the glow, together, and the glow swells as well as beats. Something to act on |
+
+Peripheral vision answers to movement long before it answers to hue, which is the
+whole argument for pulsing something rather than only colouring it. None of the
+tiers fire during the start-up sweep: a warning that goes off on every start is
+one nobody reads by the second week.
 
 ### 9.6 Ride distance
 

@@ -10,10 +10,14 @@ package dk.agesen.springfield
  * **On where the number lives.** A phone is the wrong home for it. The interval
  * belongs to the motorcycle, and a phone gets reinstalled, replaced, dropped in
  * a car park. So this reads the bike's own answer first and falls back to the
- * app's setting only when the bike has none — which is every firmware built so
- * far. Teaching the ESP32 to keep it in NVS and report it as `svcKm` is a small
- * change, and the moment it lands the number stops depending on this phone
- * existing. Nothing here changes when it does.
+ * app's setting only when the bike has none.
+ *
+ * That fallback used to be the only path: no firmware reported it, and this
+ * comment said so. The ESP32 now keeps the last service odometer in NVS and
+ * publishes it as `svcKm` on both transports, omitting the key entirely when
+ * nothing has been recorded — which is how a client tells "no service logged"
+ * from "serviced at 0 km". The app reads it as `sk`. Nothing here changed when
+ * it landed, which was the point of writing it this way round.
  */
 object Service {
 
