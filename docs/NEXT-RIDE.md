@@ -6,6 +6,38 @@
 
 ### 1. The WiFi failover starves BLE, and everything else
 
+**Settled 2026-09-15, and the paragraphs below got the mechanism wrong.** A
+ten-minute test ride on `2026.09.14-4` (wake 15:51:40, last packet from home
+15:56:06, last-will 15:57:37, back on `Devices` at 16:06:18 by an in-motion
+rescan — no boot banner, so `ensureNetwork()` → `wifiConnect()` does run in
+motion) never reported from the road, and the phone's hotspot listed
+`esp32s3-XXXXXX` as a connected client the whole time. So the association to
+the hotspot **succeeds**. What fails is the step after it: `mqtt.example.com` is
+`192.0.2.10` from the home resolver (TTL 3600) and `198.51.100.10` from anywhere
+else, and lwIP keeps the home answer in its DNS cache for the full hour after
+the board has moved networks. Every connect on the road went to a LAN address
+over cellular and timed out. A power cycle empties that cache — which is the
+whole reason the roadside reboot on Zealand worked and the failover never did.
+The BLE and timeout theories below were not the cause. The phone died on the
+hotspot for a second reason, also fixed: the 5 s MQTT backoff was stamped
+*before* a connect that itself takes 5 s to time out, so attempts ran back to
+back and `loop()` was blocked continuously; switching the hotspot off made the
+attempts fail instantly, which is why BLE came back the moment it was off.
+Fixed in `2026.09.15-1`: DNS cache flushed after every association, retry
+stamped after the attempt and 15 s apart, and offline log lines buffered and
+delivered with the next connection. See OTA.md.
+
+**Proven the same afternoon.** Test ride on `2026.09.15-1`, 16:24–16:40: link
+to `Devices` lost at uptime +333 s, three reconnects, rescan at +363 s, joined
+`PhoneHotspot` at +388 s (IP 192.0.2.30, rssi −45), broker resolved to
+`198.51.100.10`, MQTT up — 55 s from link loss to online over the hotspot. Eleven
+minutes on cellular at ~500 item updates a minute, up to 110.7 km/h, no drop.
+Back at the garage: hotspot link lost at +1032 s, rescan, `Devices` at +1084 s,
+broker back to `192.0.2.10`. The road reported both transitions itself through
+the new buffer. Rider's verdict: flawless, and the phone's screen stayed live.
+Range to empty (item 2 below) also read right on this ride.
+
+
 Reported from the road: the BLE stream to the phone went on, off, on, off,
 continuously — until the rider pulled over, unplugged the ESP32's service
 connector, and plugged it back in. After that it held for most of the trip.
@@ -63,7 +95,12 @@ Fixes, in increasing thoroughness:
    scan. Twenty lines, and it delivers what the comment above already promises.
 3. Make `wifiConnect()` non-blocking. Cleanest, largest.
 
-### 2. Range to empty wraps at 256 — decoded as 16 bits in 2026.09.14-4, proof at the next fill-up
+### 2. Range to empty wraps at 256 — decoded as 16 bits in 2026.09.14-4, proven at the fill-up 2026-09-15
+
+**Proven.** Filled up mid-ride at 16:34 (fuel 44 % → 100 %, reported over the
+hotspot). `CanBus_Range` climbed 251, 252, 254, **257**, 258, 260, 262 … 272
+without wrapping — the boundary that read `0 → 254` on Zealand went straight
+through. 272 km at a full tank, steady at 271–273 afterwards.
 
 `b[3]` of PGN 65382 is one byte, one km per count, and the dash goes past 350.
 Above 255 the app showed the dash reading minus 256. **The ride proves it:**

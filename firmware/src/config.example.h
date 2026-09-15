@@ -22,7 +22,7 @@
 #define MQTT_USERNAME   "YOUR_MQTT_USER"
 #define MQTT_PASSWORD   "YOUR_MQTT_PASS"
 // PREFIX only — the firmware appends the last 3 bytes of the board MAC
-// (e.g. "indian-canbus-5A8EE0") so two boards flashed from the same config.h
+// (e.g. "indian-canbus-XXXXXX") so two boards flashed from the same config.h
 // don't collide on the broker (duplicate MQTT client IDs make the broker evict
 // one board when the other connects). Publish topics use MQTT_BASE_TOPIC as-is.
 #define MQTT_CLIENT_ID  "indian-canbus"

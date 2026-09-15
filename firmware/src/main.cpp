@@ -88,6 +88,8 @@
   #include <PubSubClient.h>
   #include <ArduinoJson.h>
     #include <time.h>
+  #include <esp_netif.h>            // esp_netif_tcpip_exec(): run a call in the lwIP thread
+  #include <lwip/dns.h>             // dns_clear_cache()
 #endif
 
 // ======================= CAN HARDWARE ======================================
@@ -316,8 +318,77 @@ const char *mqttClientId() {
     return id.c_str();
 }
 
+// ---- The log while the broker is out of reach -------------------------------
+//
+// Every logEvent() line goes to Serial and to <base>/debug, and nobody holds
+// the serial port on a motorcycle. So the lines that explain a failover --
+// link down, rescanning, joined the hotspot, broker resolved to WHAT, connect
+// failed WHY -- were exactly the lines that never arrived: they are written
+// while there is no broker to write them to.
+//
+// The 2026-09-15 test ride was diagnosed with none of them. openHAB had a
+// last-will "offline" at 15:57 and a reconnect at home at 16:06; the hotspot
+// had a client called esp32s3-XXXXXX. Everything in between was inferred from
+// the source, and the day before had been spent on a wrong inference.
+//
+// So lines written while offline are kept here and published, in order and with
+// the uptime they were written at, as soon as the next connection is made. The
+// FIRST lines of an outage are kept, not the last: they are the ones that say
+// what happened. A line identical to the one before it is counted, not stored,
+// so "[mqtt] connect failed" repeated for an hour costs one slot.
+static const uint8_t  DBG_RING_LINES = 24;
+static const uint8_t  DBG_RING_WIDTH = 112;
+static char     sDbgLine[DBG_RING_LINES][DBG_RING_WIDTH];
+static uint32_t sDbgAtSec[DBG_RING_LINES];
+static uint16_t sDbgRepeat[DBG_RING_LINES];
+static uint8_t  sDbgCount = 0;
+static uint16_t sDbgDropped = 0;
+
+static void debugRingAdd(const char *msg) {
+    if (sDbgCount > 0 && strncmp(sDbgLine[sDbgCount - 1], msg, DBG_RING_WIDTH - 1) == 0) {
+        if (sDbgRepeat[sDbgCount - 1] < 65535) sDbgRepeat[sDbgCount - 1]++;
+        return;
+    }
+    if (sDbgCount >= DBG_RING_LINES) {
+        if (sDbgDropped < 65535) sDbgDropped++;
+        return;
+    }
+    strncpy(sDbgLine[sDbgCount], msg, DBG_RING_WIDTH - 1);
+    sDbgLine[sDbgCount][DBG_RING_WIDTH - 1] = '\0';
+    sDbgAtSec[sDbgCount]  = millis() / 1000;
+    sDbgRepeat[sDbgCount] = 1;
+    sDbgCount++;
+}
+
+// Called from mqttConnect() once the broker has answered. Synchronous
+// publishes, like everything else on the debug topic.
+static void debugRingFlush() {
+    if (sDbgCount == 0 && sDbgDropped == 0) return;
+    char out[DBG_RING_WIDTH + 48];
+    snprintf(out, sizeof(out),
+             "[log] %u line(s) written while the broker was out of reach (uptime now %lus):",
+             (unsigned)sDbgCount, (unsigned long)(millis() / 1000));
+    mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
+    for (uint8_t i = 0; i < sDbgCount; i++) {
+        if (sDbgRepeat[i] > 1)
+            snprintf(out, sizeof(out), "[+%lus] %s (x%u)",
+                     (unsigned long)sDbgAtSec[i], sDbgLine[i], (unsigned)sDbgRepeat[i]);
+        else
+            snprintf(out, sizeof(out), "[+%lus] %s", (unsigned long)sDbgAtSec[i], sDbgLine[i]);
+        mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
+    }
+    if (sDbgDropped) {
+        snprintf(out, sizeof(out), "[log] %u more line(s) dropped; the buffer holds %u",
+                 (unsigned)sDbgDropped, (unsigned)DBG_RING_LINES);
+        mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
+    }
+    sDbgCount = 0;
+    sDbgDropped = 0;
+}
+
 void mqttDebugPublish(const char *msg) {
     if (!mqtt.connected()) {
+        debugRingAdd(msg);
         return;
     }
     mqtt.publish(topic("debug").c_str(), (const uint8_t *) msg, strlen(msg), false);
@@ -592,12 +663,26 @@ void onMqttMessage(char* inTopic, byte* payload, unsigned int length) {
 // blocking connect attempt per loop pass, back to back. wifiConnect() resets
 // this the moment a link comes up, so a fresh association is never made to
 // wait out a backoff earned by the previous one.
+//
+// Stamped at the END of the attempt, and fifteen seconds. 2026.09.14-3 stamped
+// the time before connecting and waited five seconds from that stamp -- but a
+// connect that times out takes five seconds itself (hotspot up, broker not
+// reachable through it), so the stamp had expired by the time the attempt
+// returned and the next pass started the next one at once. loop() was blocked
+// five seconds of every five, the same outage the change was meant to cure.
+// The 2026-09-15 test ride showed it exactly: the phone's screen died the
+// moment the board joined the hotspot and came back the moment the hotspot was
+// switched off (no link, so the attempt fails instantly instead of timing out).
+//
+// Stamped afterwards, a five-second timeout is followed by fifteen seconds in
+// which loop() runs: BLE and the bus get three quarters of the time instead of
+// none of it.
+static const uint32_t MQTT_RETRY_MS = 15000;
 static uint32_t sMqttLastTry = 0;
 
 void mqttConnect() {
     if (mqtt.connected()) return;
-    if (sMqttLastTry != 0 && millis() - sMqttLastTry < 5000) return;
-    sMqttLastTry = millis();
+    if (sMqttLastTry != 0 && millis() - sMqttLastTry < MQTT_RETRY_MS) return;
     String willTopic = topic("status");
     Serial.printf("[mqtt] connecting to %s:%d as clientId=%s ...\n",
                   MQTT_BROKER, MQTT_PORT, mqttClientId());
@@ -628,11 +713,44 @@ void mqttConnect() {
             announced = true;
             mqtt.publish(topic("ota/status").c_str(), "Running " FW_VERSION, true);
         }
+        debugRingFlush();                          // what happened while we were away
         logEvent("[mqtt] connected");
     } else {
         logEventf("[mqtt] connect failed: state=%d (%s)",
                   mqtt.state(), mqttStateText(mqtt.state()));
     }
+    sMqttLastTry = millis();                       // after the attempt, not before
+}
+
+// ---- DNS: forget the previous network's answers -----------------------------
+//
+// mqtt.example.com is 192.0.2.10 from inside the house and 198.51.100.10 from
+// anywhere else: the home resolver answers with the LAN address, TTL 3600.
+// lwIP caches that answer for the full hour, and the cache is NOT emptied when
+// the board moves to another network. So on 2026-09-15 the bike left the
+// garage, joined the phone's hotspot (the phone listed it: esp32s3-XXXXXX),
+// asked the cache where the broker was, got 192.0.2.10, and sent every SYN of
+// the ride into a private address that does not exist on the cellular side.
+// Each one timed out after five seconds. Nothing reached openHAB; nothing could.
+//
+// A power cycle empties the cache, and the first lookup afterwards goes to the
+// phone's resolver and gets the public address. That is why the roadside reboot
+// on the Zealand ride worked and the automatic failover never did -- and why a
+// day went into BLE coexistence and timeouts that were not the cause.
+//
+// dns_clear_cache() is lwIP's own. This core is built with
+// CONFIG_LWIP_CHECK_THREAD_SAFETY, under which lwIP core functions assert when
+// entered from outside the lwIP thread, and an assert here would be a crash
+// after every association -- the one failure OTA cannot recover from. So it
+// is handed to esp_netif_tcpip_exec(), which runs it in that thread and waits.
+static esp_err_t dnsClearInTcpipThread(void *) {
+    dns_clear_cache();
+    return ESP_OK;
+}
+
+static void flushDnsCache() {
+    esp_err_t err = esp_netif_tcpip_exec(dnsClearInTcpipThread, nullptr);
+    if (err != ESP_OK) logEventf("[wifi] DNS cache flush failed: %d", (int)err);
 }
 
 void wifiConnect() {
@@ -722,14 +840,17 @@ void wifiConnect() {
                 wp.end();
                 Serial.printf("[wifi] will try SSID%d first next time\n", idx + 1);
             }
-            Serial.printf("[wifi] IP %s\n", WiFi.localIP().toString().c_str());
+            // Logged NOW, not after MQTT is up: with the broker out of reach
+            // these lines go to the ring buffer and arrive with the next
+            // connection, which is the only way the road ever gets reported.
+            logEventf("[wifi] connected to SSID%d (%s), IP %s, rssi %d",
+                      idx + 1, ssidList[idx], WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
+            flushDnsCache();                 // this network's resolver, not the last one's
             IPAddress brokerIp;
-            bool brokerResolved = false;
             if (WiFi.hostByName(MQTT_BROKER, brokerIp)) {
-                brokerResolved = true;
-                Serial.printf("[wifi] broker %s resolved to %s\n", MQTT_BROKER, brokerIp.toString().c_str());
+                logEventf("[wifi] broker %s resolved to %s", MQTT_BROKER, brokerIp.toString().c_str());
             } else {
-                Serial.printf("[wifi] DNS failed for broker %s\n", MQTT_BROKER);
+                logEventf("[wifi] DNS failed for broker %s", MQTT_BROKER);
             }
 
             configTime(0, 0, "dk.pool.ntp.org", "pool.ntp.org", "time.cloudflare.com");
@@ -760,13 +881,6 @@ void wifiConnect() {
             mqtt.setCallback(onMqttMessage);  // Set message callback BEFORE connect
             mqttConnect();
             if (mqtt.connected()) {
-                logEventf("[wifi] connected to SSID%d, IP %s", idx + 1, WiFi.localIP().toString().c_str());
-                if (brokerResolved) {
-                    logEventf("[wifi] broker %s resolved to %s", MQTT_BROKER, brokerIp.toString().c_str());
-                } else {
-                    logEventf("[wifi] DNS failed for broker %s", MQTT_BROKER);
-                }
-
                 // ---- OTA Setup ----
                 ArduinoOTA.setHostname(mqttClientId());
                 ArduinoOTA.setPassword(""  /* no auth password for now */);
@@ -3284,12 +3398,11 @@ void ensureNetwork() {
             // is tried first on the next wake. ArduinoOTA.begin() is guarded by
             // its own _initialized flag, so calling it again is a no-op.
             if (++wifiRetriesOnSameSsid <= 3) {
-                Serial.printf("[wifi] link down - reconnecting (%u/3)\n",
-                              wifiRetriesOnSameSsid);
+                logEventf("[wifi] link down - reconnecting (%u/3)", wifiRetriesOnSameSsid);
                 WiFi.disconnect();
                 WiFi.reconnect();
             } else {
-                Serial.println("[wifi] link down - rescanning all SSIDs");
+                logEvent("[wifi] link down - rescanning all SSIDs");
                 wifiRetriesOnSameSsid = 0;   // cheap retries again after this
                 wifiConnect();               // blocks up to 30 s, as at boot
                 lastWifiRetry = millis();    // re-arm from when the scan ended
