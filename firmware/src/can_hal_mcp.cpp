@@ -14,7 +14,9 @@
  * PIN MAP + OSC verified against LilyGO's official T-2Can pin_config.h and the
  * T_2Can_Fd examples (examples/can, examples/original_test):
  *       SPI  SCLK=12  MOSI=11  MISO=13   MCP2518 CS=10   INT=8
- *       Crystal = 40 MHz  (Longan_CANFD + ACAN2517FD both assume 40 MHz here).
+ *       Crystal = 40 MHz. ACAN2517FD is told so explicitly (OSC_40MHz below);
+ *       Longan_CANFD defaults to 20 MHz, which is why LilyGO's own example
+ *       reads nothing on their own board. Same crystal on the CANFD-MC board.
  *
  * ⚠️  IMPORTANT — the MCP2518FD has NO hardware RESET pin (unlike the MCP2515 on
  *     the older non-FD T-2Can). On the T-2CANFD, ESP32 GPIO9/GPIO3 are the

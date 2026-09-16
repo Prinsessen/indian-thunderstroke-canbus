@@ -49,7 +49,7 @@ for f in $(git -C "$FW" ls-files src platformio.ini); do put "$FW/$f" "firmware/
 for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
          probe_watch.sh switch_watch.py sync_check.py tpms_ride_capture.py; do
   put "$FW/tools/$t" "firmware/tools/$t"; done
-for d in DECODE-PLAN FLASHING GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
+for d in DECODE-PLAN FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
          TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES; do put "$FW/$d.md" "docs/$d.md"; done
 for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done
 

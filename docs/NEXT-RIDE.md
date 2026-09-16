@@ -267,6 +267,13 @@ dash's range to empty (2026-09-08). One byte left in this message.
 > said `ON`, and the first one was believed. **Wait for the second, or query the
 > retained topic a few seconds after the board is up.**
 
+**Since 2026-09-15 the probe streams no longer depend on a capture process.**
+`probe/throttle` and `probe/cruise` are bound to `CanBus_Probe_ThrottleLine` /
+`CanBus_Probe_CruiseLine` in openHAB and persisted in InfluxDB on every change,
+after the test ride of 2026-09-15 became the second ride to lose the whole
+stream because `ride_capture.py` was not running. `ride_capture.py` is still
+the only thing that records raw frames; the probe lines now come home either way.
+
 **Switch `probe/throttle` back on before riding.** All four probes were turned
 off on 2026-09-08 once the range was settled, so this ride reports nothing
 unless one is re-enabled — `CanBus_Probe_Throttle` on the Springcommand page,
