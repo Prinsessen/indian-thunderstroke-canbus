@@ -97,6 +97,14 @@ This is the part that decides whether the factory instrument can ever leave.
 2. **The odometer is *computed* there too**: front wheel-speed sensor → ABS →
    bus → cluster integrates distance (service notes: front WSS feeds the
    odometer, rear WSS the speedometer). Remove the cluster and the count stops.
+   **The bus confirms it independently of Indian's paperwork:** the odometer
+   travels in PGN 65217 (J1939 High Resolution Vehicle Distance, bytes 0–3,
+   × 0.005 km, trip 1 in bytes 4–7), and in every raw capture in this
+   repository that message has exactly one CAN ID — `18FEC117`, source
+   address 0x17 = **23, the node that claims as Instrument cluster**. 824
+   frames, none from any other sender; the ECM (SA 0) never transmits it.
+   What openHAB shows as `CanBus_Odometer` (143 127 km on 2026-09-16) is the
+   gauge on the tank reporting what it has counted itself.
 3. **Ambient temperature** enters the bus from SA 23 — the AMB_AIR_TEMP sensor
    is on the instrument side of the harness. No cluster, no ambient.
 4. **Trip odometers, clock, unit settings, brightness, the TPMS registration
