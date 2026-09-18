@@ -192,6 +192,17 @@ missing key as "unknown", never as zero. On a silent bus the payload is literall
 | `dm1Raw` | string | | Raw DM1 hex. **MQTT only, and always was** -- this table failed to say so, and the Android app consequently parsed a field that could never arrive. It was dead from the day it was written and nobody could see it, because a null field looks exactly like a field with nothing to report. Removed from the app 2026-09-09. Use `dm1` |
 | `fw` | string | | Firmware version, e.g. `"2026.09.02-4"`. **Always present** from that build onwards — a client that cannot say which firmware it is talking to makes every report of odd behaviour start with a guess. |
 
+### Not in `state`: the handlebar buttons
+
+The two trip buttons (PGN 65381 SA 39 byte 0, bit 0 left, bit 2 right, found
+2026-09-18) are not fields in `state`, because a press is an event, not a
+level: a 1 Hz JSON would miss most of them. The firmware publishes each
+debounced press as one non-retained MQTT message on `…/button` -- `left`,
+`right` or `both` plus `short` (under 800 ms), `long` (800 ms, sent at the
+mark) or `double` (two shorts with less than 600 ms between). Nothing goes over
+BLE. The table and the first rule that uses them are in the README's `button`
+section.
+
 ### Deliberately absent over BLE
 
 `vin` and `softwareId` are present on the MQTT path but **withheld from BLE**.

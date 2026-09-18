@@ -254,7 +254,7 @@ broadcast. There are exactly seven in the whole manual:
 | 5582 | Static Roll Angle | P1062 | **Shipped** — this is almost certainly our PGN 2304 lean byte |
 | 520300 | Tire Pressure Sensor (Front) | C1085 | **Shipped** — PGN 65268 |
 | 520302 | Tire Pressure Sensor (Rear) | C1090 | **Shipped** — PGN 65268 |
-| 520329 | **Operator Switch Status (pOSS1)** | P1063 | **Partly answered 2026-09-05.** PGN 65381 from SA 39 carries a switch layer: byte 1 bits 2/4/6 are the indicator switch and its cancel, byte 2 bit 0 is hazard held for its exact duration. Whether that message IS pOSS1 is unproven -- it is proprietary, not the standard's parameter. |
+| 520329 | **Operator Switch Status (pOSS1)** | P1063 | **Partly answered 2026-09-05.** PGN 65381 from SA 39 carries a switch layer: byte 1 bits 2/4/6 are the indicator switch and its cancel, byte 2 bit 0 is hazard held for its exact duration. **Extended 2026-09-18:** byte 0 of the same message carries the two handlebar trip buttons -- bit 0 the left MFD/trip button, bit 2 the right TPMS/trip button, each set while held (bit 4 = ignition). The firmware turns them into short/long/double events on the `button` topic; see README. Whether that message IS pOSS1 is unproven -- it is proprietary, not the standard's parameter. |
 | 520330 | **Immobilizer** | P106A | **Found 2026-09-05.** PGN 65386 SA 39 byte 0, bits 6-7: `00` authorised, `01` searching, `10` fob not detected. Proved by a controlled pair -- fob in a pocket resolves in one second, fob left indoors sits searching for twenty and then reports failure while the bike shuts down -- and the owner watched all three states on the display. As with pOSS1, whether this IS SPN 520330 cannot be shown from a proprietary PGN; what is certain is that it carries the state the security lamp shows. |
 
 **Six of seven are shipped.** Five already were when this table was written,
@@ -264,7 +264,8 @@ banner -- so only pOSS1 is outstanding.
 
 And even that is not empty-handed: PGN 65381 from SA 39 carries a switch layer
 where pOSS1 predicted one, and the hazard warning decoded from that message is
-shipped too. What is missing is not a signal but a name -- proof that the
+shipped too -- as are, since 2026-09-18, the two handlebar trip buttons from its
+byte 0. What is missing is not a signal but a name -- proof that the
 proprietary message IS the standard's parameter, which a proprietary layout
 cannot give.
 
