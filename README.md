@@ -131,7 +131,8 @@ its presses; the firmware only listens.
 
 [openhab/rules/canbus_button_garage.example.js](openhab/rules/canbus_button_garage.example.js)
 is the first thing built on it: a double press on the right button pulses the
-garage door, but only while the bike is inside the home geofence, with an
+garage door inside the home geofence; away from home it may only close a door
+the limit switches report open, never open one. With an
 8-second lockout. Details in [docs/DECODE-PLAN.md](docs/DECODE-PLAN.md).
 
 ## Cruise control, derived

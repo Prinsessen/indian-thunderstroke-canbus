@@ -1,6 +1,7 @@
 // =============================================================================
 // Example openHAB rule (JS Scripting / GraalJS): a double press on the RIGHT
-// handlebar button toggles the garage door, but only when the bike is home.
+// handlebar button toggles the garage door when the bike is home. Away from
+// home it may only CLOSE an open door, never open one.
 // =============================================================================
 // Sanitized copy of the rule that runs on the author's installation. Replace the three
 // UPPER_CASE placeholders with your own items:
@@ -16,13 +17,14 @@
 //                        used to say "opening" or "closing" in the result.
 //   CanBus_Button_Result String item with no channel: what the last press did,
 //                        in words, for the sitemap ("Garage door opening",
-//                        "Garage door left alone — bike is not at home", ...).
+//                        "Garage door stays closed — bike is not at home", ...).
 //
 // The door is a toggle: one pulse opens, the next pulse closes, so the rule
-// does not care which way it goes. It refuses to fire while the bike is away
-// (a stray double press at a traffic light must never open the house) and it
-// ignores a second double press inside LOCKOUT_MS so a nervous thumb cannot
-// stop the door half way.
+// does not care which way it goes at home. Away from home it pulses only when
+// the limit switches say the door is fully open, so a stray double press at a
+// traffic light can never open the house, while a habit-tap after leaving can
+// still close a door the geofence rule missed. A second double press inside
+// LOCKOUT_MS is ignored so a nervous thumb cannot stop the door half way.
 //
 // What the firmware sends: one message per event, not retained. A press
 // shorter than 800 ms is "short", longer is "long", two shorts with less than
@@ -62,9 +64,13 @@ rules.JSRule({
       return;
     }
 
-    const fence = items.getItem('TRACKER_GeofenceId').numericState;
-    if (fence !== HOME_GEOFENCE_ID) {
-      report('Garage door left alone — bike is not at home');
+    const home = items.getItem('TRACKER_GeofenceId').numericState === HOME_GEOFENCE_ID;
+    const door = doorState();
+
+    if (!home && door !== 'open') {
+      report(door === 'closed'
+        ? 'Garage door stays closed — bike is not at home'
+        : 'Garage door left alone — it is moving and the bike is not at home');
       return;
     }
 
@@ -75,11 +81,10 @@ rules.JSRule({
     }
     lastPulse = now;
 
-    const door = doorState();
     items.getItem('GARAGE_DOOR_PULSE').sendCommand(1);
-    if (door === 'closed')    report('Garage door opening');
-    else if (door === 'open') report('Garage door closing');
-    else                      report('Garage door pulsed — it was moving');
+    if (door === 'open')        report(home ? 'Garage door closing' : 'Garage door closing — bike is away');
+    else if (door === 'closed') report('Garage door opening');
+    else                        report('Garage door pulsed — it was moving');
   }
 });
 
