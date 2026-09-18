@@ -35,6 +35,7 @@ that is not encrypted *and* authenticated.
 |------|------|--------------|---------|
 | **fast** | `5f6d0001-9b2a-4c31-8f0e-2a7c1d3e4b50` | 10 Hz | 8 binary bytes |
 | **state** | `5f6d0002-9b2a-4c31-8f0e-2a7c1d3e4b50` | 1 Hz | UTF-8 JSON |
+| **button** | `5f6d0004-9b2a-4c31-8f0e-2a7c1d3e4b50` | per press | 2 binary bytes — see section 4b. Firmware 2026.09.19-1 and later |
 
 Rates come from `BLE_FAST_MS` (100) and `BLE_JSON_MS` (1000) in the firmware
 config and may be retuned; do not hard-code a timing assumption, drive the UI off
@@ -135,6 +136,29 @@ bus, not a fault. Note that while the bus is silent the firmware runs a blocking
 bitrate scan, so notifications drop to roughly one every 1.5-3 s. Full rate
 resumes the moment the bus is detected.
 
+## 4b. `button` characteristic — 2 bytes, one notification per press
+
+Added 2026-09-19. The two handlebar trip buttons (PGN 65381 SA 39 byte 0)
+as debounced events, so a phone can act on a thumb without any WiFi.
+
+| Byte | Meaning |
+|------|---------|
+| 0 | sequence, 1-255, wraps; `0` only before the first press since boot |
+| 1 | event code: kind + 3 × side — kind 1 short, 2 long, 3 double; side 0 left, 1 right, 2 both |
+
+So `1` left short, `2` left long, `3` left double, `4` right short, `5` right
+long, `6` right double, `7` both short, `8` both long, `9` both double.
+Thresholds: short is released before 800 ms, long is sent at the 800 ms mark,
+double is two shorts with under 600 ms between release and the next press.
+
+Act on a **sequence change**, not on the code: the same gesture twice is two
+events. A read returns the last event, which is how a client that connected
+late can tell nothing has happened (`00 00`). Nothing is queued while no phone
+is paired. Its own characteristic rather than two more bytes in `fast`, so a
+client that has never heard of the UUID never subscribes and the 8-byte packet
+stays exactly what it was. The same events go to openHAB over MQTT on
+`…/button` as text.
+
 ## 5. `state` characteristic — JSON
 
 A UTF-8 JSON object, ~350-450 bytes when fully populated.
@@ -199,8 +223,8 @@ The two trip buttons (PGN 65381 SA 39 byte 0, bit 0 left, bit 2 right, found
 level: a 1 Hz JSON would miss most of them. The firmware publishes each
 debounced press as one non-retained MQTT message on `…/button` -- `left`,
 `right` or `both` plus `short` (under 800 ms), `long` (800 ms, sent at the
-mark) or `double` (two shorts with less than 600 ms between). Nothing goes over
-BLE. The table and the first rule that uses them are in the README's `button`
+mark) or `double` (two shorts with less than 600 ms between). Over BLE the
+same event is the `button` characteristic, section 4b (2026-09-19). The table and the first rule that uses them are in the README's `button`
 section.
 
 ### Deliberately absent over BLE

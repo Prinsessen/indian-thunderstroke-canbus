@@ -13,10 +13,15 @@ static bool s_pendingShort;    // a short press waiting to see if a second one f
 static bool s_pendingLeft, s_pendingBoth;
 static uint32_t s_releasedAt;
 
+static uint8_t codeFor(const char *side, const char *kind) {
+    const uint8_t k = kind[0] == 's' ? 1 : kind[0] == 'l' ? 2 : 3;          // short / long / double
+    const uint8_t s = side[0] == 'l' ? 0 : side[0] == 'r' ? 1 : 2;          // left / right / both
+    return (uint8_t)(k + 3 * s);
+}
 static void emit(const char *side, const char *kind) {
     static char buf[24];
     snprintf(buf, sizeof(buf), "%s %s", side, kind);
-    if (s_emit) s_emit(buf);
+    if (s_emit) s_emit(buf, codeFor(side, kind));
 }
 static const char *side(bool both, bool left) { return both ? "both" : (left ? "left" : "right"); }
 

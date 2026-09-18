@@ -49,6 +49,7 @@
 #define BLE_CHR_FAST   "5f6d0001-9b2a-4c31-8f0e-2a7c1d3e4b50"
 #define BLE_CHR_STATE  "5f6d0002-9b2a-4c31-8f0e-2a7c1d3e4b50"
 #define BLE_CHR_SVC    "5f6d0003-9b2a-4c31-8f0e-2a7c1d3e4b50"
+#define BLE_CHR_BUTTON "5f6d0004-9b2a-4c31-8f0e-2a7c1d3e4b50"   // 2026-09-19
 
 // Sentinels for "the bus has not told us yet". The app must treat these as
 // no-data rather than as a real zero — a real 0 rpm and an unknown rpm mean
@@ -60,6 +61,8 @@ static NimBLEServer         *gServer  = nullptr;
 static NimBLECharacteristic *gChFast  = nullptr;
 static NimBLECharacteristic *gChState = nullptr;
 static NimBLECharacteristic *gChSvc   = nullptr;
+static NimBLECharacteristic *gChButton = nullptr;
+static uint8_t gButtonSeq = 0;         // wraps 1..255; 0 = nothing since boot
 
 static bool     gPaired    = false;   // connected AND encrypted
 static uint32_t gLastFast  = 0;
@@ -212,6 +215,14 @@ void bleSetup() {
     gChFast  = svc->createCharacteristic(BLE_CHR_FAST,  props);
     gChState = svc->createCharacteristic(BLE_CHR_STATE, props);
 
+    // The handlebar buttons as events, its own characteristic rather than two
+    // more bytes in `fast`: a press is not a level, so it does not belong in a
+    // packet that repeats ten times a second, and an app that has never heard
+    // of this UUID simply never subscribes -- old app and new firmware still
+    // agree on everything they share. Same read gate as the others.
+    gChButton = svc->createCharacteristic(BLE_CHR_BUTTON, props);
+    { const uint8_t none[2] = { 0, 0 }; gChButton->setValue(none, 2); }
+
     // The one writable characteristic. WRITE_ENC|WRITE_AUTHEN mirrors the read
     // side: an unpaired phone cannot set the bike's service history any more
     // than it can read the bike's speed.
@@ -234,6 +245,14 @@ void bleSetup() {
     adv->start();
 
     Serial.printf("[ble] advertising as \"%s\" (passkey pairing required)\n", BLE_DEVICE_NAME);
+}
+
+void bleButtonEvent(uint8_t code) {
+    if (!gChButton) return;
+    if (++gButtonSeq == 0) gButtonSeq = 1;
+    const uint8_t v[2] = { gButtonSeq, code };
+    gChButton->setValue(v, 2);               // a late reader sees the last event
+    if (gPaired) gChButton->notify();
 }
 
 bool bleClientConnected() {

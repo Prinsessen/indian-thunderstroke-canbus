@@ -128,6 +128,9 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
 
     override fun onStart() {
         super.onStart()
+        // A heat gesture on the handlebar turns the app to the heat page, so the
+        // rider sees the level land. Page 3 is HeatFragment in the adapter above.
+        HandlebarButtons.onHeatGesture = { pager.currentItem = 3 }
         // Both re-applied on return from settings, where either may have changed.
         requestedOrientation = Settings.requestedOrientation
         window.attributes = window.attributes.apply {
@@ -153,6 +156,7 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
     }
 
     override fun onStop() {
+        HandlebarButtons.onHeatGesture = null
         BikeRepository.removeObserver(this)
         super.onStop()
         // The service is NOT stopped here — that is the whole point of it. The

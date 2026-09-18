@@ -144,10 +144,34 @@ object Keis : BikeRepository.Observer {
             // driver asking what state the hardware is in, and adopting that is
             // not an override — treating it as one put both zones into manual
             // the moment they connected.
-            if (hadAsked) {
+            //
+            // And not only the first. The controller has to be woken by pressing
+            // one of its level buttons, and it reports that level whenever it
+            // gets round to it — sometimes after automatic has already written
+            // its first level, which made the wake-up press look like a choice
+            // and started the ride in manual (2026-09-19). So a report inside
+            // CONNECT_GRACE_MS of the connection is adopted, never obeyed;
+            // automatic simply writes again on the next bike update.
+            val settled = System.currentTimeMillis() - (connectedAt[zone] ?: 0L) > CONNECT_GRACE_MS
+            if (hadAsked && settled) {
                 manual += zone
                 wanted[zone] = level
             }
+            notifyObservers()
+        }
+    }
+
+    /** A zone always starts a connection in automatic; see onDeviceReport. */
+    private const val CONNECT_GRACE_MS = 15_000L
+    private val connectedAt = mutableMapOf<HeatCurve.Zone, Long>()
+
+    /** The driver has its link and its notifications. Called from a BLE thread. */
+    fun onDeviceConnected(zone: HeatCurve.Zone) {
+        main.post {
+            connectedAt[zone] = System.currentTimeMillis()
+            // A reconnect is a fresh start: whatever manual choice was made before
+            // the link dropped belonged to that stretch of road.
+            manual -= zone
             notifyObservers()
         }
     }
@@ -293,6 +317,36 @@ object Keis : BikeRepository.Observer {
         wanted[zone] = level
         apply(zone, capTo(level), "manual")
         notifyObservers()
+    }
+
+    /**
+     * One step warmer or colder on every connected zone, from the handlebar.
+     *
+     * Steps from the level the garment is actually at, so a zone the rider
+     * left on HIGH and one automatic holds at LOW both move by one. Stops at
+     * the ends rather than wrapping: a thumb that presses once too often
+     * must not turn a jacket from HIGH to OFF on a cold road. Each zone
+     * becomes manual, exactly as a tap on its panel would.
+     */
+    fun step(delta: Int, why: String) {
+        val levels = HeatCurve.Level.entries
+        var moved = false
+        for (zone in HeatCurve.Zone.entries) {
+            if (!deviceFor(zone).connected) continue
+            val now = requested[zone] ?: wanted[zone] ?: HeatCurve.Level.OFF
+            val next = levels[(now.ordinal + delta).coerceIn(0, levels.size - 1)]
+            if (next == now) continue
+            lastReason[zone] = why
+            setManual(zone, next)
+            moved = true
+        }
+        if (!moved) RideLog.add("$why — nothing to change")
+    }
+
+    /** Both zones back to the curve, from the handlebar. */
+    fun returnAllToAuto(why: String) {
+        RideLog.add(why)
+        for (zone in HeatCurve.Zone.entries) if (zone in manual) returnToAuto(zone)
     }
 
     /** Never above what the bike can feed, whoever asked. */

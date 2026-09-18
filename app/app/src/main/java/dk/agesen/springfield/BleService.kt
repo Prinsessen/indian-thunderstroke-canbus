@@ -122,6 +122,12 @@ class BleService : Service(), BikeBleClient.Listener {
         updateNotification(text)
     }
 
+    override fun onButton(event: HandlebarEvent) {
+        // Handled here, in the service, because the rider's thumbs must work
+        // whether or not a page is open — the whole point is not looking down.
+        HandlebarButtons.handle(event)
+    }
+
     override fun onState(state: BikeJsonState) {
         BikeRepository.setState(state)
         // Fed here rather than from a page: the filter needs every reading the

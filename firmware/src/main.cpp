@@ -304,8 +304,11 @@ void logEvent(const char *msg);   // defined further down
 
 // Handlebar button events (buttons.cpp) -> canbus/<base>/button, not retained,
 // so a rule sees every press and a reboot does not replay the last one.
-static void buttonEmit(const char *event) {
+// The same event goes to the phone over BLE as a one-byte code (ble.h), which
+// is how the rider's thumbs reach the heated clothing without a WiFi in sight.
+static void buttonEmit(const char *event, uint8_t code) {
     if (mqtt.connected()) mqtt.publish(topic("button").c_str(), event, false);
+    bleButtonEvent(code);
     logEvent((String("[button] ") + event).c_str());
 }
 

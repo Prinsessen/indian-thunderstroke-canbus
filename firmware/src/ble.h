@@ -59,10 +59,17 @@ void bleUpdate(const VehState &st);
 // True while a phone is connected AND has completed pairing.
 bool bleClientConnected();
 
+// A handlebar button event (buttons.h codes) for the `button` characteristic:
+// two bytes, [sequence, code], notified once per event. The phone acts on a
+// sequence change, so the same code twice in a row is still two presses.
+// Nothing is queued while no phone is paired -- a press is not a log entry.
+void bleButtonEvent(uint8_t code);
+
 #else   // ---- compiled out -------------------------------------------------
 
 static inline void bleSetup() {}
 static inline void bleUpdate(const VehState &) {}
 static inline bool bleClientConnected() { return false; }
+static inline void bleButtonEvent(uint8_t) {}
 
 #endif  // ENABLE_BLE

@@ -46,6 +46,8 @@ class BikeBleClient(
         fun onStatus(text: String)
         fun onFast(packet: FastPacket)
         fun onState(state: BikeJsonState)
+        /** A handlebar button press. Default does nothing, so older listeners still compile. */
+        fun onButton(event: HandlebarEvent) {}
     }
 
     companion object {
@@ -54,6 +56,8 @@ class BikeBleClient(
         val SERVICE_UUID: UUID = UUID.fromString("5f6d0000-9b2a-4c31-8f0e-2a7c1d3e4b50")
         val CHR_FAST_UUID: UUID = UUID.fromString("5f6d0001-9b2a-4c31-8f0e-2a7c1d3e4b50")
         val CHR_STATE_UUID: UUID = UUID.fromString("5f6d0002-9b2a-4c31-8f0e-2a7c1d3e4b50")
+        /** Handlebar button events, firmware 2026.09.19-1 and later. Absent on older firmware, and that is fine. */
+        val CHR_BUTTON_UUID: UUID = UUID.fromString("5f6d0004-9b2a-4c31-8f0e-2a7c1d3e4b50")
 
         /**
          * The one writable characteristic: the odometer at the last service.
@@ -301,6 +305,8 @@ class BikeBleClient(
             }
             service.getCharacteristic(CHR_FAST_UUID)?.let { subscribe(g, it) }
             service.getCharacteristic(CHR_STATE_UUID)?.let { subscribe(g, it) }
+            // Older firmware has no button characteristic; nothing to subscribe to, nothing lost.
+            service.getCharacteristic(CHR_BUTTON_UUID)?.let { subscribe(g, it) }
 
             main.removeCallbacks(rssiPoll)
             main.postDelayed(rssiPoll, RSSI_INTERVAL_MS)
@@ -443,6 +449,9 @@ class BikeBleClient(
             CHR_FAST_UUID -> {
                 BikeRepository.setRaw(value, null)
                 FastPacket.parse(value)?.let { p -> main.post { listener.onFast(p) } }
+            }
+            CHR_BUTTON_UUID -> {
+                HandlebarButtons.onNotify(value)?.let { e -> main.post { listener.onButton(e) } }
             }
             CHR_STATE_UUID -> {
                 val text = String(value, Charsets.UTF_8)

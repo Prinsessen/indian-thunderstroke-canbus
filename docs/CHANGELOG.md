@@ -6,6 +6,30 @@ commits carry the detail.
 
 ---
 
+## 2026-09-19 — the heated clothing under the rider's thumbs
+
+Asked for in one sentence: "styre mit Keis tøj op og ned med de knapper". The
+bike's two trip buttons now reach the app over BLE — firmware 2026.09.19-1
+adds a `button` characteristic (`5f6d0004-…`, two bytes: sequence, event
+code) that notifies once per debounced press. `HandlebarButtons.kt` maps three
+gestures: left double = one step warmer on both zones, both short = one step
+colder, both long = both zones back to automatic. Steps stop at OFF and HIGH
+rather than wrapping, and a heat gesture turns the app to the heat page so the
+rider sees the level land. Right double is left to the house (garage door).
+
+Also fixed: **a ride no longer starts in manual.** The Keis controller is
+woken by pressing one of its level buttons and reports that level whenever it
+gets round to it. When that landed after automatic's first write, it looked
+like a rider's choice and latched the zone into manual — a race, so it only
+happened sometimes. A report inside fifteen seconds of connecting is now
+adopted, never obeyed (`Keis.onDeviceConnected`, `CONNECT_GRACE_MS`), and a
+reconnect starts the zone in automatic again.
+
+Older firmware has no button characteristic; the app simply never subscribes.
+Older app on new firmware ignores the unknown UUID. Nothing else in the BLE
+contract moved. **Nothing in this entry has been seen running** — written and
+checked, not yet built.
+
 ## 2026-09-14 — the cluster stops looking plotted
 
 One session, triggered by the owner looking at the screen on a Hugerock X70 and

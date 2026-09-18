@@ -209,6 +209,7 @@ class KeisBleDevice(
                     run { cccd.value = enable; g.writeDescriptor(cccd) }
                 }
             }
+            Keis.onDeviceConnected(zone)
         }
 
         @SuppressLint("MissingPermission")
