@@ -74,11 +74,11 @@ control -- flick an indicator, work the headlight -- before being believed.
 | 61444 | 0 | 7 | 75 | 103–185 | EEC1 byte 8 — Engine Demand Percent Torque (SPN 2432), offset -125 | **HIGH** | Negative means overrun braking. Range 103-179 reads as -22 % to +54 %, which is exactly right for a bike that coasts and pulls. Cheap: correlate against throttle now that we have it. |
 | 65215 | 11 | 4 | 88 | 39–220 | EBC2 byte 5 — Relative Speed, Rear Axle Left Wheel (SPN 907) | **HIGH** | 88 values, r = +0.84 against speed, offset 125 = zero. If that scaling holds this is the REAR wheel from the ABS module -- a third speed source, and a direct cross-check on the one the dash uses. |
 | 65265 | 11 | 0 | 2 | 63–127 | CCVS byte 1 — parking brake, two-speed axle, cruise pause | **MEDIUM** | Two values from SA 11. Two-bit fields; worth one controlled test. |
-| 65381 | 39 | 1 | 4 | 3–67 | Proprietary | **MEDIUM** | Four values, moves with the headlight switch. Probably a lamp state we do not need. |
+| 65381 | 39 | 1 | 4 | 3–67 | Proprietary | **SOLVED** | Indicator switch (2026-09-05): bit 2 left, bit 4 right, bit 6 cancel, each a blip while the stalk is moved. Was rated MEDIUM as "probably a lamp state". |
 | 61441 | 11 | 5 | 3 | 204–220 | EBC1 byte 6 — ABS/EBS related | **MEDIUM** | Only 41 frames and three values, all of which also appear in the cruise switch byte. Could be a mirror. Ten minutes. |
 | 65390 | 39 | 0 | 2 | 223–255 | Proprietary | **MEDIUM** | Two values, one bit. Stepped at the start of the sidestand test. The PGN the front brake was withdrawn from; bit 5 is unexplained. |
 | 61445 | 39 | 4 | 2 | 32–83 | ETC2 byte 5 — transmission field | **LOW** | Two values only. Indian already deviates in this PGN (we read the gear as ASCII in byte 6, which is not the standard), so the standard is a weak guide here. |
-| 65381 | 39 | 2 | 2 | 252–253 | Proprietary | **LOW** | Two values. |
+| 65381 | 39 | 2 | 2 | 252–253 | Proprietary | **SOLVED** | Bit 0 = hazard warning active, held for the exact duration (2026-09-05). |
 | 65381 | 39 | 3 | 2 | 243–255 | Proprietary | **SOLVED** | Bit 2 is the START BUTTON, set while pressed (2026-09-06). Rated LOW on the note "moved during the lights test" -- it had been seen and mis-scored, and a deliberate five-press run settled it in three minutes. |
 | 65381 | 39 | 0 | — | 0x10/0x11/0x14 | Proprietary | **SOLVED** | **MFD/trip buttons** (2026-09-18): bit 0 = left MFD/trip, bit 2 = right TPMS/trip, set while pressed; bit 4 = ignition on. |
 | 65386 | 39 | 1 | 2 | 252–253 | Proprietary | **LOW** | Two values, moves with the headlight. Byte 1 is the ignition/wake bit and byte 3 is the grips. |

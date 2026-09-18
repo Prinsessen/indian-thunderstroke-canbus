@@ -72,13 +72,17 @@ gauge hardware/software information, TPMS sensor registration (dealer).
 | heated grips | `grips` | SA 39 |
 | TPMS pressures/temps | `tyreFront/Rear` | VCM, SA 39 |
 | neutral | gear = N | SA 0 |
-| **low oil pressure lamp** | not decoded | sensor on the VCM side (README); probably DM1 from SA 39 — to find |
+| **low oil pressure lamp** | not broadcast at key-on (2026-09-18) | switch on the VCM side; key-on/start/idle/key-off moved no DM1 lamp bit from SA 39 or SA 0 and no VCM status bit. Presumably a DM1 fault only with the engine running — assumed, not proven |
 | **chassis fault lamp** | not decoded | DM1 from SA 39, presumably — to find |
+| MFD/trip buttons (left, right) | `button` events | VCM, SA 39 (65381 byte 0, bits 0 and 2; 2026-09-18) |
 | clock, settings | none | cluster-internal |
 
-Everything a replacement display must show is on the bus except two lamps that
-have not been hunted yet, and the clock. The two lamps are a garage evening with
-the DM1 decoder, not a project.
+Everything a replacement display must show is on the bus except the clock and
+the two lamps. The chassis-fault lamp has not been hunted yet and is a garage
+evening with the DM1 decoder. The oil-pressure lamp was hunted on 2026-09-18
+and is not broadcast at key-on; a replacement display will have to light it
+from a DM1 fault, which can only be checked when a real low-pressure event
+happens. The two trip buttons the display must react to are on the bus too.
 
 ---
 

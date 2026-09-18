@@ -228,6 +228,10 @@ more run settles it.
 Also unexplained: 65381 b0 bit 0 blipped (`10`→`11`→`10`) at 07:51:19, at the
 moment the grip heater stepped. Once only.
 
+> **Explained 2026-09-18 (garage run 3, DECODE-PLAN.md):** that blip was the
+> left MFD/trip button, 65381 SA 39 byte 0 bit 0 — the owner had pressed it to
+> step the grip display. The right TPMS/trip button is bit 2 of the same byte.
+
 ## Four tests could not have reported anything
 
 Front brake, rear brake, cruise enable and cruise SET/RESUME produced silence,
@@ -915,6 +919,8 @@ That also completes a picture worth keeping:
 | sidestand | SA 0, the ECU | 65381 byte 7 bit 0 |
 | start button | SA 39, the handlebars | 65381 byte 3 bit 2 |
 | indicators, hazard | SA 39, the handlebars | 65381 bytes 1 and 2 |
+| left MFD/trip button | SA 39, the handlebars | 65381 byte 0 bit 0 (2026-09-18) |
+| right TPMS/trip button | SA 39, the handlebars | 65381 byte 0 bit 2 (2026-09-18) |
 
 The two interlocks that can refuse to let the engine run are the ECU's. The
 things a rider presses are the handlebars'. Same PGN, different modules, and the

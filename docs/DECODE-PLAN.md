@@ -722,7 +722,9 @@ of the operator's switches.
 **A switch layer was found where this predicted one** — see GARAGE-RUN.md, runs
 1 and 2. PGN 65381 from SA 39 carries the indicator switch and its cancel in
 byte 1 bits 2, 4 and 6, and the hazard warning in byte 2 bit 0, held for the
-exact duration of the flashing. What is NOT established is that this message is
+exact duration of the flashing. **Completed 2026-09-18:** byte 0 bits 0 and 2 are
+the left and right trip buttons (garage run 3 above), so all five bits in the
+tables below are now named. What is NOT established is that this message is
 pOSS1: it is proprietary, and the standard's parameter cannot be identified from
 a proprietary layout. The lead below stands for the rest of the switches.
 
@@ -736,19 +738,21 @@ Everything observed across the four rides, in binary:
 | byte 0 | seen | meaning |
 |---|---|---|
 | `00010000` | 237x | bit 4 — dipped beam, **decoded** |
-| `00010001` | 27x | bit 4 + **bit 0 unexplained** |
-| `00010100` | 6x | bit 4 + **bit 2 unexplained** |
+| `00010001` | 27x | bit 4 + bit 0 — **left MFD/trip button, decoded 2026-09-18** |
+| `00010100` | 6x | bit 4 + bit 2 — **right TPMS/trip button, decoded 2026-09-18** |
 | `01000000` | 6x | bit 6 — main beam, **decoded** |
 
 | byte 1 | seen | meaning |
 |---|---|---|
 | `00000011` | 246x | bits 0-1, always set — baseline |
-| `00000111` | 6x | **bit 2 unexplained** |
-| `00010011` | 3x | **bit 4 unexplained** |
-| `01000011` | 3x | **bit 6 unexplained** |
+| `00000111` | 6x | bit 2 — **left indicator switch, decoded 2026-09-05** |
+| `00010011` | 3x | bit 4 — **right indicator switch, decoded 2026-09-05** |
+| `01000011` | 3x | bit 6 — **indicator cancel, decoded 2026-09-05** |
 
-Five unexplained bits, each of which appeared only a handful of times during
-ordinary riding — exactly how a switch behaves that is pressed occasionally.
+Five bits that appeared only a handful of times during ordinary riding — exactly
+how a switch behaves that is pressed occasionally. When this was written all
+five were unexplained; the garage runs of 2026-09-05 and 2026-09-18 named every
+one of them. The plan that did it is kept below as written.
 
 **The test needs no ride and no movement.** Ignition on, engine off, run
 `tools/switch_watch.py`, and work one control at a time holding each for eight
