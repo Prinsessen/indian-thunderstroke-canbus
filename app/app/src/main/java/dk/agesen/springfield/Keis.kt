@@ -312,10 +312,10 @@ object Keis : BikeRepository.Observer {
     }
 
     /** The rider taking over. Sticks until they hand it back. */
-    fun setManual(zone: HeatCurve.Zone, level: HeatCurve.Level) {
+    fun setManual(zone: HeatCurve.Zone, level: HeatCurve.Level, why: String = "manual") {
         manual += zone
         wanted[zone] = level
-        apply(zone, capTo(level), "manual")
+        apply(zone, capTo(level), why)
         notifyObservers()
     }
 
@@ -336,8 +336,7 @@ object Keis : BikeRepository.Observer {
             val now = requested[zone] ?: wanted[zone] ?: HeatCurve.Level.OFF
             val next = levels[(now.ordinal + delta).coerceIn(0, levels.size - 1)]
             if (next == now) continue
-            lastReason[zone] = why
-            setManual(zone, next)
+            setManual(zone, next, why)
             moved = true
         }
         if (!moved) RideLog.add("$why — nothing to change")
