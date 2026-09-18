@@ -40,6 +40,17 @@ const LOCKOUT_MS = 8000;      // ignore a second double press this soon after on
 
 let lastPulse = 0;
 
+// What the other gestures mean, for the result item. The heat ones are done
+// by the phone app over BLE; openHAB only reports them.
+const MEANING = {
+  'left double': 'Heated clothing one step warmer — the app does it over BLE',
+  'both short':  'Heated clothing one step colder — the app does it over BLE',
+  'both long':   'Heated clothing back to automatic — the app does it over BLE',
+  'left short':  'Cluster page — nothing for the house',
+  'right short': 'Cluster page — nothing for the house',
+  'left long':   'Trip meter reset on the cluster — nothing for the house'
+};
+
 function doorState() {
   // Adjust to your switches. Here: CLOSED = bottom OPEN + top CLOSED.
   const bottom = String(items.getItem('DOOR_BOTTOM').state);
@@ -60,7 +71,7 @@ rules.JSRule({
   execute: () => {
     const ev = String(items.getItem('CanBus_Button').state);
     if (ev !== 'right double') {
-      report(ev + ' — no action assigned');
+      report(MEANING[ev] || (ev + ' — no action assigned'));
       return;
     }
 
