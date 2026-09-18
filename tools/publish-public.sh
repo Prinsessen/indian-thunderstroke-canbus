@@ -6,6 +6,7 @@
 #     app/       <- /etc/openhab/source-code/indian-canbus-app   (source only; the
 #                   APK is built on Windows and never published)
 #     docs/      <- firmware docs + app docs, links rewritten for this layout
+#                   plus docs/examples/ (sanitized openHAB rules)
 #     firmware/  <- /etc/openhab-firmware/indian-canbus src/, platformio.ini, a
 #                   fixed subset of tools/
 #     tools/     <- this script and the pattern-free checker
@@ -52,6 +53,7 @@ for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
 for d in DECODE-PLAN DISPLAY-INTEGRATION FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
          TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES; do put "$FW/$d.md" "docs/$d.md"; done
 for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done
+put "$FW/canbus_button_garage.example.js" docs/examples/canbus_button_garage.example.js   # sanitized openHAB rule, 2026-09-19
 
 # ---- app: source only. Root docs go to docs/, README/IDEAS/tools stay private -
 for f in $(git -C /etc/openhab ls-files source-code/indian-canbus-app | sed 's|^source-code/indian-canbus-app/||'); do

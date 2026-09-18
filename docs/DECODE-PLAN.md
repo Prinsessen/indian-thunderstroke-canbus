@@ -180,6 +180,34 @@ finding. Recorded as an anomaly rather than explained away.
 
 ## The bus, as it stands
 
+### Garage run 3, 2026-09-18 evening (captures/garage_20260918_lamps.log)
+
+- **Both MFD/trip buttons are on the bus, PGN 65381 SA 39 byte 0:** left
+  (MFD/trip) = bit 0 (`10->11`), right (TPMS/trip) = bit 2 (`10->14`), set
+  while pressed. Bit 4 is on whenever the ignition is. Same byte as the rest of
+  the left switch housing; nothing is wired into the cluster connector for
+  these.
+- **The low-oil-pressure lamp is not a broadcast bit.** Key on → start → idle
+  → key off → key on moved nothing in DM1's lamp byte from SA 39 or SA 0, and
+  no VCM status bit followed the pressure. The switch is on the VCM (chassis
+  schematic); the VCM evidently reports it only as a fault with the engine
+  running, which cannot be provoked safely. Recorded as *assumed* in the
+  cluster repo.
+- **65386 SA 39 byte 2 (heated grips) pulses to 0xFA for 1–3 s right after
+  engine start** — the VCM inhibits the grips while cranking. Mask 0xFA in the
+  grips decode so the app does not show 250 for a second at every start.
+- **65265 SA 0 byte 3 bit 6 (0x40) sets when the engine starts and clears at
+  key-off:** the ECM's engine-running/cranking flag. August rides show 0x4C
+  273 times and 0x5C 138 times, so bit 4 carries something else on top.
+- 65388 from SA 23 is sent once at every key-on (seen as NEW on both
+  restarts), not periodically; 65387 from SA 0 likewise — it is the answer to
+  SA 23's request.
+
+> **SA 23's own transmit set, request behaviour and the garage checklist for
+> replacing it live in the cluster repository:**
+> `indian-springfield-cluster/docs/GARAGE-SA23.md` (settled from these
+> captures on 2026-09-18). Do not redo that analysis here.
+
 30 PGNs appear in the captures. They fall into four groups:
 
 **Shipped (16 PGNs)** — 61444, 61445, 65089, 65217, 65226, 65262, 65265, 65266,

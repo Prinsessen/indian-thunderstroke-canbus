@@ -118,6 +118,21 @@ notice.
 
 ---
 
+## The handlebar buttons, as events
+
+The two multifunction-display buttons on the left switch housing are on the
+bus: PGN 65381 from the VCM, byte 0, bit 0 for the left (MFD/trip) button and
+bit 2 for the right (TPMS/trip) one, set while pressed. Found 2026-09-18. The
+firmware debounces them into one MQTT message per event on `…/button`:
+`left`, `right` or `both`, plus `short` (released before 800 ms), `long` (held
+800 ms) or `double` (two shorts less than 600 ms apart). The cluster still gets
+its presses; the firmware only listens.
+
+[docs/examples/canbus_button_garage.example.js](docs/examples/canbus_button_garage.example.js)
+is the first thing built on it: a double press on the right button pulses the
+garage door, but only while the bike is inside the home geofence, with an
+8-second lockout. Details in [docs/DECODE-PLAN.md](docs/DECODE-PLAN.md).
+
 ## Cruise control, derived
 
 SPN 595 is not transmitted, so the engaged state is worked out instead — from

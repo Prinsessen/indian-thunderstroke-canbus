@@ -10,13 +10,13 @@ static bool gOn[PROBE__COUNT];
 
 // Short keys: the NVS key length limit is 15 characters, and these are written
 // once in a blue moon, so there is nothing to gain from spelling them out.
-static const char *KEY[PROBE__COUNT] = { "scan", "cruise", "thr", "claim" };
-static const char *NAME[PROBE__COUNT] = { "scan", "cruise", "throttle", "claims" };
+static const char *KEY[PROBE__COUNT] = { "scan", "cruise", "thr", "claim", "rates" };
+static const char *NAME[PROBE__COUNT] = { "scan", "cruise", "throttle", "claims", "rates" };
 
 // Defaults on a bike that has never been told otherwise. Everything cheap is on;
 // the 2 Hz throttle probe is off, because leaving it running is the whole
 // problem this file exists to solve.
-static const bool DEFAULT_ON[PROBE__COUNT] = { true, true, false, true };
+static const bool DEFAULT_ON[PROBE__COUNT] = { true, true, false, true, false };
 
 void probeFlagsBegin() {
     gOpen = gPrefs.begin("canbusprb", false);

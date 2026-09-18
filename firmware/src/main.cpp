@@ -22,6 +22,7 @@
  */
 
 #include <Arduino.h>
+#include "buttons.h"
 #include <esp_timer.h>   // OTA dead man's switch -- see otaGuardStart()
 #include <map>
 #include <stdarg.h>
@@ -298,6 +299,15 @@ uint32_t lastHeartbeat = 0;
 bool noCanReported = false;
 
 String topic(const char *leaf) { return String(MQTT_BASE_TOPIC) + "/" + leaf; }
+
+void logEvent(const char *msg);   // defined further down
+
+// Handlebar button events (buttons.cpp) -> canbus/<base>/button, not retained,
+// so a rule sees every press and a reboot does not replay the last one.
+static void buttonEmit(const char *event) {
+    if (mqtt.connected()) mqtt.publish(topic("button").c_str(), event, false);
+    logEvent((String("[button] ") + event).c_str());
+}
 
 // Per-board unique MQTT client ID = MQTT_CLIENT_ID + "-" + last 3 MAC bytes.
 // Two boards flashed from the SAME config.h would otherwise share the client ID
@@ -1531,8 +1541,53 @@ static uint32_t probeLastPub = 0;
 static uint32_t probe2304At  = 0;
 static int      probe2304Val = -1;
 
+// --- probe/rates: how often each (PGN, SA) arrives ---------------------------
+// Not a change detector: it counts EVERY frame, which the MQTT firehose never
+// did (it publishes on change, at 1 s), so this is the only way to learn the
+// transmit periods without the USB serial cable. Ten-second windows, one JSON
+// per window: {"win_ms":10012,"rows":[[pgn,sa,count,avg_ms,min_ms],...]}.
+// Off by default; switched from openHAB like the other probes. Written for the
+// SA 23 profile (indian-springfield-cluster/docs/GARAGE-SA23.md, step 3).
+struct RateSlot { bool used; uint8_t sa; uint16_t n; uint32_t pgn, last, minDt, sumDt; };
+static RateSlot gRates[48];
+static uint32_t gRatesWin = 0;
+
+static void ratesFrame(const J1939 &j) {
+    const uint32_t now = millis();
+    if (!gRatesWin) gRatesWin = now;
+    int slot = -1;
+    for (int i = 0; i < 48; i++) {
+        RateSlot &r = gRates[i];
+        if (r.used && r.pgn == j.pgn && r.sa == j.sa) {
+            const uint32_t dt = now - r.last; r.last = now; r.n++;
+            if (r.n > 1) { if (dt < r.minDt) r.minDt = dt; r.sumDt += dt; }
+            slot = -2; break;
+        }
+        if (!r.used && slot < 0) slot = i;
+    }
+    if (slot >= 0) { RateSlot &r = gRates[slot]; r.used = true; r.pgn = j.pgn; r.sa = j.sa; r.n = 1; r.last = now; r.minDt = 0xFFFFFFFFu; r.sumDt = 0; }
+
+    if (now - gRatesWin >= 10000) {
+        static char buf[2900];
+        int n = snprintf(buf, sizeof(buf), "{\"win_ms\":%lu,\"rows\":[", (unsigned long)(now - gRatesWin));
+        bool first = true;
+        for (int i = 0; i < 48 && n < (int)sizeof(buf) - 64; i++) {
+            const RateSlot &r = gRates[i]; if (!r.used) continue;
+            const unsigned long avg = r.n > 1 ? r.sumDt / (r.n - 1) : 0;
+            n += snprintf(buf + n, sizeof(buf) - n, "%s[%lu,%u,%u,%lu,%lu]", first ? "" : ",",
+                          (unsigned long)r.pgn, (unsigned)r.sa, (unsigned)r.n, avg, (unsigned long)(r.n > 1 ? r.minDt : 0));
+            first = false;
+        }
+        n += snprintf(buf + n, sizeof(buf) - n, "]}");
+        mqtt.publish(topic("probe/rates").c_str(), buf, false);
+        memset(gRates, 0, sizeof(gRates));
+        gRatesWin = now;
+    }
+}
+
 static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
     if (!probeOnline) return;                      // cached; no network call here
+    if (probeEnabled(PROBE_RATES)) ratesFrame(j);  // every frame, any speed; see above
 
     // --- PGN 65265 SA 39: the cruise bytes, at ANY speed --------------------
     // Deliberately ABOVE the stationary gate, and it is the only thing here
@@ -2090,6 +2145,10 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             if (j.sa == 39 && nn >= 1 && b[0] != 0xFF) {
                 const char *h = (b[0] & 0x40) ? "High" : ((b[0] & 0x10) ? "Low" : "Off");
                 SETS(headlight, h);
+                // The two MFD/trip buttons, bit 0 (left) and bit 2 (right), found
+                // 2026-09-18 with three presses each. Turned into short/long/double
+                // events in buttons.cpp; the house acts on them (garage door).
+                buttonsSample((b[0] & 0x01) != 0, (b[0] & 0x04) != 0, millis());
             }
             // Hazard warning, byte 2 bit 0. Measured 2026-09-05: FC -> FD for
             // the exact duration of the hazard flashing, back to FC on release.
@@ -3357,7 +3416,8 @@ void setup() {
     // than against an uninitialised one.
     serviceBegin();
     countersBegin();      // tallies that must outlive an OTA
-    probeFlagsBegin();    // which probes run; also outlives an OTA
+    probeFlagsBegin();
+    buttonsBegin(buttonEmit);    // which probes run; also outlives an OTA
     sleepBegin();         // deep-sleep setting, and why this boot happened
     bleSetup();
 
@@ -3492,6 +3552,7 @@ void loop() {
 #endif
     if (mqtt.connected()) {
         mqtt.loop();              // MQTT message processing (calls callback)
+        buttonsTick(millis());    // resolves a short press once the double-press gap has passed
         publishHeartbeat();
         ArduinoOTA.handle();       // OTA update handler (non-blocking when idle)
     }

@@ -27,6 +27,7 @@ enum ProbeId {
     PROBE_CRUISE,      // 65265 SA39 bytes 4-5, any speed, on change only
     PROBE_THROTTLE,    // 65382 SA0 bytes 1+4, any speed, 2 Hz -- the expensive one
     PROBE_CLAIMS,      // address claims
+    PROBE_RATES,       // frame rate per (PGN, SA), 10 s windows -- for the SA 23 profile; off by default
     PROBE__COUNT
 };
 

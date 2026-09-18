@@ -17,5 +17,5 @@ USER=$(sed -n 's/^#define MQTT_USERNAME *"\(.*\)".*/\1/p' "$(dirname "$0")/../sr
 PASS=$(sed -n 's/^#define MQTT_PASSWORD *"\(.*\)".*/\1/p' "$(dirname "$0")/../src/config.h")
 exec mosquitto_sub -h "${HOST:-mqtt.example.com}" -u "$USER" -P "$PASS" -v \
      -t 'canbus/springfield/probe' -t 'canbus/springfield/probe/2304' \
-     -t 'canbus/springfield/probe/cruise' \
+     -t 'canbus/springfield/probe/cruise' -t 'canbus/springfield/probe/rates' \
   | while read -r topic rest; do printf '%s  %-28s %s\n' "$(date +%H:%M:%S)" "${topic##*/}" "$rest"; done
