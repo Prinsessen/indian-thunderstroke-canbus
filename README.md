@@ -128,7 +128,7 @@ firmware debounces them into one MQTT message per event on `…/button`:
 800 ms) or `double` (two shorts less than 600 ms apart). The cluster still gets
 its presses; the firmware only listens.
 
-[docs/examples/canbus_button_garage.example.js](docs/examples/canbus_button_garage.example.js)
+[openhab/rules/canbus_button_garage.example.js](openhab/rules/canbus_button_garage.example.js)
 is the first thing built on it: a double press on the right button pulses the
 garage door, but only while the bike is inside the home geofence, with an
 8-second lockout. Details in [docs/DECODE-PLAN.md](docs/DECODE-PLAN.md).
@@ -220,6 +220,8 @@ heat is coming out of the battery.
 firmware/     ESP32-S3 (LilyGO T-2CANFD, MCP2518FD). PlatformIO.
 app/          Android cluster. Kotlin, plain Views and Canvas, no Compose.
 docs/         The protocol, the decode plan, and the method.
+openhab/      The openHAB side: canbus.items, canbus.things and the rules that
+              run on top of the decoder, straight from the author's server.
 ```
 
 | document | what it is |
@@ -234,6 +236,7 @@ docs/         The protocol, the decode plan, and the method.
 | [`SLEEP.md`](docs/SLEEP.md) | Deep sleep on a permanently powered board: how it wakes, and the four faults only the bike found |
 | [`TRANSMIT.md`](docs/TRANSMIT.md) | What leaving hardware listen-only would unlock, what it would cost, and what must stay impossible |
 | [`BUILD-SETUP.md`](docs/BUILD-SETUP.md) · [`WORKFLOW.md`](docs/WORKFLOW.md) | Building the app, and the traps that cost an afternoon each |
+| [`openhab/`](openhab/) | The items and things that bind the MQTT topics (70 channels, JSONPATH picks, no transforms), the OTA trigger, the probe queue, the cruise latch, "this ride" and what survives key-off — and an example that opens a garage door from the handlebar |
 | [`SKILLS.md`](docs/SKILLS.md) | A handover note: the machine, the bus, the method, and eight ways to be wrong |
 
 **Start with [`docs/PROTOCOL.md`](docs/PROTOCOL.md)** — every field, over MQTT and

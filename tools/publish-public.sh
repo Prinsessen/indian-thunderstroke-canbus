@@ -6,14 +6,15 @@
 #     app/       <- /etc/openhab/source-code/indian-canbus-app   (source only; the
 #                   APK is built on Windows and never published)
 #     docs/      <- firmware docs + app docs, links rewritten for this layout
-#                   plus docs/examples/ (sanitized openHAB rules)
 #     firmware/  <- /etc/openhab-firmware/indian-canbus src/, platformio.ini, a
 #                   fixed subset of tools/
 #     tools/     <- this script and the pattern-free checker
+#     openhab/   <- canbus.items, canbus.things and the CAN rules from
+#                   /etc/openhab/automation/js (2026-09-19, they carry no secrets)
 #     README.md, LICENSE   public-only, never touched here
 #
 # NOT published, on purpose: captures/ (VIN and odometer of one motorcycle in
-# every line), REVERSE_ENGINEERING.md, GIT-NOTES.md, the .items/.things files,
+# every line), REVERSE_ENGINEERING.md, GIT-NOTES.md, canbus_production.*,
 # the app's README/IDEAS, and any binary. Adding to the public surface is a
 # decision, so the lists below are explicit rather than "everything".
 #
@@ -53,7 +54,14 @@ for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
 for d in DECODE-PLAN DISPLAY-INTEGRATION FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
          TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES; do put "$FW/$d.md" "docs/$d.md"; done
 for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done
-put "$FW/canbus_button_garage.example.js" docs/examples/canbus_button_garage.example.js   # sanitized openHAB rule, 2026-09-19
+# ---- openHAB side (2026-09-19): the live items/things pair and the CAN rules ----
+# The .items/.things carry topics and JSONPATH picks only; the broker bridge with
+# its host and credentials lives in a different file and is not copied.
+put "$FW/canbus.items"  openhab/canbus.items
+put "$FW/canbus.things" openhab/canbus.things
+put "$FW/canbus_button_garage.example.js" openhab/rules/canbus_button_garage.example.js
+for r in canbus-ota canbus-probe-queue canbus-cruise-latch canbus-trip-this-ride canbus-clear-live-values; do
+  put /etc/openhab/automation/js/$r.js openhab/rules/$r.js; done
 
 # ---- app: source only. Root docs go to docs/, README/IDEAS/tools stay private -
 for f in $(git -C /etc/openhab ls-files source-code/indian-canbus-app | sed 's|^source-code/indian-canbus-app/||'); do

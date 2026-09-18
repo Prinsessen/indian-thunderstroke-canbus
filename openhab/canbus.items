@@ -1,0 +1,394 @@
+// =============================================================================
+// Indian Springfield 2017 — CAN bus  ·  PRODUCTION-MODE items
+// =============================================================================
+// DROP-IN REPLACEMENT for items/canbus.items, paired with
+// indian-canbus/canbus_production.things, for when the ESP32 runs
+// FIRMWARE_MODE = 1 (PRODUCTION).
+//
+// Same item NAMES as the discovery file, so sitemaps/myhouse.sitemap works
+// UNCHANGED. This trimmed set drops the discovery-only diagnostics (alt RPM /
+// throttle, raw-hex Polaris dumps, shared-tyre topic, VIN/SW-ID, DM1, live
+// frame) because production streams only the confirmed, display-ready values.
+//
+// The two openHAB helper rules keep working in this mode because their trigger
+// items exist here:
+//   canbus-trip-this-ride.js  <- CanBus_RPM + CanBus_Trip
+//   canbus-cruise-latch.js    <- CanBus_CruiseSwitch
+//
+// Activate: use EITHER this file OR items/canbus.items — never both (duplicate
+// item names). Copy this to items/ when you flash the production firmware.
+//
+// -----------------------------------------------------------------------------
+// STRUCTURE, restructured 2026-09-07
+// -----------------------------------------------------------------------------
+// Items belong to a domain sub-group, and the sub-groups belong to gCanBus. So
+// gCanBus is still the one root that holds everything, but it now holds it in
+// ten named boxes instead of one flat list of seventy.
+//
+// Safe to do because nothing consumed the flat membership: influxdb.persist
+// names every item individually, no JS rule mentions gCanBus, and the sitemap
+// lists items explicitly rather than rendering the group. Checked before the
+// move, not assumed. NO ITEM WAS RENAMED -- the InfluxDB series, the Android
+// app and both helper rules key on the names, and those are untouched.
+//
+// Section order below is the sitemap's order, so the two files read the same
+// way: what stops a ride first, what you look at while riding next, what you
+// only look at when something is wrong last.
+// =============================================================================
+Group  gCanBus                 "SpringCommand"                   <network>
+// The ten boxes. Order matters: it is the order they appear on the sitemap.
+Group  gCanBus_System          "Status"                          <network>     (gCanBus)
+Group  gCanBus_Alerts          "Alerts"                          <error>       (gCanBus)
+Group  gCanBus_Interlock       "Interlocks & tilt"               <lock>        (gCanBus)
+Group  gCanBus_Tyres           "Tyres"                           <pressure>    (gCanBus)
+Group  gCanBus_Ride            "Ride"                            <motion>      (gCanBus)
+Group  gCanBus_Engine          "Engine"                          <motion>      (gCanBus)
+Group  gCanBus_Controls        "Controls & comfort"              <switch>      (gCanBus)
+Group  gCanBus_Power           "Electrical & weather"            <energy>      (gCanBus)
+Group  gCanBus_Identity        "Identity"                        <text>        (gCanBus)
+Group  gCanBus_Probe           "Discovery probes"                <zoom>        (gCanBus)
+// =============================================================================
+// 1. SPRINGCOMMAND — is the logger alive, and can I reach it?
+// =============================================================================
+// Not about the motorcycle at all: this is the ESP32 answering for itself.
+// First on the page because when it is wrong, every reading below it is stale
+// and you need to know that before you trust any of them.
+// MQTT last will. "online" means the board holds a broker connection -- it is
+// the transport, not a setting. Displayed as Enabled/Disabled via
+// transform/springcommand.map because SpringCommand as a whole is up or down
+// with it, but do not confuse it with CanBus_Sleep, which is the real switch.
+String CanBus_Status           "Bus Status [%s]"                 <network>     (gCanBus_System) { channel="mqtt:topic:broker:canbus:status" }
+String CanBus_Debug            "Firmware log [%s]"               <text>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:debug" }
+// Ignition. Not decoded from anything -- the bus is silent with the ignition off
+// and busy the moment it comes on, so bus activity IS the ignition. Found the
+// long way round: a bit in PGN 65386 goes high when the bike wakes, but that
+// PGN sends every 11 seconds and catches a press about one time in ten, while
+// the bus announces the same event instantly and every time.
+Switch CanBus_Ignition         "Ignition [%s]"                   <switch>      (gCanBus_System) { channel="mqtt:topic:broker:canbus:ignition" }
+// asleep / awake, published in the last moment before the chip goes down.
+//
+// Without it, CanBus_Status reading "offline" means any of: sleeping on purpose,
+// crashed, out of WiFi range, or unpowered. Those want very different responses,
+// and once the board is behind a panel rather than on a USB lead the difference
+// is between shrugging and going to look.
+//
+//   Status offline + this "asleep"  -> working as designed
+//   Status offline + this "awake"   -> something went wrong
+String CanBus_SleepState       "Sleep state [%s]"                <moon>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:sleepState" }
+String CanBus_SleepWake        "Last wake [%s]"                  <time>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:sleepWake" }
+// Deep sleep while the bus is quiet. OFF by default and this switch is the way
+// back: the board takes permanent 12 V from the service connector, so left awake
+// it holds WiFi up into a battery nobody is charging. Asleep it is unreachable —
+// no OTA, no tilt watch — until the ignition wakes it or the hourly backstop
+// fires. Turning this OFF takes effect at the next wake, not immediately.
+Switch CanBus_Sleep            "Deep sleep [%s]"                 <moon>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:sleepEnable" }
+String CanBus_WiFiIP           "WiFi IP [%s]"                    <network>     (gCanBus_System) { channel="mqtt:topic:broker:canbus:wifiIp" }
+String CanBus_Bitrate          "Detected Bitrate [%s]"           <line>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:bitrate" }
+// Frames counted in the detection window at boot. Since CAN_FIXED_BITRATE was
+// set there is only one rate to try, so this stopped being a search result and
+// became a plain answer to "did the bus reply at 250 kbit?". Zero after a boot
+// with the ignition on means the wiring, not the rate.
+Number CanBus_ScanFrames       "Scan Frames [%d]"                <chart>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:scanFrames" }
+// OTA status line — driven live by the ESP32 (canbus/indian/ota/status):
+// "Running <ver>" on boot, "Starting download...", "Downloading NN%",
+// "OK — rebooting" or "FAILED (...)". The Switch command is caught by
+// automation/js/canbus-ota.js, which publishes "update" to canbus/indian/ota.
+String CanBus_OTA              "Firmware OTA Status [%s]"        <sync>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:otaStatus" }
+String CanBus_FW_Version       "Firmware Version [%s]"           <text>        (gCanBus_System) { channel="mqtt:topic:broker:canbus:fw" }
+// =============================================================================
+// 2. ALERTS — things that should make you stop, or not set off
+// =============================================================================
+// The admission rule for this group is deliberately narrow: act now. A counter
+// that only means something as a trend belongs with its subsystem instead, which
+// is why the gear-glitch counter is down in Engine and the wheel dropouts are
+// here -- the dropouts are the early warning for a failure that has already
+// happened once on this bike and took the ABS out in traffic.
+// DM1 = active J1939 fault codes (PGN 65226).
+String CanBus_DM1              "Active DTCs [%s]"                <error>       (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:dm1" }
+String CanBus_DM1_Raw          "Active DTCs hex [%s]"            <text>        (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:dm1Raw" }
+// Verdict on the two wheel sensors: OK, FRONT LOST or REAR LOST. Exists because
+// a missing shim once let the tone ring machine the face off the front sensor,
+// and the first warning was the ABS quitting in traffic.
+String CanBus_Wheels           "Wheel sensors [%s]"              <error>       (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:wheels" }
+// Brief front-sensor dropouts since the ESP32 last booted. The COUNT is the
+// signal, not any single one: the sensor is an active Hall device, so it counts
+// teeth correctly or not at all -- it never reads progressively slow, and there
+// is no drift to watch. A widening air gap shows up as intermittency instead,
+// which the ABS module tolerates without setting a fault. One a week becoming
+// twenty a ride is a sensor being ground away.
+Number CanBus_WheelBlips       "Dropouts front [%d]"             <error>       (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:wheelBlips" }
+// The rear is watched too, and not out of symmetry: BOTH 0.5 mm shims were left
+// out at that service, so both sensors have run with too small an air gap. Only
+// the front was ground through. The rear survived the same treatment and is
+// under the same threat.
+Number CanBus_WheelBlipsRear   "Dropouts rear [%d]"              <error>       (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:wheelBlipsRear" }
+// Security / key fob state, PGN 65386 SA 39 byte 0 bits 6-7. This is what the
+// withdrawn horn decode actually was -- bit 6 is the system looking for the fob,
+// which is why a horn tell-tale lit at every press of the wake button.
+//   OK         fob authorised
+//   SEARCHING  looking for it
+//   NOT FOUND  gave up; the bike shuts down and the dash shield flashes
+String CanBus_Security         "Security [%s]"                   <lock>        (gCanBus_Alerts) { channel="mqtt:topic:broker:canbus:security" }
+// =============================================================================
+// 3. INTERLOCKS & TILT — why it will not start, or will not stay running
+// =============================================================================
+// High on the page for one reason: every item here is a thing that silently
+// refuses to let the engine run, and the rider's own account of the kill switch
+// is minutes spent wondering why the bike is dead. A page that answers that in
+// one glance earns its place above the riding numbers.
+// The kill switch, PGN 65381 SA 0 byte 4 bit 6. Set = RUN, clear = STOP. Two
+// bytes from the sidestand in the same ECU message -- the two interlocks that
+// can refuse to let the engine run, side by side. Found 2026-09-06; it had never
+// been hunted, because no document remembered it.
+String CanBus_KillSwitch       "Kill switch [%s]"                <switch>      (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:killSwitch" }
+// The switch itself, PGN 65381 SA 0 byte 7 bit 0. DOWN = extended, which is the
+// state SPN 520267 faults on when it blocks a start.
+String CanBus_StandSwitch      "Sidestand [%s]"                  <switch>      (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:standDown" }
+// Start button, PGN 65381 SA 39 byte 3 bit 2. Set = pressed. SA 39 is the
+// handlebar switch module -- the same one carrying the indicators and hazard --
+// which is why it still reports with the kill switch blocking the crank: the
+// button never goes through the ECU at all. Expect PRESSED only while held.
+String CanBus_Button           "Handlebar button [%s]"           <switch>      (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:button" }
+String CanBus_Button_Result    "Handlebar [%s]"                  <switch>      (gCanBus_Interlock)   // what the last press did, written by vehicle-motorcycle-button-garage.js
+String CanBus_StartButton      "Start button [%s]"               <switch>      (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:startButton" }
+// UPRIGHT / STAND / DOWN, and only while stationary. Derived from the tilt, so
+// it answers whether the bike is RESTING on the stand -- not where the stand is.
+//
+// This comment used to say there is no sidestand switch on this bus. There is,
+// and it is CanBus_StandSwitch above. The claim stood for three weeks because
+// the hunt behind it ran with thirty bytes masked out of the probe; settled
+// 2026-09-06 against the cluster's own red lamp.
+String CanBus_Stand            "Hviler på støtteben [%s]"        <switch>      (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:stand" }
+// Tip-over sensor, PGN 2304 byte 0. 127 upright, 113 resting on the sidestand.
+// NOT a lean angle: in a balanced corner the force runs down the bike's own
+// vertical axis, so it reads upright however far over you are. The August rides
+// confirm it -- at road speed it never left 127, while every long excursion sits
+// at 114 with the speed at zero, which is a stop with the bike on its stand.
+Number CanBus_Lean             "Static roll angle [%d]"          <line>        (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:lean" }
+// Seconds since PGN 65381 SA 0 last arrived -- the message carrying BOTH the
+// kill switch and the sidestand, so one age is correct for both. Hidden from the
+// sitemap; it feeds CanBus_Interlocks_Seen below.
+Number CanBus_Interlock_Age    "Interlock reading age [%d s]"    <time>        (gCanBus_Interlock) { channel="mqtt:topic:broker:canbus:interlockAge" }
+// "sidst set 15:27", written once when the machine goes off. The interlocks are
+// worth keeping -- walking up to a machine that will not start, STOP is exactly
+// what you want to see -- but 65381 SA 0 is event-driven, and in the August
+// captures it fell silent three minutes before the bus did on one ride and
+// seventeen on another. A bare value would lie about how fresh it is.
+String CanBus_Interlocks_Seen  "Interlocks last seen [%s]"       <time>        (gCanBus_Interlock)
+// =============================================================================
+// 4. TYRES — TPMS (confirmed 2026-08-15)
+// =============================================================================
+// Above the riding numbers because it is the other pre-ride check, and because
+// the app already raises a banner on it.
+Number CanBus_TyreFront        "Front Tyre [%.1f PSI]"           <pressure>    (gCanBus_Tyres) { channel="mqtt:topic:broker:canbus:tyreFront" }
+Number CanBus_TyreRear         "Rear Tyre [%.1f PSI]"            <pressure>    (gCanBus_Tyres) { channel="mqtt:topic:broker:canbus:tyreRear" }
+Number CanBus_TyreFrontTemp    "Front Tyre Temp [%.1f °C]"       <temperature> (gCanBus_Tyres) { channel="mqtt:topic:broker:canbus:tyreFrontTemp" }
+Number CanBus_TyreRearTemp     "Rear Tyre Temp [%.1f °C]"        <temperature> (gCanBus_Tyres) { channel="mqtt:topic:broker:canbus:tyreRearTemp" }
+// The OLDER of the two tyre readings, in seconds -- never claims fresher than
+// reality. The sensors sleep when the wheels stop, so a pressure on a parked
+// machine can be a whole ride old, which is exactly when someone walks up with
+// a pump. Hidden; it feeds CanBus_Tyres_Seen.
+Number CanBus_Tyre_Age         "Tyre reading age [%d s]"         <time>        (gCanBus_Tyres) { channel="mqtt:topic:broker:canbus:tyreAge" }
+String CanBus_Tyres_Seen       "Tyres last measured [%s]"        <time>        (gCanBus_Tyres)
+// =============================================================================
+// 5. RIDE — the numbers you actually watch
+// =============================================================================
+// The two wheel-speed readings sit together on purpose: the pair IS the
+// diagnostic, and splitting them hides the ratio that matters.
+// The REAR wheel -- this is what the dash shows. It is the driven wheel and so
+// it slips, running 1.0351x high against CanBus_SpeedFront, with the error
+// growing with speed. That gap is deliberate and stays; the optimistic reading
+// is a margin against a speed camera. See DECODE-PLAN.md.
+Number CanBus_Speed            "Speed rear · dash [%.1f km/h]"   <motion>      (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:speed" }
+// Front wheel speed, PGN 65215 from the ABS module. This is the HONEST road
+// speed: the dash reads the rear wheel, which is driven and slips, and runs
+// 1.0351x high. Kept because the pair is a diagnostic -- charted over months, a
+// drift in the ratio is a sensor being worn away.
+Number CanBus_SpeedFront       "Speed front · true [%.1f km/h]"  <line>        (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:speedFront" }
+Number CanBus_Odometer         "Odometer [%d km]"                <chart>       (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:odometer" }
+Number CanBus_Trip             "Trip 1 [%.1f km]"                <chart>       (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:trip" }
+// Current-ride distance = Trip 1 − snapshot at engine start (canbus-trip-this-ride.js).
+Number CanBus_TripStart        "Trip start snapshot [%.1f km]"                 (gCanBus_Ride)
+Number CanBus_TripThis         "Trip (this ride) [%.1f km]"      <chart>       (gCanBus_Ride)
+Number CanBus_Service          "Last Service [%d km]"            <wrench>      (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:svcKm" }
+// Fuel moved here from Engine 2026-09-07: the level, the average, the
+// instantaneous figure and the flow rate are one question -- how far will this
+// get me -- and they were split across two frames.
+Number CanBus_Fuel             "Fuel [%d %%]"                    <oil>         (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:fuel" }
+Number CanBus_FuelEconomy      "Fuel Economy [%.1f l/100km]"     <oil>         (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:fuelEconomy" }
+// Instantaneous, against CanBus_FuelEconomy which is the running average.
+Number CanBus_FuelEconInst     "Economy now [%.1f l/100km]"      <fuel>        (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:fuelEconInst" }
+// PGN 65266 carries four fields and we were reading one. The throttle was in
+// byte 7 the whole time -- SPN 51, Engine Throttle Valve Position -- and is now
+// live again on CanBus_Throttle after being withdrawn on 2026-09-02, when the
+// byte we had been calling throttle turned out to be engine speed over 256.
+Number CanBus_FuelRate         "Fuel rate [%.2f L/h]"            <fuel>        (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:fuelRate" }
+// Range to empty, straight from the dash rather than computed here: PGN 65382
+// SA 0 byte 3, one count per km, identified 2026-09-08 by reading the display
+// against the byte. It is the machine's own estimate and it is pessimistic on
+// purpose -- it uses a recent-consumption window, so it sat at 212 km on a full
+// tank while CanBus_FuelEconomy, the lifetime average, read 6.6 l/100km. That
+// gap is the estimator being cautious, not a decode error. Do not "correct" it.
+Number CanBus_Range            "Range [%d km]"                   <oil>         (gCanBus_Ride) { channel="mqtt:topic:broker:canbus:range" }
+// =============================================================================
+// 6. ENGINE
+// =============================================================================
+Number CanBus_RPM              "Engine RPM [%d rpm]"             <motion>      (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:rpm" }
+Number CanBus_Throttle         "Throttle [%d %%]"                <line>        (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:throttle" }
+String CanBus_Gear             "Gear [%s]"                       <line>        (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:gear" }
+// The gear position sensor on this bike is unreliable: a pin held against the
+// sensor by a spring makes the seven contacts, the mechanism is dirty, and it
+// reports gears that are not engaged. Three sensors have been replaced under
+// warranty without anyone cleaning the mechanism.
+//
+// When it lies at idle on the stand, the interlock stops the engine -- correctly,
+// on a false reading. This counts those moments. It never acts on them: if the
+// gear were REAL and the clutch came out, the bike would lunge, the stand would
+// dig in, and 400 kg would go over. That interlock is not negotiable.
+//
+// The bus cannot tell a false gear from a real one -- the clutch switch would,
+// and Indian sends it as "not available" -- so this records and the rider
+// judges. Twenty-three timestamped events on a stationary bike is evidence a
+// service desk cannot wave away, and after the mechanism is cleaned the same
+// counter says whether it worked.
+//
+// Stays beside the gear reading rather than up in Alerts: it is a trend to argue
+// with a service desk about, not something to act on at the roadside.
+Number CanBus_GearGlitches     "Gear glitches [%d]"              <error>       (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:gearGlitches" }
+String CanBus_GearEvent        "Last gear event [%s]"            <line>        (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:gearEvent" }
+// NOT coolant. The Thunder Stroke 111 is air-cooled; there is no coolant on this
+// motorcycle. Indian reuses the J1939 coolant slot (PGN 65262 byte 1, SPN 110)
+// for engine temperature, which the captures identify as OIL: it starts near
+// ambient, climbs over eight to ten minutes and settles at 100-115 C. A
+// cylinder head on an air-cooled twin runs 150-200 C, so this is not the head.
+// PGN 65262 byte 1. J1939 calls this Engine Coolant Temperature; this engine
+// has no coolant and no oil temperature sensor either. The service manual lists
+// exactly one engine temperature sensor -- "CHT (Cylinder Head Temperature)
+// Sensor, located on the rear face of the front cylinder head" -- so that is
+// what this reading is. Corrected 2026-09-05; it was briefly labelled engine
+// oil temp on the reasoning that an air-cooled bike has no coolant. True, but
+// the follow-through was wrong: the parts list settles it, not the shape of the
+// curve. Item name stays CanBus_Coolant so the InfluxDB series keeps its history.
+Number CanBus_Coolant          "Cylinder head temp [%.0f °C]"    <temperature> (gCanBus_Engine) { channel="mqtt:topic:broker:canbus:coolant" }
+// =============================================================================
+// 7. CONTROLS & COMFORT — what your hands and feet are doing
+// =============================================================================
+// Brake, clutch, cruise, lights and grips merged into one group 2026-09-07.
+// They were three frames -- "Brake & Cruise", "Lighting & Controls" and "Heated
+// Grips" -- with the grips stranded at the bottom of the page behind the
+// developer probes. They are all the same thing: handlebar controls.
+// ONE brake signal. SPN 597 from SA 0 is the brake LIGHT switch, and on a
+// motorcycle either control operates it, so the lever and the pedal cannot be
+// told apart from the bus. The manual does give them separate identities (SPN
+// 520322 front, 520323 rear) -- the module knows, it just does not say.
+// CanBus_Brake and CanBus_Brake_Latched were removed 2026-09-05: their decode
+// had been withdrawn and the field was never published, so both sat frozen.
+String CanBus_BrakeRear        "Brake [%s]"                      <switch>      (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:brakeRear" }
+// Clutch, SPN 598, free from the byte the brake already came from.
+String CanBus_Clutch           "Clutch [%s]"                     <switch>      (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:clutch" }
+// Cruise, decoded in the garage 2026-09-05. The item that was withdrawn on
+// 09-03 is back with the right meaning: it was reading the SET button and
+// calling it the engaged state.
+//   Engaged  SPN 595 -- stays absent until proven on a ride; "not available"
+//            is never published as OFF, which is what caused the false tell-tale
+//   Enabled  SPN 596 -- the rocker. Was ON for all four August rides.
+//   Switch   SPN 599/601 -- momentary; see canbus-cruise-latch.js
+String CanBus_CruiseEnable     "Cruise Enabled [%s]"             <switch>      (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:cruiseEnable" }
+// DERIVED, and the label says so. SPN 595 is not on this bus -- proved on the
+// road 2026-09-05 with the cruise demonstrably holding at 94 km/h and byte 4
+// unmoved, while the button presses came through in the same frames. This is
+// worked out from measured inputs: the SET/RESUME press arms it, and it only
+// claims HOLDING once the speed has sat still for three seconds. Brake, clutch
+// and the rocker end it outright; drifting off the held speed ends it too,
+// which is how a backward flick of the grip is caught without being visible.
+String CanBus_Cruise           "Cruise held [%s]"                <switch>      (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:cruise" }
+String CanBus_CruiseSwitch     "Cruise Switch [%s]"              <switch>      (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:cruiseSw" }
+String CanBus_CruiseSw_Latched "Cruise Switch (recent) [%s]"     <switch>      (gCanBus_Controls)
+String CanBus_Headlight        "Headlight [%s]"                  <light>       (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:headlight" }
+Switch CanBus_IndLeft          "Indicator Left [%s]"             <light>       (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:indicatorLeft" }
+Switch CanBus_IndRight         "Indicator Right [%s]"            <light>       (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:indicatorRight" }
+// Horn removed 2026-09-05: eight presses across two garage runs moved nothing,
+// and the manual gives SPN 520293 only output-driver faults. Not on this bus.
+// Hazard warning, PGN 65381 SA 39 byte 2 bit 0 -- a held state, measured for
+// the exact duration of the flashing.
+String CanBus_Hazard           "Hazard Warning [%s]"             <light>       (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:hazard" }
+// Heated grips: ten detents, PGN 65386 byte 2 in steps of 25. Confirmed on the
+// bike 2026-09-04 -- it rode in the same frame as the horn all along.
+Number CanBus_Grips            "Heated Grips [%d / 10]"          <heating>     (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:grips" }
+// Grip temperature, PGN 65394 bytes 0 and 1, J1939 -40 offset. Proved 2026-09-04.
+// Byte 0 is the LEFT grip and byte 1 the RIGHT, settled by holding a bare hand
+// on the left grip with the heat off: byte 0 rose 18 to 22 C in a minute while
+// byte 1 did not move. The inference had them the other way round.
+Number CanBus_GripTempLeft     "Grip Temp Left [%.1f °C]"        <temperature> (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:gripTempL" }
+Number CanBus_GripTempRight    "Grip Temp Right [%.1f °C]"       <temperature> (gCanBus_Controls) { channel="mqtt:topic:broker:canbus:gripTempR" }
+// =============================================================================
+// 8. ELECTRICAL & WEATHER
+// =============================================================================
+Number CanBus_Battery          "Battery [%.1f V]"                <energy>      (gCanBus_Power) { channel="mqtt:topic:broker:canbus:battery" }
+Number CanBus_Ambient          "Ambient [%.1f °C]"               <temperature> (gCanBus_Power) { channel="mqtt:topic:broker:canbus:ambient" }
+// =============================================================================
+// 9. IDENTITY
+// =============================================================================
+// VIN + Software ID come from PGN 65242 (TP/BAM), reassembled in the ESP32.
+// Both ride along in /state. Read once, then never again -- hence near the end.
+String CanBus_VIN              "VIN [%s]"                        <text>        (gCanBus_Identity) { channel="mqtt:topic:broker:canbus:vin" }
+String CanBus_SoftwareId       "Software ID [%s]"                <text>        (gCanBus_Identity) { channel="mqtt:topic:broker:canbus:softwareId" }
+// =============================================================================
+// 10. DISCOVERY PROBES — developer tools, last on the page
+// =============================================================================
+// The discovery probes, switchable from anywhere. They have found six signals
+// and settled four nulls, so they stay -- but they are not all free.
+//
+//   scan      byte-level change detector + PGN 2304. STATIONARY ONLY, so it
+//             costs nothing on a ride. Leave it on.
+//   cruise    65265 SA39 bytes 4-5, any speed, publishes only on change. Cheap.
+//   throttle  65382 SA0 bytes 1+4, any speed, TWICE A SECOND -- about 7,200
+//             messages an hour of riding. Turn it on to hunt, off afterwards.
+//   claims    address claims. Rate-limited, negligible.
+//
+// The flags are stored in the ESP32's NVS and survive a reboot and an OTA.
+// -----------------------------------------------------------------------------
+// Bus health -- the CAN controller's own error registers.
+//
+// The only readings in this file that are NOT about the motorcycle. Everything
+// else describes the machine; these describe the wire we spliced into it, on a
+// vehicle that vibrates, feeding a bus that carries ABS data. We believe the
+// board is passive -- this is how that belief gets checked rather than asserted.
+//
+// The counters reset on every wake, because canInit() reconfigures the
+// controller and deep sleep restarts the chip. So they cover ONE RIDE, which is
+// the useful window: a rising count within a ride is the signal, and comparing
+// rides is what shows a connector working loose.
+//
+// CanBus_Bus_ErrTypes is the one to watch. STUFF and CRC are what a chafing wire
+// or a loosening splice produce, and they appear long before anything visible
+// fails because CAN retransmits and the other modules recover. It reads "none"
+// on a healthy bus -- never blank, so a stale value cannot masquerade as clean.
+// -----------------------------------------------------------------------------
+String CanBus_Bus_State        "Bus state [%s]"                  <network>     (gCanBus_System) { channel="mqtt:topic:broker:canbus:busState" }
+String CanBus_Bus_ErrTypes     "Bus error types [%s]"            <error>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:busErrTypes" }
+// The nominal-bitrate error counts, and they are the REAL error numbers on
+// this controller -- TEC and REC may never move in listen-only, because the
+// node never transmits an error frame.
+Number CanBus_Bus_RxErr        "Receive errors, this ride [%d]"  <error>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:busRxErr" }
+Number CanBus_Bus_TxErr        "Transmit errors, this ride [%d]" <error>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:busTxErr" }
+// Error-FREE messages this ride. Published briefly as "bus errors" on
+// 2026-09-09 and it is the opposite: the owner spotted it climbing by ~197 a
+// second, which is the J1939 message rate, not a fault rate. It is the more
+// useful of the two numbers -- a denominator. Errors per million messages
+// compares across rides of different lengths; a raw count does not.
+Number CanBus_Bus_CleanMsgs    "Clean messages, this ride [%d]"  <network>     (gCanBus_System) { channel="mqtt:topic:broker:canbus:busEfMsg" }
+Number CanBus_Bus_REC          "Receive error counter [%d]"      <error>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:busREC" }
+Number CanBus_Bus_TEC          "Transmit error counter [%d]"     <error>       (gCanBus_System) { channel="mqtt:topic:broker:canbus:busTEC" }
+Switch CanBus_Probe_Scan       "Probe: scan [%s]"                <zoom>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeScan" }
+Switch CanBus_Probe_Cruise     "Probe: cruise [%s]"              <zoom>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeCruise" }
+Switch CanBus_Probe_Throttle   "Probe: throttle [%s]"            <zoom>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeThrottle" }
+Switch CanBus_Probe_Claims     "Probe: claims [%s]"              <zoom>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeClaims" }
+Switch CanBus_Probe_Rates      "Probe: rates (periods, 10 s windows) [%s]" <zoom> (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeRates" }
+String CanBus_Probe_RatesJson  "Probe rates [%s]"                <text>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeRatesJson" }
+// The probe output itself, persisted (influxdb.persist) so a ride's hunt data is
+// on the server when the ride is over -- no capture process to remember. The
+// throttle line is 65382 SA0: b1 (the load-byte candidate), b4/b5 (range),
+// torque, throttle, fuel rate, rpm and speed, about twice a second while ON.
+String CanBus_Probe_ThrottleLine "Probe throttle [%s]"          <text>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeThrottleLine" }
+String CanBus_Probe_CruiseLine   "Probe cruise [%s]"            <text>        (gCanBus_Probe) { channel="mqtt:topic:broker:canbus:probeCruiseLine" }

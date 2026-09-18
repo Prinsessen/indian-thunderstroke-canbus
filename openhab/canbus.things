@@ -1,0 +1,194 @@
+// =============================================================================
+// Indian Springfield 2017 — CAN bus over MQTT
+// =============================================================================
+// WHAT THIS IS
+// One MQTT thing with 70 channels, fed by an ESP32 wired into the motorcycle's
+// CAN bus. The firmware decodes the bus itself and publishes ONE compact
+// retained JSON roughly once a second:
+//
+//     canbus/springfield/state   {"rpm":3000,"speed":57.0,"gear":"3", ...}
+//
+// So there are no JS transforms here, only cheap JSONPATH field-picks. That is
+// deliberate: the alternative was 50-100 publishes a second and a transform on
+// every one of them.
+//
+// ABSENT FIELDS ARE NOT ZERO
+// A field the bike is not currently sending is simply missing from the JSON,
+// and JSONPATH then leaves the item at its last value rather than zeroing it.
+// Several signals only appear once the bike is moving — cruise engagement
+// (SPN 595) is the clearest example. automation/js/canbus-clear-live-values.js
+// exists for exactly this: it clears the momentary readings to UNDEF when the
+// bus goes offline, so a parked bike does not show the last value it had at
+// 90 km/h. Expect those items to repopulate from the retained message whenever
+// the thing re-initialises, and to be cleared again on the next disconnect.
+//
+// FIRMWARE MODES
+// The ESP32 has a discovery mode and a production mode. This file is the
+// production one: it assumes FIRMWARE_MODE = 1, where the firmware does the
+// decoding. The item names and channel UIDs are identical in both modes, so
+// items/canbus.items and the sitemap work unchanged either way — but only ONE
+// things file may be active at a time, since they share a thing UID.
+//
+// WHERE THE FIRMWARE LIVES
+// /etc/openhab-firmware/indian-canbus/ — its own git repository, outside
+// /etc/openhab and NOT covered by the auto-commit service. See CLAUDE.md.
+//
+// Used by:  items/canbus.items (70 items, groups gCanBus_*)
+//           automation/js/canbus-*.js
+//           sitemaps/myhouse.sitemap
+// =============================================================================
+Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
+	Channels:
+	// ---- Bus health -----------------------------------------------------
+	Type string : status     "Bus Status"       [ stateTopic="canbus/springfield/status" ]
+	// The firmware's own log lines (logEvent / logEventf), one per message. Bound so
+	// that a tripwire such as "[state] JSON truncated" is readable after a ride,
+	// not only on a serial cable nobody was holding. Added 2026-09-14.
+	Type string : debug      "Firmware log"     [ stateTopic="canbus/springfield/debug" ]
+	// The two probe streams that matter on a ride, bound so they land in InfluxDB
+	// by the same road as everything else. Twice now (Zealand 2026-09-13, the
+	// test ride 2026-09-15) probe/throttle was ON for the whole ride and nothing
+	// wrote it down, because ride_capture.py was not running and the topic was
+	// bound to no item. A capture process is a thing to forget; a binding is not.
+	Type string : probeThrottleLine "Probe: throttle line" [ stateTopic="canbus/springfield/probe/throttle" ]
+	Type string : probeCruiseLine   "Probe: cruise line"   [ stateTopic="canbus/springfield/probe/cruise" ]
+	Type string : bitrate    "Detected Bitrate" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.bitrate" ]
+	Type number : scanFrames "Scan Frame Count" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.scan_frames" ]
+	Type string : wifiIp     "WiFi IP"          [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.ip" ]
+	// ---- Engine ---------------------------------------------------------
+	Type number : rpm        "Engine RPM"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rpm" ]
+	Type number : throttle   "Throttle"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.throttle" ]
+	Type string : gear       "Gear"         [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gear" ]
+	Type number : coolant    "Coolant Temp" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.coolant" ]
+	// ---- Vehicle --------------------------------------------------------
+	Type number : speed       "Vehicle Speed" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.speed" ]
+	Type number : fuel        "Fuel Level"    [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.fuel" ]
+	Type number : odometer    "Odometer"      [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.odometer" ]
+	Type number : trip        "Trip 1"        [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.trip" ]
+	Type number : fuelEconomy "Fuel Economy"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.fuelEconomy" ]
+	// Odometer reading at the last service, kept in the ESP32's NVS rather
+	// than in the phone — it is the one figure on this bus that cannot be
+	// measured again, only remembered. Absent from the payload until a
+	// service has been recorded, so the item stays NULL rather than showing
+	// a misleading 0.
+	Type number : svcKm       "Last Service"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.svcKm" ]
+	// ---- Brake & cruise --------------------------------------------------
+	// One brake signal, not two. SPN 597 from SA 0 is the brake LIGHT switch
+	// and either control operates it, so the lever and the pedal are
+	// indistinguishable here. The old "brake"/"brakeFront" channel was
+	// removed 2026-09-05: its decode had been withdrawn and the firmware had
+	// not published the field for days, so the item never updated.
+	Type string : brakeRear "Brake"          [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.brakeRear" ]
+	// Cruise, decoded in the garage 2026-09-05 (PGN 65265 SA 39 byte 4/5).
+	//   cruise       SPN 595 engaged   -- absent until the bike is moving;
+	//                "not available" is deliberately not published as OFF
+	//   cruiseEnable SPN 596 rocker on
+	//   cruiseSw     SPN 599/601, the SET and RESUME presses
+	// DERIVED, not measured -- SPN 595 is not transmitted on this bus.
+	Type string : cruise       "Cruise (derived)" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruise" ]
+	Type string : cruiseEnable "Cruise Enabled" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseEnable" ]
+	Type string : cruiseSw     "Cruise Switch"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseSw" ]
+	// Clutch, SPN 598 -- free from the byte the brake comes from. Decoded
+	// 2026-09-05 because the derived cruise hold needs it.
+	Type string : clutch       "Clutch"         [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.clutch" ]
+	// ---- TPMS (confirmed 2026-08-15) ------------------------------------
+	Type number : tyreFront     "Front Tyre"      [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreFront" ]
+	Type number : tyreRear      "Rear Tyre"       [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreRear" ]
+	Type number : tyreFrontTemp "Front Tyre Temp" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreFrontTemp" ]
+	Type number : tyreRearTemp  "Rear Tyre Temp"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreRearTemp" ]
+	// ---- Electrical & environment ---------------------------------------
+	Type number : battery "Battery Voltage" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.battery" ]
+	Type number : ambient "Ambient Temp"    [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.ambient" ]
+	// ---- Controls & lighting --------------------------------------------
+	Type string : headlight      "Headlight"       [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.headlight" ]
+	Type switch : indicatorLeft  "Indicator Left"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.indLeft" ]
+	Type switch : indicatorRight "Indicator Right" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.indRight" ]
+	// Horn channel removed 2026-09-05 -- proven not to exist on this bus.
+	// Hazard warning, PGN 65381 SA 39 byte 2 bit 0. A held state.
+	Type string : hazard         "Hazard Warning"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.hazard" ]
+	// ---- Probe switches (2026-09-05) -------------------------------------
+	// Each probe can be switched from anywhere. The flags live in the
+	// ESP32's NVS, so they survive a reboot and an OTA -- a setting that
+	// resets on every flash is not a setting.
+	//
+	// The state topic is one retained JSON for all four; the command topics
+	// are separate so a Switch item binds straight to one with no rule.
+	// Bus health -- the CAN controller's own error registers, on their own
+	// topic because they describe OUR installation and not the motorcycle.
+	Type string : busState    "Bus: state"       [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.state" ]
+	Type number : busTEC      "Bus: TEC"         [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.tec" ]
+	Type number : busREC      "Bus: REC"         [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.rec" ]
+	Type number : busRxErr    "Bus: rx errors"   [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.rxerr" ]
+	Type number : busTxErr    "Bus: tx errors"   [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.txerr" ]
+	Type number : busEfMsg    "Bus: clean msgs"  [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.efmsg" ]
+	Type string : busErrTypes "Bus: error types" [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.errs" ]
+	Type switch : probeScan     "Probe: scan"     [ commandTopic="canbus/springfield/probe/en/scan", stateTopic="canbus/springfield/probe/enabled", transformationPattern="JSONPATH:$.scan", on="ON", off="OFF" ]
+	Type switch : probeCruise   "Probe: cruise"   [ commandTopic="canbus/springfield/probe/en/cruise", stateTopic="canbus/springfield/probe/enabled", transformationPattern="JSONPATH:$.cruise", on="ON", off="OFF" ]
+	Type switch : probeThrottle "Probe: throttle" [ commandTopic="canbus/springfield/probe/en/throttle", stateTopic="canbus/springfield/probe/enabled", transformationPattern="JSONPATH:$.throttle", on="ON", off="OFF" ]
+	Type switch : probeClaims   "Probe: claims"   [ commandTopic="canbus/springfield/probe/en/claims", stateTopic="canbus/springfield/probe/enabled", transformationPattern="JSONPATH:$.claims", on="ON", off="OFF" ]
+	Type switch : probeRates    "Probe: rates"    [ commandTopic="canbus/springfield/probe/en/rates", stateTopic="canbus/springfield/probe/enabled", transformationPattern="JSONPATH:$.rates", on="ON", off="OFF" ]
+	// Transmit period per (PGN, SA), one JSON per 10 s window while the rates probe is on. tools/rates_watch.py shows it as a table.
+	Type string : probeRatesJson "Probe rates"    [ stateTopic="canbus/springfield/probe/rates" ]
+	// Handlebar MFD/trip buttons as events: "left short", "right double", "both long" ... (firmware buttons.cpp, 2026-09-18)
+	Type string : button         "Handlebar button" [ stateTopic="canbus/springfield/button" ]
+	// Security / key fob, PGN 65386 SA 39 byte 0 bits 6-7. Decoded 2026-09-05.
+	Type string : security       "Security"        [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.security" ]
+	// Heated grips, 0 = off, 1..10. Confirmed 2026-09-04.
+	Type number : grips          "Heated Grips"    [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.grips" ]
+	// Grip temperature. Sides confirmed on the bike 2026-09-04 by holding a
+	// bare hand on the left grip with the heat off -- see DECODE-PLAN.md.
+	Type number : gripTempL      "Grip Temp Left"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gripTempL" ]
+	Type number : gripTempR      "Grip Temp Right" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gripTempR" ]
+	// Tip-over sensor and the state derived from it. Only published while
+	// stationary -- in a corner an accelerometer reads upright, so moving
+	// tells you nothing. See DECODE-PLAN.md.
+	Type number : lean           "Tilt raw"        [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.lean" ]
+	Type string : stand          "Stand"           [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.stand" ]
+	// The sidestand SWITCH, which is a different fact from the tilt above:
+	// where the stand is, not whether the bike is resting on it.
+	Type string : standDown      "Sidestand switch" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.standDown" ]
+	// The red run/stop switch on the right bar. RUN / STOP, from the ECU.
+	Type string : killSwitch     "Kill switch"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.killSwitch" ]
+	// Deep sleep. The switch is the recall: a board that sleeps wrongly is
+	// one you have to ride out to, so it must be reachable from anywhere.
+	Type switch : sleepEnable    "Deep sleep"      [ stateTopic="canbus/springfield/sleep/status", transformationPattern="JSONPATH:$.enabled", commandTopic="canbus/springfield/sleep/en", on="ON", off="OFF" ]
+	Type string : sleepWake      "Last wake"       [ stateTopic="canbus/springfield/sleep/status", transformationPattern="JSONPATH:$.wake" ]
+	// asleep / awake. Published in the last moment before the chip goes
+	// down, so an offline board can be told from a dead one.
+	Type string : sleepState     "Sleep state"     [ stateTopic="canbus/springfield/sleep/status", transformationPattern="JSONPATH:$.state" ]
+	// How old the reading behind the value is, in seconds. MQTT only -- the
+	// BLE payload has no room and the phone has TyreMemory of its own.
+	//
+	// openHAB cannot work this out for itself: /state is republished about
+	// once a second carrying whatever the ESP32 last decoded, so an item
+	// updates every second whether the CAN frame behind it arrived one second
+	// or seventeen minutes ago. Only the firmware knows.
+	Type number : interlockAge  "Interlock reading age" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.interlockAge" ]
+	Type number : tyreAge       "Tyre reading age"      [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreAge" ]
+	// Start button. MQTT only -- it is deliberately kept off the BLE link,
+	// where a momentary press is almost never caught in a snapshot anyway.
+	Type string : startButton    "Start button"    [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.startButton" ]
+	// Ignition, read from bus activity rather than any decoded bit.
+	Type switch : ignition       "Ignition"        [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.ignition" ]
+	// Front wheel speed from the ABS module, and the verdict on the pair.
+	Type number : speedFront     "Speed (front)"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.speedFront" ]
+	Type string : wheels         "Wheel sensors"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.wheels" ]
+	Type number : wheelBlips     "Dropouts front"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.wheelBlips" ]
+	Type number : wheelBlipsRear "Dropouts rear"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.wheelBlipsRear" ]
+	// The rest of PGN 65266, which we had been reading one field of.
+	Type number : fuelRate       "Fuel rate"       [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.fuelRate" ]
+	Type number : fuelEconInst   "Economy now"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.fuelEconInst" ]
+	Type number : range          "Range"           [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.range" ]
+	// Gear sensor: a running count of changes that happened stationary, on
+	// the stand, engine running -- and the raw event log beside it.
+	Type number : gearGlitches   "Gear glitches"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gearGlitches" ]
+	Type string : gearEvent      "Gear event"      [ stateTopic="canbus/springfield/gear" ]
+	// ---- Identity & diagnostics (TP/BAM + DM1, decoded in firmware) ------
+	Type string : vin        "VIN"           [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.vin" ]
+	Type string : softwareId "Software ID"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.softwareId" ]
+	Type string : dm1        "Active DTCs"    [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.dm1" ]
+	Type string : dm1Raw     "Active DTCs hex"[ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.dm1Raw" ]
+	// ---- Firmware version + OTA status (reported by the ESP32) -----------
+	Type string : fw        "Firmware Version" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.fw" ]
+	Type string : otaStatus "OTA Status"      [ stateTopic="canbus/springfield/ota/status" ]
+}
