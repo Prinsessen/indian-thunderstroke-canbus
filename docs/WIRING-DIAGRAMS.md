@@ -240,18 +240,33 @@ What stays after the knife, and what each wire does on a Springfield:
         P2  VB18      DG/DB ── windshield DOWN, VCM B18 ───────────────▶  pin 4
         P3  VCMACC-5  PK/GN ── backlight feed: not on this plug; tap a VCMACC line at the console (HG1 P3) or leave dark
         P4  VB17      BN/DB ── windshield UP, VCM B17 ─────────────────▶  pin 5
-        P5  211       YE/WH ┐
-        P6  210       BG/WH │  the five-way audio/map buttons: four wires to OUR board,
-        P7  209       VT/WH │  or taped off until then (a ladder or matrix — measure)
-        P8  208       OG/WH ┘
+        P5  211       YE/WH ┐  the five-way audio/map buttons. No new wire to the seat is
+        P6  210       BG/WH │  needed: jumper them onto CHASSIS_FAIRING pins 8–11 (nets
+        P7  209       VT/WH │  204–207, the speaker pairs), which the chassis harness already
+        P8  208       OG/WH ┘  carries to CHASSIS_TRUNK pins 8–11 at the back, unused on a
+                                Springfield — five free wires nacelle→rear, with pin 13 (145)
+                                as the fifth. Our board picks them up at CHASSIS_TRUNK.
 
    keep with 30 cm of tail, as test leads for the unknowns:
         pin 7   V115  BU     (VCM 1-15, the "VCM_15" device)
         pin 14  V118  YE/BN  (VCM 1-18, HomeLink)
         pin 15  V116  GN     (VCM 1-16, HomeLink)
         pin 2/3 V106/V107    (the windshield motor H-bridge, if B6 ever happens)
-   cut and tape:  pin 6 radio power, pins 8–11 speakers, pin 13
+   cut and tape:  pin 6 radio power
+   pins 8–11 and 13 are the highway to the back — see above, do not cut
 ```
+
+**The button lines never needed a new wire.** The chassis harness already
+has five conductors that run from the connector under the nacelle to the
+connector at the back and are connected to nothing on a Springfield: 204,
+205, 206, 207 (the Chieftain's speaker pairs, CHASSIS_FAIRING 8–11 ↔
+CHASSIS_TRUNK 8–11) and 145 (pin 13 ↔ pin 13). Four button lines in at the
+front, four lines out at the back, next to the VCM and our board. And nobody
+has to imitate Ride Command: the display is just the thing that happens to
+read those switches on a Chieftain; on ours, our board reads them and puts
+the events where the trip buttons already go. If the five buttons turn out to
+be a resistor ladder, it is one analogue line and a ground, and 145 alone
+carries it.
 
 So it is one 8-way socket, a run of loom the length the donor gives us
 (the harness goes from the bars to the triple-clamp bracket, so half a metre
