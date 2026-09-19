@@ -361,6 +361,15 @@ version 0.3). The source on the server is the truth; Windows builds it.
 
 ## Debugging on the phone
 
+**Two tracks since 2026-09-19.** The X70 on the bar runs the Google Play
+build (internal test track); the phone runs debug sideloads. They are signed
+with different keys, so **a Play device cannot take a sideload over the top,
+nor the other way round** — `adb install -r` fails with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Switching a device between tracks means
+uninstalling first, which also wipes its settings, pairings and ride log. New
+settings reach the X70 with the next Play release (bump `versionCode`, upload);
+they reach the phone immediately.
+
 **Install straight from the build machine. Over the top, never uninstall first.**
 
 ```powershell
