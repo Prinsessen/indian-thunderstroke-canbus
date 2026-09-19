@@ -239,6 +239,7 @@ openhab/      The openHAB side: canbus.items, canbus.things and the rules that
 | [`TRANSMIT.md`](docs/TRANSMIT.md) | What leaving hardware listen-only would unlock, what it would cost, and what must stay impossible |
 | [`BUILD-SETUP.md`](docs/BUILD-SETUP.md) · [`WORKFLOW.md`](docs/WORKFLOW.md) | Building the app, and the traps that cost an afternoon each |
 | [`openhab/`](openhab/) | The items and things that bind the MQTT topics (70 channels, JSONPATH picks, no transforms), the OTA trigger, the probe queue, the cruise latch, "this ride" and what survives key-off — and an example that opens a garage door from the handlebar |
+| [`WIRING-DIAGRAMS.md`](docs/WIRING-DIAGRAMS.md) | The service manual's schematics read connector by connector: one chassis harness for all six models, the two connectors a Springfield leaves empty, the VCM's three plugs, the switch cubes, the round cluster's seven wires — with the diagram excerpts |
 | [`SKILLS.md`](docs/SKILLS.md) | A handover note: the machine, the bus, the method, and eight ways to be wrong |
 
 **Start with [`docs/PROTOCOL.md`](docs/PROTOCOL.md)** — every field, over MQTT and

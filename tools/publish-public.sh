@@ -15,8 +15,9 @@
 #
 # NOT published, on purpose: captures/ (VIN and odometer of one motorcycle in
 # every line), REVERSE_ENGINEERING.md, GIT-NOTES.md, canbus_production.*,
-# WIRING-DIAGRAMS.md and images/wiring-* (excerpts of Polaris' service manual;
-# the owner decides if those go public), the app's README/IDEAS, and any binary. Adding to the public surface is a
+# the app's README/IDEAS, and any binary. WIRING-DIAGRAMS.md and images/wiring-*
+# (excerpts of Polaris' service manual) ARE published, by the owner's decision.
+ Adding to the public surface is a
 # decision, so the lists below are explicit rather than "everything".
 #
 # Redactions live OUTSIDE the repositories (a list of what you must not publish
@@ -53,8 +54,8 @@ for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
          probe_watch.sh switch_watch.py sync_check.py tpms_ride_capture.py; do
   put "$FW/tools/$t" "firmware/tools/$t"; done
 for d in DECODE-PLAN DISPLAY-INTEGRATION FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
-         TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES; do put "$FW/$d.md" "docs/$d.md"; done
-for i in $(ls "$FW/images"); do case "$i" in wiring-*) continue ;; esac; put "$FW/images/$i" "docs/images/$i"; done   # wiring-* are service-manual excerpts: not published
+         TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES WIRING-DIAGRAMS; do put "$FW/$d.md" "docs/$d.md"; done
+for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done   # incl. wiring-*: service-manual excerpts, published on the owner's decision 2026-09-19
 # ---- openHAB side (2026-09-19): the live items/things pair and the CAN rules ----
 # The .items/.things carry topics and JSONPATH picks only; the broker bridge with
 # its host and credentials lives in a different file and is not copied.
