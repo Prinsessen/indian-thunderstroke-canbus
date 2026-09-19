@@ -208,7 +208,9 @@ finding. Recorded as an anomaly rather than explained away.
 > **The VCM's spare switch inputs** — the Chieftain's windshield rocker on
 > VCM B17/B18, the only two inputs a Springfield leaves unused, and the test
 > for whether the VCM broadcasts them — are worked through from the service
-> manual in `indian-springfield-cluster/docs/VCM-SPARE-INPUTS.md` (2026-09-19).
+> manual in `indian-springfield-cluster/docs/VCM-SPARE-INPUTS.md` (2026-09-19),
+> and the manual's schematics are read connector by connector in
+> `WIRING-DIAGRAMS.md` there (a copy lives in this repository too).
 >
 > **SA 23's own transmit set, request behaviour and the garage checklist for
 > replacing it live in the cluster repository:**
