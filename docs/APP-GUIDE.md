@@ -754,7 +754,7 @@ can, and it is the only control here you have a chance of using with gloves on.
 | Last service | Tap to record one at the odometer showing now |
 | Trousers / jacket controller | Scan and assign. Switch on only the one being assigned |
 | Heated clothing | Automatic from felt temperature, or manual only |
-| Clothing is controlled by | THIS DEVICE or ANOTHER DEVICE. A Keis controller talks to one client; the phone in the pocket says ANOTHER DEVICE so the tablet on the bar keeps the controllers — see [8.12](#812-two-devices-who-controls-the-clothing) |
+| Clothing is controlled by | **THIS DEVICE** (the default): this install connects to the Keis controllers and runs the automatic and manual control, the handlebar gestures included. **ANOTHER DEVICE**: this install never connects to the controllers and only shows the bike; some other install owns the clothing. A Keis controller talks to one client, so exactly one device per bike says THIS DEVICE — the one on the bar — and the phone in the pocket says ANOTHER DEVICE. Flipping it takes or releases the controllers at once — see [8.12](#812-two-devices-who-controls-the-clothing) |
 | Curve endpoints | Off-at and full-at per zone, in felt degrees |
 | Fault codes | Review, and name a code so it is recognisable next time |
 | All-time records | Reset the highest speed and rpm ever seen |
