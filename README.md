@@ -145,6 +145,14 @@ at OFF and HIGH rather than wrapping. Right double is left to the house and a
 long left press still resets the trip meter on the cluster, which the firmware
 cannot prevent. Tested on the road 2026-09-19.
 
+**Two devices on one bike.** Since firmware 2026.09.19-2 the bike takes two
+BLE centrals, so a tablet on the bar and a phone in a pocket both get the
+data. A Keis controller, though, talks to one client, so the app has a
+per-device setting, *Clothing is controlled by*: THIS DEVICE on the one
+that rides on the bar, ANOTHER DEVICE on the phone in the pocket. Without it
+the phone takes the controllers first and the tablet never gets them — which
+is how it was found.
+
 ## Cruise control, derived
 
 SPN 595 is not transmitted, so the engaged state is worked out instead — from

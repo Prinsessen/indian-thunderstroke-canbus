@@ -504,6 +504,43 @@ keis: LEGS -> OFF   (cap ENGINE_OFF)
 a physical button press did. A `reports` immediately followed by a write is the
 app overruling the rider, which it should never do.
 
+### 8.11 From the handlebar
+
+Since firmware 2026.09.19-1 the bike reports its two trip buttons to the app
+over BLE, and three gestures step the clothing without taking a hand off the
+bar or an eye off the road:
+
+| gesture | does |
+|---|---|
+| **left double** (two quick presses on the left trip button) | one step warmer, both zones |
+| **both short** (both trip buttons together, briefly) | one step colder, both zones |
+| **both long** (both held for 0.8 s) | both zones back to automatic |
+
+A step moves from the level the garment is actually at, one notch, and stops
+at OFF and HIGH — pressing once too often cannot turn a jacket from HIGH to
+OFF on a cold road. Each step puts the zone in manual, exactly like a tap on
+its panel, and the app turns to the HEAT page by itself so you see where the
+level lands. Short presses keep paging the cluster as they always did, a long
+*left* press still resets the trip meter (that is the cluster's own function
+and cannot be changed), and a *right* double press is reserved for the house
+(the garage door), so the app ignores it.
+
+### 8.12 Two devices: who controls the clothing
+
+Each Keis controller talks to **one** client. If the app is installed on both
+a tablet on the bar and a phone in your pocket, the phone's background
+service takes both controllers the moment it sees them, and the tablet never
+gets them — you would see the HEAT page stuck on "not connected" until the
+phone's Bluetooth is off.
+
+So each install says whether it owns the clothing: **Settings → Clothing is
+controlled by → THIS DEVICE** on the tablet that rides on the bar, **ANOTHER
+DEVICE** on the phone in the pocket. A device set to ANOTHER DEVICE never
+connects to the controllers, its HEAT page says so, and flipping the button
+releases or takes the controllers immediately, no restart. The bike itself
+serves two devices at once since firmware 2026.09.19-2, so both still show
+the ride; only the clothing needs one owner.
+
 ---
 
 ## 9. Calculated figures, in full
@@ -717,6 +754,7 @@ can, and it is the only control here you have a chance of using with gloves on.
 | Last service | Tap to record one at the odometer showing now |
 | Trousers / jacket controller | Scan and assign. Switch on only the one being assigned |
 | Heated clothing | Automatic from felt temperature, or manual only |
+| Clothing is controlled by | THIS DEVICE or ANOTHER DEVICE. A Keis controller talks to one client; the phone in the pocket says ANOTHER DEVICE so the tablet on the bar keeps the controllers — see [8.12](#812-two-devices-who-controls-the-clothing) |
 | Curve endpoints | Off-at and full-at per zone, in felt degrees |
 | Fault codes | Review, and name a code so it is recognisable next time |
 | All-time records | Reset the highest speed and rpm ever seen |
@@ -776,6 +814,8 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
 | **Fuel reads low on the side stand** | Expected, and ignored: only moving readings count — see [9.5](#95-fuel-level) |
 | **A level change lags a settings change** | A single-step change is held for 45 seconds to prevent flapping |
 | **Both controllers assigned to one garment** | They look identical over the air. Re-assign with only one switched on |
+| **The tablet cannot reach the bike or the clothing while the phone is in a pocket** | One client per controller, and until firmware 2026.09.19-2 one per bike. Set the phone to *Clothing is controlled by → ANOTHER DEVICE*, and update the bike's firmware — see [8.12](#812-two-devices-who-controls-the-clothing) |
+| **A handlebar gesture does nothing** | The bike must run firmware 2026.09.19-1 or later, and the app must be connected to it (the gestures arrive over BLE). A right double press is reserved for the house on purpose — see [8.11](#811-from-the-handlebar) |
 | **Connects but shows nothing** | The pairing bond is stale or was never made. The link stays unencrypted, so the characteristics read as empty. Forget the device in Android's Bluetooth settings — **not just in the app** — and pair again with the passkey |
 
 ---
