@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "dk.agesen.springfield"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dk.agesen.springfield"
@@ -16,14 +16,34 @@ android {
         // path and a second, quite different, permission flow — a lot of code
         // for phones this bike's rider does not own.
         minSdk = 31
-        targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        targetSdk = 36
+        versionCode = 4
+        versionName = "0.3"
+    }
+
+    // Play upload key. The keystore lives outside every repository, and the
+    // password comes from the environment, never from a file that can be
+    // committed. Set SPRINGFIELD_KEYSTORE_PW before `gradlew bundleRelease`;
+    // without it the release build still compiles but is unsigned, which is
+    // fine for a debug session and useless for Play.
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("SPRINGFIELD_KEYSTORE")
+                ?: "C:/Users/YourName/Documents/CANFD-MC/play-store/upload-key.jks"
+            val ksPw = System.getenv("SPRINGFIELD_KEYSTORE_PW")
+            if (ksPw != null) {
+                storeFile = file(ksPath)
+                storePassword = ksPw
+                keyAlias = "upload"
+                keyPassword = ksPw
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -6,6 +6,23 @@ commits carry the detail.
 
 ---
 
+## 2026-09-19 — on Google Play, internal test (release 4, version 0.3)
+
+The first signed bundle went up to Play's internal test track today, built on
+the Windows PC. The three build changes it needed now live in the source so
+the next `scp` does not lose them: `compileSdk`/`targetSdk` 36 (Play rejects
+35), `versionCode` 4 / `versionName` "0.3", and a release signing config
+that reads the keystore path from `SPRINGFIELD_KEYSTORE` and the password
+from `SPRINGFIELD_KEYSTORE_PW` — applied only when the password is set, so
+`assembleDebug` and unsigned release builds work without it. The keystore
+lives outside every repository; nothing here is secret but a path and an
+env-var name. `gradle.properties` suppresses AGP 8.7.3's compileSdk-36
+warning. The launcher label is now "Springcommand", as on Play.
+
+**Rule from now on: bump `versionCode` before every Play upload.** Play
+refuses a code it has seen. `versionName` is free text. `applicationId` is
+fixed on Play forever and must not change.
+
 ## 2026-09-19 — the heated clothing under the rider's thumbs
 
 Asked for in one sentence: "styre mit Keis tøj op og ned med de knapper". The
