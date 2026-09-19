@@ -288,16 +288,21 @@ On connect the firmware requests a **15-30 ms** interval (`updateConnParams(12,
 refuse. Request `CONNECTION_PRIORITY_HIGH` from the client side if the gauge
 looks steppy; drop to balanced to save battery when the screen is off.
 
-### One central at a time
+### Two centrals at a time (firmware 2026.09.19-2 and later)
 
-The server accepts a single connection. Advertising stops when a client
-connects and restarts only in `onDisconnect`, so a second phone or tablet
-does not see the bike while the first is on it. Seen on 2026-09-19: a phone
-in a pocket, app running, held the link and the tablet on the bar could not
-connect until the phone's Bluetooth was off. Allowing two centrals is a
-firmware change (NimBLE supports it: restart advertising after the first
-connect, keep pairing state per connection, notify every subscriber) and is
-in the ideas backlog as D5.
+The server accepts **two** connections: the tablet on the bar and the phone
+in the pocket. Each pairs on its own with the same passkey (the stack keeps
+three bonds), each subscribes on its own, and every notification goes to
+every paired subscriber. Advertising restarts after the first connect and
+stops only when both links are in use; it restarts when either drops.
+`BLE_MAX_CENTRALS` in `ble.cpp` is the cap; the precompiled core allows
+three.
+
+Before 2026.09.19-2 it was one: advertising stopped on connect and a phone in
+a pocket, app running, held the only link, so the tablet on the bar could not
+connect until the phone's Bluetooth was off. The Keis controllers still take
+one client each; the app's "Clothing is controlled by" setting decides which
+device that is.
 
 ### ⚠️ MTU negotiation is REQUIRED for `state`
 

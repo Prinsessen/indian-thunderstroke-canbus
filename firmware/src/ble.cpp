@@ -42,6 +42,14 @@
 #ifndef BLE_MTU
 #define BLE_MTU 517
 #endif
+// How many phones may be on the bike at once. Two: the tablet on the bar and
+// the phone in the pocket. The stack itself allows more (the precompiled core
+// sets CONFIG_BT_NIMBLE_MAX_CONNECTIONS, see the build log); this is our cap.
+// Found the hard way on 2026-09-19: with one, the phone in the pocket took
+// the only link and the tablet on the bar could not connect.
+#ifndef BLE_MAX_CENTRALS
+#define BLE_MAX_CENTRALS 2
+#endif
 
 // Custom 128-bit UUIDs. Randomly generated for this project — they are not any
 // adopted SIG service, so nothing else on the phone will try to interpret them.
@@ -64,7 +72,23 @@ static NimBLECharacteristic *gChSvc   = nullptr;
 static NimBLECharacteristic *gChButton = nullptr;
 static uint8_t gButtonSeq = 0;         // wraps 1..255; 0 = nothing since boot
 
-static bool     gPaired    = false;   // connected AND encrypted
+// Paired links, by connection handle. More than one phone may be on the bike
+// (BLE_MAX_CENTRALS), and each pairs on its own; "somebody is paired" is what
+// gates the notifications, and it used to be a single flag.
+static uint16_t gPairedConn[BLE_MAX_CENTRALS];
+static uint8_t  gPairedCount = 0;
+static bool     gPaired    = false;   // at least one link connected AND encrypted
+static void pairedAdd(uint16_t h) {
+    for (uint8_t i = 0; i < gPairedCount; i++) if (gPairedConn[i] == h) return;
+    if (gPairedCount < BLE_MAX_CENTRALS) gPairedConn[gPairedCount++] = h;
+    gPaired = gPairedCount > 0;
+}
+static void pairedRemove(uint16_t h) {
+    for (uint8_t i = 0; i < gPairedCount; i++) {
+        if (gPairedConn[i] == h) { gPairedConn[i] = gPairedConn[--gPairedCount]; break; }
+    }
+    gPaired = gPairedCount > 0;
+}
 static uint32_t gLastFast  = 0;
 static uint32_t gLastJson  = 0;
 static uint32_t gLastFw    = 0;
@@ -79,11 +103,21 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         // free to refuse, but when it agrees the fast characteristic can push
         // ~20 notifications/sec, which is what the gauge rate needs.
         server->updateConnParams(info.getConnHandle(), 12, 24, 0, 400);
+        // Keep the door open for the second phone. NimBLE stops advertising on
+        // every connect; restart it while there is room for another central.
+        if (server->getConnectedCount() < BLE_MAX_CENTRALS) {
+            NimBLEDevice::startAdvertising();
+            Serial.printf("[ble] %u of %u links in use - still advertising\n",
+                          (unsigned)server->getConnectedCount(), (unsigned)BLE_MAX_CENTRALS);
+        } else {
+            Serial.println("[ble] all links in use - advertising stops until one drops");
+        }
     }
 
     void onDisconnect(NimBLEServer *server, NimBLEConnInfo &info, int reason) override {
-        gPaired = false;
-        Serial.printf("[ble] client disconnected (reason %d) - advertising again\n", reason);
+        pairedRemove(info.getConnHandle());
+        Serial.printf("[ble] client disconnected (reason %d), %u paired left - advertising again\n",
+                      reason, (unsigned)gPairedCount);
         NimBLEDevice::startAdvertising();
     }
 
@@ -96,9 +130,9 @@ class ServerCallbacks : public NimBLEServerCallbacks {
             NimBLEDevice::getServer()->disconnect(info.getConnHandle());
             return;
         }
-        gPaired = true;
-        gLastFw = 0;        // a reconnecting app gets the version immediately
-        Serial.println("[ble] paired, link encrypted");
+        pairedAdd(info.getConnHandle());
+        gLastFw = 0;        // a (re)connecting app gets the version immediately
+        Serial.printf("[ble] paired, link encrypted (%u paired)\n", (unsigned)gPairedCount);
     }
 };
 

@@ -144,6 +144,12 @@ Remove-Item -Recurse -Force indian-canbus-app\app\src
 scp -r admin@your-server.example:/etc/openhab/source-code/indian-canbus-app .
 ```
 
+**Unchanged by the Play work (2026-09-19).** The signing block, SDK 36 and the
+version numbers live in `app\build.gradle.kts` in the source, so the same
+`scp` carries them; the keystore and its password are outside every
+repository and outside the copy, so nothing on the Windows side is lost by
+refreshing. See "Building for Google Play" below.
+
 **Why the whole project.** For a long time only `app\src` ever changed, so the
 command copied only that — and it was right until it was not. The Gradle wrapper
 arrived outside it, and `app\build.gradle.kts` sat stale on the Windows side for

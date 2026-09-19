@@ -40,6 +40,7 @@ object Settings {
     private const val K_FUEL_PCT = "last_fuel_pct"
     private const val K_DTC = "dtc_name_"
     private const val K_HEAT_AUTO = "heat_auto"
+    private const val K_HEAT_OWNER = "heat_owner"
     private const val K_HEAT_OFF = "heat_off_"
     private const val K_HEAT_FULL = "heat_full_"
     private const val K_HEAT_MAC = "heat_mac_"
@@ -218,6 +219,20 @@ object Settings {
     var heatAuto: Boolean
         get() = prefs.getBoolean(K_HEAT_AUTO, true)
         set(v) { prefs.edit().putBoolean(K_HEAT_AUTO, v).apply() }
+
+    /**
+     * Whether THIS device connects to the Keis controllers at all.
+     *
+     * A controller talks to one client. With the app on both the tablet on
+     * the bar and the phone in a pocket, the phone's foreground service took
+     * both controllers the moment it saw them and the tablet got nothing
+     * (2026-09-19). So each install says whether it owns the clothing; the
+     * one on the bar does, the one in the pocket does not. Per device, not
+     * synced anywhere — it is a fact about where the device sits.
+     */
+    var heatOwner: Boolean
+        get() = prefs.getBoolean(K_HEAT_OWNER, true)
+        set(v) { prefs.edit().putBoolean(K_HEAT_OWNER, v).apply() }
 
     /**
      * Curve endpoints per zone, in felt degrees.

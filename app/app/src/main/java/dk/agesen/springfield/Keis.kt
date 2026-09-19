@@ -109,9 +109,20 @@ object Keis : BikeRepository.Observer {
         jacket.disconnect()
         legs = driverFor(HeatCurve.Zone.LEGS)
         jacket = driverFor(HeatCurve.Zone.JACKET)
-        legs.connect(context)
-        jacket.connect(context)
+        if (Settings.heatOwner) {
+            legs.connect(context)
+            jacket.connect(context)
+        }
         notifyObservers()
+    }
+
+    /**
+     * The owner setting flipped. Off: let go of both controllers now, so the
+     * other device can have them without a restart here. On: take them.
+     */
+    fun ownershipChanged(context: Context) {
+        RideLog.add("keis: this device " + (if (Settings.heatOwner) "now controls" else "no longer controls") + " the clothing")
+        reconfigure(context)
     }
 
     /**
@@ -241,6 +252,10 @@ object Keis : BikeRepository.Observer {
         started = true
         legs = driverFor(HeatCurve.Zone.LEGS)
         jacket = driverFor(HeatCurve.Zone.JACKET)
+        if (!Settings.heatOwner) {
+            RideLog.add("keis: not connecting — this device does not control the clothing (settings)")
+            return
+        }
         legs.connect(context)
         jacket.connect(context)
     }
@@ -255,6 +270,7 @@ object Keis : BikeRepository.Observer {
      * catch it — which is the open question this is meant to settle.
      */
     fun scanHarderNow(context: Context) {
+        if (!Settings.heatOwner) return
         if (Settings.heatMac(HeatCurve.Zone.LEGS).isBlank() &&
             Settings.heatMac(HeatCurve.Zone.JACKET).isBlank()) return
 
@@ -298,6 +314,7 @@ object Keis : BikeRepository.Observer {
      * A control that stops working should say which of its preconditions failed.
      */
     fun blockedReason(zone: HeatCurve.Zone): String? = when {
+        !Settings.heatOwner -> "another device controls the clothing — change it in settings"
         !Settings.heatAuto -> "automatic is off — turn it on in settings"
         zone in manual -> null                      // deliberate; the panel says MANUAL
         !deviceFor(zone).connected -> null          // the panel already says this

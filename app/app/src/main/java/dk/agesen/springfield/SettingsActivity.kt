@@ -116,6 +116,18 @@ class SettingsActivity : AppCompatActivity() {
         heatAuto.setOnClickListener { Settings.heatAuto = !Settings.heatAuto; paintHeatAuto() }
         paintHeatAuto()
 
+        // Which device owns the clothing. The controllers take one client each,
+        // so the phone in the pocket must say no, or the tablet on the bar
+        // never gets them.
+        val heatOwner = findViewById<Button>(R.id.heatOwnerButton)
+        fun paintHeatOwner() { heatOwner.text = if (Settings.heatOwner) "THIS DEVICE" else "ANOTHER DEVICE" }
+        heatOwner.setOnClickListener {
+            Settings.heatOwner = !Settings.heatOwner
+            paintHeatOwner()
+            Keis.ownershipChanged(this)
+        }
+        paintHeatOwner()
+
         // Curve endpoints are stored in Celsius and shown in the rider's unit,
         // like every other temperature in the app.
         fun degStepper(minusId: Int, valueId: Int, plusId: Int,

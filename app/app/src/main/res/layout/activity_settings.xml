@@ -61,6 +61,14 @@
 
     <LinearLayout style="@style/SettingRow">
         <LinearLayout style="@style/SettingText">
+            <TextView style="@style/SettingTitle" android:text="Clothing is controlled by" />
+            <TextView style="@style/SettingSub" android:text="Each Keis controller talks to one device. Set the phone in your pocket to ANOTHER DEVICE, or the tablet on the bar never gets them" />
+        </LinearLayout>
+        <Button android:id="@+id/heatOwnerButton" style="@style/WideButton" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/SettingRow">
+        <LinearLayout style="@style/SettingText">
             <TextView style="@style/SettingTitle" android:text="Trousers controller" />
             <TextView style="@style/SettingSub" android:text="Both controllers look identical over the air, so assign them once" />
         </LinearLayout>

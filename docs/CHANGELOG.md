@@ -6,6 +6,19 @@ commits carry the detail.
 
 ---
 
+## 2026-09-19 — two devices, one bike
+
+The phone in the pocket took the only BLE link to the bike and both Keis
+controllers, and the tablet on the bar got nothing until the phone's
+Bluetooth was off. The bike half is firmware 2026.09.19-2 (two centrals).
+The app half is a per-device setting, **"Clothing is controlled by": THIS
+DEVICE / ANOTHER DEVICE** (`Settings.heatOwner`), read by `Keis.start`,
+`reconfigure` and `scanHarderNow`; a device set to ANOTHER DEVICE never
+connects to the controllers, and flipping the button releases or takes them
+immediately (`Keis.ownershipChanged`). The heat page's blocked-reason says so.
+Default THIS DEVICE, so nothing changes for a single install. **Not yet
+built or bench-tested.**
+
 ## 2026-09-19 — on Google Play, internal test (release 4, version 0.3)
 
 The first signed bundle went up to Play's internal test track today, built on
