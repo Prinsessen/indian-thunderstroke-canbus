@@ -17,8 +17,8 @@ android {
         // for phones this bike's rider does not own.
         minSdk = 31
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3"
+        versionCode = 5
+        versionName = "0.4"
     }
 
     // Play upload key. The keystore lives outside every repository, and the

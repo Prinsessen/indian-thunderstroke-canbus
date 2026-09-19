@@ -8,6 +8,12 @@ commits carry the detail.
 
 ## 2026-09-19 — two devices, one bike
 
+**Tested on the road the same afternoon:** phone on ANOTHER DEVICE, X70 on
+THIS DEVICE, both connected to firmware 2026.09.19-2, gestures stepping the
+heat with no interference, ignition off and on with nobody stuck. Source is
+now `versionCode 5` / `0.4`, ready for the Play release that carries this to
+the X70.
+
 The phone in the pocket took the only BLE link to the bike and both Keis
 controllers, and the tablet on the bar got nothing until the phone's
 Bluetooth was off. The bike half is firmware 2026.09.19-2 (two centrals).
