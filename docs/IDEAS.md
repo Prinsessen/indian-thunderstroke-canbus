@@ -44,7 +44,7 @@ garage evening decides it), **ready** (all facts known, only work left),
 | # | idea | status | depends on | written up |
 |---|---|---|---|---|
 | C1 | **The S3 cluster is seven wires**: CAN on 1/2, INS12V on 4, ground 5, wake 3, power-button line 6, ambient NTC on 15. The connector is on paper | ready to design | the SA 23 profile (transmit set is settled) | `WIRING-DIAGRAMS.md` §5, `GARAGE-SA23.md` |
-| C2 | **The ambient sensor's curve** — pins known, resistance at two temperatures still to measure | measure | a multimeter and a thermometer | `GARAGE-SA23.md` step 2 |
+| C2 | **The ambient sensor.** Pins known (cluster pin 15 + ground). Owner prefers not to keep the NTC (non-linear, drifts at the ends). **Preferred: a waterproof DS18B20 on the same two wires**, parasite-powered, 4.7 kΩ pull-up at the cluster, ±0.5 °C, no calibration, same PGN 65269 out; probe moved out of the headlight's heat soak. TMP117 / SHT45 (±0.1 °C) only if four wires are run. The NTC curve is only worth measuring if the factory sensor stays | ready | the S3 cluster; a probe placement out of the nacelle's heat | `GARAGE-SA23.md` step 2, `WIRING-DIAGRAMS.md` §5 |
 | C3 | **The chassis lamp** — DM1 from SA 39, presumably; the oil lamp is SPN 98 FMI 4 and will only ever show in a real event | measure | a bulb test on the chassis lamp | `GARAGE-SA23.md` step 4 |
 | C4 | **The unplug test** — what complains when SA 23 leaves the bus | owner's decision | the logger cannot clear DTCs | `GARAGE-SA23.md` step 6 |
 
