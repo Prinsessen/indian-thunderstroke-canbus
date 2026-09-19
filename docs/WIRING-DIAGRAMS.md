@@ -211,7 +211,20 @@ second 8-pin plug on the fairing harness:
 
 LH_SW_CUBE (fairing harness): P1 ground, P2 VB18 windshield down, P3
 VCMACC-5 (illumination), P4 VB17 windshield up, P5–P8 nets 211/210/209/208 —
-four wires to the 7-inch display's pins 9, 10, 25, 26. **Those four wires
+four wires to the 7-inch display's pins 9, 10, 25, 26.
+
+So the Tour cube (4015197) has **two leads with two 8-pin plugs**: the upper
+half's lead goes to LH_CONT_1 on the chassis harness, exactly like the
+Springfield's cube, and the lower half's lead (rocker, the five-way audio /
+map buttons, backlight) goes to LH_SW_CUBE, **whose mate is on the Chieftain
+fairing harness, not on the chassis harness.** Under a Springfield's nacelle
+there is no LH_SW_CUBE socket; there is CHASSIS_FAIRING, 16 pins, chassis
+side. Between the two sits a piece of fairing harness that a Springfield
+never had: four wires (VB17 → pin 5, VB18 → pin 4, VCMACC-5 → any VCMACC
+feed, ground → pin 16) and the four display lines going nowhere unless our
+board takes them. That piece is the donor's to give — the LH_SW_CUBE branch
+of fairing harness 2413260-03 with the CHASSIS_FAIRING plug on its other
+end — or it is a pigtail we crimp. **Those four wires
 are the audio and map buttons.** They never see the VCM; the display reads
 them. Which is why they do nothing for a Springfield, and why the windshield
 pair does: it is the only thing on that plug that goes to the VCM.
