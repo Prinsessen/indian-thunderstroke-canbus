@@ -135,6 +135,16 @@ garage door inside the home geofence; away from home it may only close a door
 the limit switches report open, never open one, with an 8-second lockout.
 Details in [docs/DECODE-PLAN.md](docs/DECODE-PLAN.md).
 
+The second thing built on it is the **heated clothing**. The same events go to
+the phone over BLE on their own characteristic (two bytes per press, see
+[docs/PROTOCOL.md](docs/PROTOCOL.md) section 4b), and the app steps the Keis
+jacket and trousers from the handlebar: **left double** one step warmer,
+**both short** one step colder, **both long** back to automatic, with the app
+turning to its heat page so the rider sees where the level lands. Steps stop
+at OFF and HIGH rather than wrapping. Right double is left to the house and a
+long left press still resets the trip meter on the cluster, which the firmware
+cannot prevent. Tested on the road 2026-09-19.
+
 ## Cruise control, derived
 
 SPN 595 is not transmitted, so the engaged state is worked out instead — from
