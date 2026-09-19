@@ -319,6 +319,23 @@ tape. Nothing on the Springfield's own harness is cut.
 - **LH / RH_HAND_WARM**: ECMRTN, E226 / E216 thermistor to ECM 2, ground,
   HNDWRM PK power — the grip heaters are powered by the VCM and their
   temperature is read by the ECM.
+- **DIAG — the service connector our CAN board hangs on.** 8-way, A–H:
+
+  ![DIAG](images/wiring-diagnostic-connector.png)
+
+  | pin | net | wire | what |
+  |---|---|---|---|
+  | A | ENGBRK-8 | RD/DB | 12 V through the engine breaker — permanent (the run/stop switch is fed from the same splice, and the board sleeps and wakes on it) |
+  | B | VCMACC-6 | PK/GN | 12 V from the VCM's accessory output — **switched: on when the bike is awake** |
+  | C, E, F | — | | empty |
+  | D | GND3-03 | BK | ground |
+  | G | C02-2 | DG | CAN low |
+  | H | C02-1 | YE | CAN high |
+
+  The CANFD-MC's four pads are A, D, G, H. Pin B is worth a wire of its own
+  one day: a clean "ignition is on" level for the board, instead of inferring
+  it from bus traffic, and the right feed for anything that must not drain
+  the battery overnight.
 
 ## 9. The breakout diagrams and connector maps, for reference
 
