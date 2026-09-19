@@ -192,7 +192,9 @@ finding. Recorded as an anomaly rather than explained away.
   no VCM status bit followed the pressure. The switch is on the VCM (chassis
   schematic); the VCM evidently reports it only as a fault with the engine
   running, which cannot be provoked safely. Recorded as *assumed* in the
-  cluster repo.
+  cluster repo — and then found in the manual on 2026-09-19: SPN 98 FMI 4
+  "Pressure Too Low", P1526, MIL on (page 4.26), lamp lit only with the
+  engine running (10.62). The signal is DM1 SPN 98; still never observed.
 - **65386 SA 39 byte 2 (heated grips) pulses to 0xFA for 1–3 s right after
   engine start** — the VCM inhibits the grips while cranking. Mask 0xFA in the
   grips decode so the app does not show 250 for a second at every start.

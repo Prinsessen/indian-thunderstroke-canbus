@@ -81,7 +81,7 @@ Worth as much as the list above, because it saves somebody a week:
 | **The fog lamps** | On and off six times with the change detector running. Nothing answered. Indian's fault table knows the lamps — SPN 520291 and 520292 — so failures are reported; the switch position is not |
 | **Cruise control engaged (SPN 595)** | Held at 94 km/h with the rider's hand off the grip. Byte 4 never moved, while the button presses in the *same frames* came through perfectly |
 | **Coast and accelerate (SPN 600 / 602)** | Not sent. Indian transmits SET and RESUME only; the decel/accel meaning is applied by the ECU once engaged |
-| **The low-oil-pressure lamp, at key-on** | Key on, start, idle, key off, key on again with every DM1 lamp byte and every VCM status byte watched: nothing followed the pressure. The switch sits on the VCM; it evidently reports low pressure only as a fault with the engine running, which nobody is going to provoke on purpose. So: assumed, not proven, and this row says so |
+| **The low-oil-pressure lamp, at key-on** | Key on, start, idle, key off, key on again with every DM1 lamp byte and every VCM status byte watched: nothing followed the pressure. The switch sits on the VCM; it evidently reports low pressure only as a fault with the engine running, which nobody is going to provoke on purpose. The service manual then named it: SPN 98 FMI 4 "Pressure Too Low", P1526, MIL on, and the lamp is specified to light only with the engine running. So it is a DM1 fault, not a status bit, and nobody is going to run the engine dry to watch it arrive |
 
 The pattern behind them: **this bus carries state that other modules need.** A horn,
 a lock and an alarm are a switch wired into a module driving its own output, with
