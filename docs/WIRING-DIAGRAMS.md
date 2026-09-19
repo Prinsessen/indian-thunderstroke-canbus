@@ -280,7 +280,29 @@ pair does: it is the only thing on that plug that goes to the VCM.
 | 644 | console harness, Chieftain / Roadmaster | ![](images/wiring-schematic-console-chieftain-roadmaster.png) |
 | 646 | trunk schematic, Roadmaster | ![](images/wiring-schematic-trunk-roadmaster.png) |
 
-## 10. What is still not on paper
+## 10. As built on this Springfield — where it differs from the schematic
+
+Owner's modifications, told 2026-09-19, so nobody reads the schematic and
+goes looking in the wrong place:
+
+- **A Roadmaster heat-and-cool seat is fitted.** The version without Ride
+  Command integration, so it is not on the bus and no module knows about
+  it. It has its own controller and its own up/down switch, and its power
+  is the HEATED SEAT plug in §8 (switched accessory 12 V, `ACCSW-4 GY/WH`).
+- **Two console switches have swapped places, by rewiring.** The seat's
+  up/down switch now sits on the right of the console next to the heated
+  grip switch, where the saddlebag lock switch (BAG_LOCK_SW, §5) used to
+  be; the bag lock switch has moved to the seat's old switch position on the
+  left of the seat. Electrically nothing changed: the same four bag-lock
+  wires (`VA02`, `VCMACC-7`, `VA03`, ground) and the seat controller's own
+  wires, just routed to each other's holes.
+- What that leaves open: the seat's up/down lines are momentary contacts on
+  the seat controller, so a board of ours could read them in parallel (seat
+  level in the app) or pulse them (seat from the handlebar or the app), the
+  way the Keis clothing is stepped today. Not on the bus, so it would be our
+  wire, not the VCM's.
+
+## 11. What is still not on paper
 
 - The direction and meaning of V110, V115, V116, V118, V119 — five VCM 1
   lines the map leaves blank and the schematics route to plugs (HomeLink,
