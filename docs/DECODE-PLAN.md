@@ -203,6 +203,11 @@ finding. Recorded as an anomaly rather than explained away.
   restarts), not periodically; 65387 from SA 0 likewise — it is the answer to
   SA 23's request.
 
+> **The VCM's spare switch inputs** — the Chieftain's windshield rocker on
+> VCM B17/B18, the only two inputs a Springfield leaves unused, and the test
+> for whether the VCM broadcasts them — are worked through from the service
+> manual in `indian-springfield-cluster/docs/VCM-SPARE-INPUTS.md` (2026-09-19).
+>
 > **SA 23's own transmit set, request behaviour and the garage checklist for
 > replacing it live in the cluster repository:**
 > `indian-springfield-cluster/docs/GARAGE-SA23.md` (settled from these
