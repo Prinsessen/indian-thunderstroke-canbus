@@ -229,6 +229,36 @@ are the audio and map buttons.** They never see the VCM; the display reads
 them. Which is why they do nothing for a Springfield, and why the windshield
 pair does: it is the only thing on that plug that goes to the VCM.
 
+### The pigtail we cut out of fairing harness 2413260
+
+What stays after the knife, and what each wire does on a Springfield:
+
+```
+   cube's lower lead ──▶ LH_SW_CUBE socket (8-way, on the harness)        CHASSIS_FAIRING plug (16-way, grey, red seal)
+                                                                           mates the empty connector under the nacelle
+        P1  GND-03    BK    ── ground ─────────────────────────────────▶  pin 16  (069 BK)
+        P2  VB18      DG/DB ── windshield DOWN, VCM B18 ───────────────▶  pin 4
+        P3  VCMACC-5  PK/GN ── backlight feed: not on this plug; tap a VCMACC line at the console (HG1 P3) or leave dark
+        P4  VB17      BN/DB ── windshield UP, VCM B17 ─────────────────▶  pin 5
+        P5  211       YE/WH ┐
+        P6  210       BG/WH │  the five-way audio/map buttons: four wires to OUR board,
+        P7  209       VT/WH │  or taped off until then (a ladder or matrix — measure)
+        P8  208       OG/WH ┘
+
+   keep with 30 cm of tail, as test leads for the unknowns:
+        pin 7   V115  BU     (VCM 1-15, the "VCM_15" device)
+        pin 14  V118  YE/BN  (VCM 1-18, HomeLink)
+        pin 15  V116  GN     (VCM 1-16, HomeLink)
+        pin 2/3 V106/V107    (the windshield motor H-bridge, if B6 ever happens)
+   cut and tape:  pin 6 radio power, pins 8–11 speakers, pin 13
+```
+
+So it is one 8-way socket, a run of loom the length the donor gives us
+(the harness goes from the bars to the triple-clamp bracket, so half a metre
+or so), and one 16-way plug with three wires that matter, five kept as test
+leads, and the rest taped. The four display lines end at our board or in
+tape. Nothing on the Springfield's own harness is cut.
+
 ## 7. The Chieftain fairing, for what it tells us
 
 ![The 7-inch display](images/wiring-fairing-7inch-display.png)
