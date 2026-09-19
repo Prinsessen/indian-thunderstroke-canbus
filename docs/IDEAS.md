@@ -1,0 +1,72 @@
+# Ideas — the backlog for the Springfield, so nothing good gets lost
+
+One line per idea is not enough; each needs what it depends on and the
+measurement that decides it, or it turns into a wish. Newest at the top of
+each section. Move an item to "Done" when it ships; move it to "Dropped"
+with the reason, never delete it. Started 2026-09-19, the night the
+schematics turned up.
+
+Status words: **idea** (nobody has checked anything), **measure** (one
+garage evening decides it), **ready** (all facts known, only work left),
+**done**, **dropped**.
+
+## A. Inputs — buttons the rider can reach
+
+| # | idea | status | depends on / what decides it | where it is written up |
+|---|---|---|---|---|
+| A1 | **The windshield rocker as two handlebar buttons.** VCM B17/B18 are the only VCM switch inputs a Springfield leaves unused; the wires are in the empty connector under the nacelle. If the VCM broadcasts them, they are two clean buttons with short/long/double and no cluster side effects — long press finally free | **measure** | garage evening: ground BN/DB then DG/DB with the logger running; watch 65381/65386 SA 39; read fault memory after | cluster `VCM-SPARE-INPUTS.md` §5, `WIRING-DIAGRAMS.md` §3 |
+| A2 | **Same rocker, read by our own board** if the VCM stays silent. Wire the rocker (or the spare cavity LH_CONT_1 P4 / RH_CONT_2 P1) to a GPIO on the CANFD-MC board; the firmware emits the same `button` events | ready once A1 is answered | A1 negative | `WIRING-DIAGRAMS.md` §6 |
+| A3 | **A Chieftain LH switch cube with the rocker**, factory part, same bar, same screws; its second 8-pin plug carries the rocker to the fairing connector | ready | A1 or A2 | `WIRING-DIAGRAMS.md` §6 |
+| A4 | **The two HomeLink lines** (VCM 1 pins 16/18) — if they are inputs, two more buttons anywhere; if outputs, two things the VCM can switch | **measure** | multimeter at CHASSIS_FAIRING pins 14/15, ignition on: pull-up voltage = input, 0/12 V = output | `WIRING-DIAGRAMS.md` §7 |
+| A5 | **VCM_15** (VCM 1 pin 15) — a 2-pin plug in the fairing, device unknown | **measure** | same evening, CHASSIS_FAIRING pin 7 | `WIRING-DIAGRAMS.md` §7 |
+| A6 | **Seat up/down read in parallel** — the heat-and-cool seat's switch is two momentary contacts into its own controller; our board reads them and the app shows the seat level | **measure** | what the contacts switch (to ground or to plus) and what they rest at | `WIRING-DIAGRAMS.md` §10 |
+
+## B. Things the bike could do for us
+
+| # | idea | status | depends on | written up |
+|---|---|---|---|---|
+| B1 | **Heated clothing from the handlebar** — left double warmer, both short colder, both long auto; app turns to the heat page | **done 2026-09-19** (firmware on the bike; app awaiting the Windows build) | — | app `CHANGELOG.md`, decoder `README.md` button section |
+| B2 | **Garage door from the handlebar** — right double toggles at home, close-only away; reason on the sitemap | **done 2026-09-18/19** | — | `canbus_button_garage.example.js` |
+| B3 | **Seat from the handlebar and the app** — pulse the seat switch lines through an optocoupler; "one step warmer" then means jacket, trousers and seat together, and a cold morning can be pre-warmed from the phone | idea → measure | A6 first | `WIRING-DIAGRAMS.md` §10 |
+| B4 | **A third brake light that just plugs in** — ECM 1-50 at CHASSIS_TRUNK pin 7 follows the brake light; pin 4 follows the tail light; 14/15 are constant 12 V and ground | ready | finding the rear connector on the bike | `WIRING-DIAGRAMS.md` §4 |
+| B5 | **Proper power for the CAN board and the Keis clothing** from a fused accessory outlet (FR/REAR_12V_SWITCHED, or CHASSIS_TRUNK 14) instead of the battery | ready | — | `WIRING-DIAGRAMS.md` §8 |
+| B6 | **The windshield motor output as a free reversible 12 V channel** (VCM 1-6/7), driven by the rocker with the VCM's own H-bridge | idea | A1 positive, and something worth moving | `VCM-SPARE-INPUTS.md` §4 |
+| B7 | **Trip marker from the handlebar** — a gesture drops a point with position and time into the trip tracker's diary | idea | one free gesture (A1 makes that easy) | — |
+| B8 | **Fuel-stop log** — a gesture at standstill with the engine running logs a fill-up with the odometer, so fuel economy gets real numbers | idea | one free gesture | — |
+| B9 | **Terndrupvej door** — the garage rule's twin for the work geofence (ID 10), which already has a GPS rule | ready | a gesture that is not right double | `vehicle-geofence-terndrupvej-door.js` |
+| B10 | **"Home in a minute"** — both short inside the home geofence: driveway and garage light on, heat pump up, ahead of the tracker rule | idea | a gesture | — |
+| B11 | **Position by SMS from the handlebar** — both double sends the bike's position to the family; the SMS path exists in the motorcycle rules | idea | a gesture; a lockout so a fumble does not spam | — |
+| B12 | **Acknowledge an alert** — a gesture silences a battery or tyre alert for 30 minutes | idea | — | — |
+| B13 | **A Roadmaster heated seat** would have been plug-in (HEATED SEAT plug on every chassis harness) — noted for the record; the heat-and-cool seat is already fitted | done, by the owner | — | `WIRING-DIAGRAMS.md` §8, §10 |
+
+## C. The cluster replacement
+
+| # | idea | status | depends on | written up |
+|---|---|---|---|---|
+| C1 | **The S3 cluster is seven wires**: CAN on 1/2, INS12V on 4, ground 5, wake 3, power-button line 6, ambient NTC on 15. The connector is on paper | ready to design | the SA 23 profile (transmit set is settled) | `WIRING-DIAGRAMS.md` §5, `GARAGE-SA23.md` |
+| C2 | **The ambient sensor's curve** — pins known, resistance at two temperatures still to measure | measure | a multimeter and a thermometer | `GARAGE-SA23.md` step 2 |
+| C3 | **The chassis lamp** — DM1 from SA 39, presumably; the oil lamp is SPN 98 FMI 4 and will only ever show in a real event | measure | a bulb test on the chassis lamp | `GARAGE-SA23.md` step 4 |
+| C4 | **The unplug test** — what complains when SA 23 leaves the bus | owner's decision | the logger cannot clear DTCs | `GARAGE-SA23.md` step 6 |
+
+## D. The decoder and the app
+
+| # | idea | status | depends on | written up |
+|---|---|---|---|---|
+| D1 | Build and test the app with the handlebar gestures and the automatic-start fix | waiting for the Windows build | — | app `CHANGELOG.md` |
+| D2 | Mask the grips' 0xFA pulse at cranking; `CanBus_EngineRunning` from 65265 b3 bit 6 | ready | — | `DECODE-PLAN.md` garage run 3 |
+| D3 | Frame-rate capture of 65217 while riding (rates probe from the phone) | measure | a ride | `DECODE-PLAN.md` |
+| D4 | One item per button side in openHAB instead of the shared `CanBus_Button` | dropped 2026-09-19 — one item with a reason field was judged simpler | — | `canbus.items` |
+
+## The garage evening that answers most of section A
+
+Ignition on, engine off, logger running, multimeter in the other hand:
+
+1. Find CHASSIS_FAIRING under the nacelle: 16 cavities, GY/DB, GY/DG,
+   BN/DB, DG/DB on pins 2–5. Find CHASSIS_TRUNK at the rear.
+2. A1: ground pin 5 (BN/DB) for a second, then pin 4 (DG/DB). Never both.
+   Watch the bus. Read fault codes afterwards (C1222/C1225 expected forms).
+3. A4/A5: voltage on pins 14, 15, 7 against ground; note which float high.
+4. A6: the seat switch on the console — what its two contacts switch and
+   rest at.
+5. C2: the ambient sensor plug (2-pin, OG/DB + BK, top of the chassis
+   harness): resistance now, and again indoors at a known temperature.

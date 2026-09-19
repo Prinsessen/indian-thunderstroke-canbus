@@ -54,7 +54,7 @@ for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
          probe_watch.sh switch_watch.py sync_check.py tpms_ride_capture.py; do
   put "$FW/tools/$t" "firmware/tools/$t"; done
 for d in DECODE-PLAN DISPLAY-INTEGRATION FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
-         TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES WIRING-DIAGRAMS; do put "$FW/$d.md" "docs/$d.md"; done
+         TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES WIRING-DIAGRAMS IDEAS; do put "$FW/$d.md" "docs/$d.md"; done
 for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done   # incl. wiring-*: service-manual excerpts, published on the owner's decision 2026-09-19
 # ---- openHAB side (2026-09-19): the live items/things pair and the CAN rules ----
 # The .items/.things carry topics and JSONPATH picks only; the broker bridge with
