@@ -328,6 +328,31 @@ HTTP and reboots in about half a minute.
 
 ---
 
+## Building for Google Play
+
+The app is on Play's internal test track since 2026-09-19 (release 4,
+version 0.3). The source on the server is the truth; Windows builds it.
+
+1. **Bump `versionCode` in the source before the `scp`.** Play refuses a
+   code it has already seen. `versionName` is free text.
+2. Refresh the Windows copy as above.
+3. Set the two environment variables, then build the bundle. The keystore
+   lives outside every repository; set the path explicitly rather than
+   relying on the default in `build.gradle.kts` — the public copy of that file
+   has the path anonymised, and one day the Windows copy may come from there:
+
+   ```powershell
+   $env:SPRINGFIELD_KEYSTORE = "C:\Users\YourName\Documents\CANFD-MC\play-store\upload-key.jks"
+   $env:SPRINGFIELD_KEYSTORE_PW = "<the password, from the password manager>"
+   .\gradlew bundleRelease
+   ```
+
+   Output: `app\build\outputs\bundle\release\app-release.aab`. Without the
+   password the release build is unsigned, which is fine for anything but Play.
+4. Upload on the Play console, internal test track. Never commit the keystore
+   or the password; the app's `.gitignore` refuses `*.jks` and
+   `keystore.properties` as a second line of defence.
+
 ## Debugging on the phone
 
 **Install straight from the build machine. Over the top, never uninstall first.**
