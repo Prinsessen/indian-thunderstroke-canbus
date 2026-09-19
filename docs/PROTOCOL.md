@@ -288,6 +288,17 @@ On connect the firmware requests a **15-30 ms** interval (`updateConnParams(12,
 refuse. Request `CONNECTION_PRIORITY_HIGH` from the client side if the gauge
 looks steppy; drop to balanced to save battery when the screen is off.
 
+### One central at a time
+
+The server accepts a single connection. Advertising stops when a client
+connects and restarts only in `onDisconnect`, so a second phone or tablet
+does not see the bike while the first is on it. Seen on 2026-09-19: a phone
+in a pocket, app running, held the link and the tablet on the bar could not
+connect until the phone's Bluetooth was off. Allowing two centrals is a
+firmware change (NimBLE supports it: restart advertising after the first
+connect, keep pairing state per connection, notify every subscriber) and is
+in the ideas backlog as D5.
+
 ### ⚠️ MTU negotiation is REQUIRED for `state`
 
 The default ATT MTU is **23 bytes**, which caps a notification payload at

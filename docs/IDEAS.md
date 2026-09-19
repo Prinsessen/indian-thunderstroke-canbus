@@ -53,7 +53,8 @@ garage evening decides it), **ready** (all facts known, only work left),
 
 | # | idea | status | depends on | written up |
 |---|---|---|---|---|
-| D1 | Build and test the app with the handlebar gestures and the automatic-start fix | waiting for the Windows build | — | app `CHANGELOG.md` |
+| D1 | Build and test the app with the handlebar gestures and the automatic-start fix | **done 2026-09-19** — built, on the X70; left double / both short step the heated gear up and down on the road | — | app `CHANGELOG.md` |
+| D5 | **Two devices, one bike.** A phone in a pocket with the app running takes the only BLE connection to the bike and both Keis links, and the tablet on the bar gets nothing until the phone's Bluetooth is off (2026-09-19). Two halves: **firmware** — accept two centrals (NimBLE max connections, restart advertising in `onConnect` while below the limit, pairing state per connection instead of the single `gPaired`, notify all subscribers); **app** — a per-device setting for who controls the heated clothing, since a Keis controller talks to one client only, and a passive mode that never connects on its own. Until then: the device on the bar owns the bike, the phone stays off | ready to design | a bench test with two phones before the bike | app `README.md` "Two devices, one bike", `PROTOCOL.md` §6 |
 | D2 | Mask the grips' 0xFA pulse at cranking; `CanBus_EngineRunning` from 65265 b3 bit 6 | ready | — | `DECODE-PLAN.md` garage run 3 |
 | D3 | Frame-rate capture of 65217 while riding (rates probe from the phone) | measure | a ride | `DECODE-PLAN.md` |
 | D4 | One item per button side in openHAB instead of the shared `CanBus_Button` | dropped 2026-09-19 — one item with a reason field was judged simpler | — | `canbus.items` |
