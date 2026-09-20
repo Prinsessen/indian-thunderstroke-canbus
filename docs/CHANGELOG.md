@@ -6,6 +6,13 @@ commits carry the detail.
 
 ---
 
+## 2026-09-20 — one version number
+
+Play named the release by `versionCode` ("5") while About showed
+`versionName` ("0.4"), and the two were read as different versions. The
+name is now derived from the code in `build.gradle.kts` (`0.<code>`), so
+release 5 is 0.5 in both places and only `playVersionCode` is ever bumped.
+
 ## 2026-09-19 — two devices, one bike
 
 **Tested on the road the same afternoon:** phone on ANOTHER DEVICE, X70 on

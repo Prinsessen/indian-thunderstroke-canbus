@@ -339,8 +339,10 @@ HTTP and reboots in about half a minute.
 The app is on Play's internal test track since 2026-09-19 (release 4,
 version 0.3). The source on the server is the truth; Windows builds it.
 
-1. **Bump `versionCode` in the source before the `scp`.** Play refuses a
-   code it has already seen. `versionName` is free text.
+1. **Bump `playVersionCode` in `app/build.gradle.kts` before the `scp`.** Play
+   refuses a code it has already seen. `versionName` is derived from it as
+   `0.<code>` since 2026-09-20, so Play's release name and the app's About
+   show the same number; do not set the name by hand.
 2. Refresh the Windows copy as above.
 3. Set the two environment variables, then build the bundle. The keystore
    lives outside every repository; set the path explicitly rather than

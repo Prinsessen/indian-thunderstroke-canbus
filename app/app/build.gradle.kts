@@ -17,8 +17,13 @@ android {
         // for phones this bike's rider does not own.
         minSdk = 31
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.4"
+        // One number, shown two ways. Play names a release by versionCode and
+        // the app's About shows versionName, and two different numbers there
+        // confused everyone (2026-09-20). So the name is derived: bump the
+        // code before every Play upload and the name follows as 0.<code>.
+        val playVersionCode = 5
+        versionCode = playVersionCode
+        versionName = "0.$playVersionCode"
     }
 
     // Play upload key. The keystore lives outside every repository, and the
