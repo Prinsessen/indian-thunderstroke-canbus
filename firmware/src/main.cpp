@@ -23,7 +23,6 @@
 
 #include <Arduino.h>
 #include "buttons.h"
-#include <esp_timer.h>   // OTA dead man's switch -- see otaGuardStart()
 #include <map>
 #include <stdarg.h>
 #include <string.h>
@@ -81,17 +80,8 @@
 #endif
 
 
-#if ENABLE_MQTT
-  #include <WiFi.h>
-    #include <WiFiClientSecure.h>
-  #include <ArduinoOTA.h>
-  #include <HTTPUpdate.h>
-  #include <PubSubClient.h>
-  #include <ArduinoJson.h>
-    #include <time.h>
-  #include <esp_netif.h>            // esp_netif_tcpip_exec(): run a call in the lwIP thread
-  #include <lwip/dns.h>             // dns_clear_cache()
-#endif
+#include <ArduinoJson.h>
+#include "net.h"           // WiFi, MQTT and OTA in their own task; empty inlines when ENABLE_WIFI is 0
 
 // ======================= CAN HARDWARE ======================================
 // The CAN controller + its pin map now live in the HAL backend
@@ -289,9 +279,6 @@ struct IdState {
 std::map<uint32_t, IdState> idTable;
 #endif
 
-#if ENABLE_MQTT
-WiFiClientSecure wifiClient;
-PubSubClient mqtt(wifiClient);
 #if FIRMWARE_MODE == MODE_DISCOVERY
 uint32_t lastPublish = 0;             // discovery publishChanges() throttle
 #endif
@@ -299,6 +286,7 @@ uint32_t lastHeartbeat = 0;
 bool noCanReported = false;
 
 String topic(const char *leaf) { return String(MQTT_BASE_TOPIC) + "/" + leaf; }
+extern uint32_t gLoopMaxMs;      // defined above loop(); worst loop gap since the last heartbeat
 
 void logEvent(const char *msg);   // defined further down
 
@@ -307,109 +295,16 @@ void logEvent(const char *msg);   // defined further down
 // The same event goes to the phone over BLE as a one-byte code (ble.h), which
 // is how the rider's thumbs reach the heated clothing without a WiFi in sight.
 static void buttonEmit(const char *event, uint8_t code) {
-    if (mqtt.connected()) mqtt.publish(topic("button").c_str(), event, false);
+    netPublish("button", event, strlen(event), false);
     bleButtonEvent(code);
     logEvent((String("[button] ") + event).c_str());
 }
 
-// Per-board unique MQTT client ID = MQTT_CLIENT_ID + "-" + last 3 MAC bytes.
-// Two boards flashed from the SAME config.h would otherwise share the client ID
-// "indian-canbus"; MQTT brokers evict the older session when a duplicate client
-// ID connects, so identical IDs make the boards kick each other off the broker
-// in an endless offline/online war. The MAC suffix guarantees uniqueness with
-// zero per-board config, while the base TOPIC stays "canbus/indian" so openHAB
-// (things/items/sitemap/OTA rule) needs no changes. Cached after first call.
-const char *mqttClientId() {
-    static String id;
-    if (id.length() == 0) {
-        uint8_t mac[6];
-        WiFi.macAddress(mac);
-        char suffix[8];
-        snprintf(suffix, sizeof(suffix), "-%02X%02X%02X", mac[3], mac[4], mac[5]);
-        id = String(MQTT_CLIENT_ID) + suffix;
-    }
-    return id.c_str();
-}
 
-// ---- The log while the broker is out of reach -------------------------------
-//
-// Every logEvent() line goes to Serial and to <base>/debug, and nobody holds
-// the serial port on a motorcycle. So the lines that explain a failover --
-// link down, rescanning, joined the hotspot, broker resolved to WHAT, connect
-// failed WHY -- were exactly the lines that never arrived: they are written
-// while there is no broker to write them to.
-//
-// The 2026-09-15 test ride was diagnosed with none of them. openHAB had a
-// last-will "offline" at 15:57 and a reconnect at home at 16:06; the hotspot
-// had a client called esp32s3-XXXXXX. Everything in between was inferred from
-// the source, and the day before had been spent on a wrong inference.
-//
-// So lines written while offline are kept here and published, in order and with
-// the uptime they were written at, as soon as the next connection is made. The
-// FIRST lines of an outage are kept, not the last: they are the ones that say
-// what happened. A line identical to the one before it is counted, not stored,
-// so "[mqtt] connect failed" repeated for an hour costs one slot.
-static const uint8_t  DBG_RING_LINES = 24;
-static const uint8_t  DBG_RING_WIDTH = 112;
-static char     sDbgLine[DBG_RING_LINES][DBG_RING_WIDTH];
-static uint32_t sDbgAtSec[DBG_RING_LINES];
-static uint16_t sDbgRepeat[DBG_RING_LINES];
-static uint8_t  sDbgCount = 0;
-static uint16_t sDbgDropped = 0;
-
-static void debugRingAdd(const char *msg) {
-    if (sDbgCount > 0 && strncmp(sDbgLine[sDbgCount - 1], msg, DBG_RING_WIDTH - 1) == 0) {
-        if (sDbgRepeat[sDbgCount - 1] < 65535) sDbgRepeat[sDbgCount - 1]++;
-        return;
-    }
-    if (sDbgCount >= DBG_RING_LINES) {
-        if (sDbgDropped < 65535) sDbgDropped++;
-        return;
-    }
-    strncpy(sDbgLine[sDbgCount], msg, DBG_RING_WIDTH - 1);
-    sDbgLine[sDbgCount][DBG_RING_WIDTH - 1] = '\0';
-    sDbgAtSec[sDbgCount]  = millis() / 1000;
-    sDbgRepeat[sDbgCount] = 1;
-    sDbgCount++;
-}
-
-// Called from mqttConnect() once the broker has answered. Synchronous
-// publishes, like everything else on the debug topic.
-static void debugRingFlush() {
-    if (sDbgCount == 0 && sDbgDropped == 0) return;
-    char out[DBG_RING_WIDTH + 48];
-    snprintf(out, sizeof(out),
-             "[log] %u line(s) written while the broker was out of reach (uptime now %lus):",
-             (unsigned)sDbgCount, (unsigned long)(millis() / 1000));
-    mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
-    for (uint8_t i = 0; i < sDbgCount; i++) {
-        if (sDbgRepeat[i] > 1)
-            snprintf(out, sizeof(out), "[+%lus] %s (x%u)",
-                     (unsigned long)sDbgAtSec[i], sDbgLine[i], (unsigned)sDbgRepeat[i]);
-        else
-            snprintf(out, sizeof(out), "[+%lus] %s", (unsigned long)sDbgAtSec[i], sDbgLine[i]);
-        mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
-    }
-    if (sDbgDropped) {
-        snprintf(out, sizeof(out), "[log] %u more line(s) dropped; the buffer holds %u",
-                 (unsigned)sDbgDropped, (unsigned)DBG_RING_LINES);
-        mqtt.publish(topic("debug").c_str(), (const uint8_t *)out, strlen(out), false);
-    }
-    sDbgCount = 0;
-    sDbgDropped = 0;
-}
-
-void mqttDebugPublish(const char *msg) {
-    if (!mqtt.connected()) {
-        debugRingAdd(msg);
-        return;
-    }
-    mqtt.publish(topic("debug").c_str(), (const uint8_t *) msg, strlen(msg), false);
-}
 
 void logEvent(const char *msg) {
     Serial.println(msg);
-    mqttDebugPublish(msg);
+    netLog(msg);
 }
 
 void logEventf(const char *fmt, ...) {
@@ -419,505 +314,83 @@ void logEventf(const char *fmt, ...) {
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
     Serial.println(buf);
-    mqttDebugPublish(buf);
+    netLog(buf);
 }
 
-const char *mqttStateText(int8_t state) {
-    switch (state) {
-        case MQTT_CONNECTION_TIMEOUT:
-            return "connection timeout";
-        case MQTT_CONNECTION_LOST:
-            return "connection lost";
-        case MQTT_CONNECT_FAILED:
-            return "connect failed";
-        case MQTT_DISCONNECTED:
-            return "disconnected";
-        case MQTT_CONNECTED:
-            return "connected";
-        case MQTT_CONNECT_BAD_PROTOCOL:
-            return "bad protocol";
-        case MQTT_CONNECT_BAD_CLIENT_ID:
-            return "bad client id";
-        case MQTT_CONNECT_UNAVAILABLE:
-            return "broker unavailable";
-        case MQTT_CONNECT_BAD_CREDENTIALS:
-            return "bad credentials";
-        case MQTT_CONNECT_UNAUTHORIZED:
-            return "unauthorized";
-        default:
-            return "unknown";
-    }
-}
 
-bool waitForClockSync(uint32_t timeoutMs = 20000) {
-    const time_t minValidEpoch = 1700000000; // 2023-11-14 UTC-ish: good enough for TLS validity checks
-    uint32_t start = millis();
-    time_t now = time(nullptr);
-    while (now < minValidEpoch && millis() - start < timeoutMs) {
-        // Up to twenty seconds here, after every association. It used to be
-        // twenty seconds of nothing: no phone packets, no bus. Same treatment
-        // as the WiFi wait in wifiConnect(), for the same reason.
-        drainCan();
-        bleUpdate(st);
-        delay(50);
-        now = time(nullptr);
-    }
-    if (now < minValidEpoch) {
-        logEvent("[time] SNTP sync FAILED - TLS handshake may fail");
-        return false;
-    }
 
-    struct tm tmNow;
-    gmtime_r(&now, &tmNow);
-    char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S UTC", &tmNow);
-    logEventf("[time] SNTP synced: %s", buf);
-    return true;
-}
-
-// ---- OTA & MQTT message handling ----
-
-// Publish a human-readable OTA status line, retained so the openHAB UI still
-// shows the last result after a reconnect. We flush directly via mqtt.publish()
-// (PubSubClient writes synchronously) so it works even while the blocking HTTP
-// download is running and the normal mqtt.loop() is not being serviced.
-static void publishOtaStatus(const char* msg) {
-    if (mqtt.connected()) {
-        mqtt.publish(topic("ota/status").c_str(), msg, true);
-    }
-    logEventf("[ota] status: %s", msg);
-}
-
-// ---------------------------------------------------------------------------
-// OTA dead man's switch.
-//
-// On 2026-09-04 httpUpdate.update() reached 100 % and then simply stopped: no
-// reboot, no error, no further MQTT. The whole loop was blocked inside the
-// call, so nothing was left running to notice -- and the device had to be
-// recovered over USB, which on a bike means taking it off the bike.
-//
-// esp_timer callbacks run from their own task, so this fires even when loop()
-// is wedged. The timer is refreshed on every progress report; if the download
-// stalls for OTA_STALL_MS the chip restarts. That is safe: the boot partition
-// is only switched after the image is written AND validated, so a restart part
-// way through comes back up on the firmware that is already running.
-//
-// A stalled OTA should cost a reboot, never a trip to the garage with a cable.
-//
-// The window has to clear the SILENT phase at the end. Progress callbacks stop
-// at 100 %, and the image is then written out and verified with nothing
-// reported: a bench run on 2026-09-04 took 29 seconds between "Downloading
-// 100 %" and the reboot.
-//
-// Sized twice, and the second time from better data. 45 s came first, then 120
-// after a bench run showed 29 seconds of silence. Then the same firmware
-// updated on the bike and the silent phase took **160 seconds** -- a bench with
-// a strong signal is not the worst case, and the guard would have restarted the
-// chip in the middle of a healthy update. Which is the exact failure it exists
-// to prevent, arrived at from the other direction.
-//
-// 300 s is set against the worst observed (160) with most of a factor of two
-// spare. A hang bounded to five minutes is still the whole point; a guard that
-// fires on healthy updates is worse than no guard at all, because it turns a
-// working feature into a coin toss.
-// ---------------------------------------------------------------------------
-#define OTA_STALL_MS 300000
-
-static esp_timer_handle_t otaGuard = nullptr;
-
-static void otaGuardFired(void *) {
-    // Nothing here can be trusted to reach the network, so just go.
-    esp_restart();
-}
-
-static void otaGuardStart() {
-    if (!otaGuard) {
-        const esp_timer_create_args_t args = {
-            .callback = &otaGuardFired,
-            .arg = nullptr,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "ota_guard",
-            .skip_unhandled_events = false
-        };
-        if (esp_timer_create(&args, &otaGuard) != ESP_OK) return;
-    }
-    esp_timer_stop(otaGuard);
-    esp_timer_start_once(otaGuard, (uint64_t)OTA_STALL_MS * 1000);
-}
-
-static void otaGuardKick() {
-    if (otaGuard) { esp_timer_stop(otaGuard); esp_timer_start_once(otaGuard, (uint64_t)OTA_STALL_MS * 1000); }
-}
-
-static void otaGuardStop() {
-    if (otaGuard) esp_timer_stop(otaGuard);
-}
 
 // Retained, so openHAB shows the truth after a restart of either end.
 static void publishSleepStatus() {
     char buf[160];
     size_t n = sleepStatusJson(buf, sizeof(buf), false);
-    mqtt.publish(topic("sleep/status").c_str(), (const uint8_t *)buf, n, true);
+    netPublish("sleep/status", buf, n, true);
 }
 
 // Called from sleepTick() immediately before the chip goes down, so the silence
 // that follows carries a reason. status goes "offline" either way -- that is the
 // last will firing on a dropped connection -- but this retained marker says
-// whether it was meant. Flushed with mqtt.loop() because deep sleep does not
+// whether it was meant. Flushed through the net task because deep sleep does not
 // wait for a socket.
-void sleepPublishAsleep() {
-    if (!mqtt.connected()) return;
-    char buf[160];
-    size_t n = sleepStatusJson(buf, sizeof(buf), true);
-    mqtt.publish(topic("sleep/status").c_str(), (const uint8_t *)buf, n, true);
-    mqtt.loop();
-    delay(120);
-}
 
 static void publishProbeFlags() {
     char buf[160];
     size_t n = probeFlagsJson(buf, sizeof(buf));
-    mqtt.publish(topic("probe/enabled").c_str(), (const uint8_t *)buf, n, true);
+    netPublish("probe/enabled", buf, n, true);
 }
 
-void onMqttMessage(char* inTopic, byte* payload, unsigned int length) {
-    String payloadStr = String((char*)payload).substring(0, length);
+// The retained marker that says the silence was meant. Flushed through the
+// queue before the chip goes down, because deep sleep does not wait for a
+// socket; netFlush() returns when the task has written it, or after 400 ms.
+void sleepPublishAsleep() {
+    if (!netMqttConnected()) return;
+    char buf[160];
+    size_t n = sleepStatusJson(buf, sizeof(buf), true);
+    netPublish("sleep/status", buf, n, true);
+    netFlush(400);
+    // netFlush() returns when the task has handed the bytes to the TCP stack,
+    // not when they have left the radio. On 2026-09-27 (27-2) the marker was
+    // written and the chip went down before it was sent: openHAB got the
+    // last will and never "asleep". The old code waited 120 ms after its
+    // synchronous publish for the same reason; with a power-saving station
+    // a quarter of a second is the safer figure, and it is paid once per sleep.
+    delay(250);
+}
 
-    // Probe switches: canbus/<base>/probe/en/<name>  payload ON or OFF.
-    //
-    // One topic per probe rather than a single command channel, because that is
-    // what an openHAB Switch channel binds to directly -- no rule, no parsing,
-    // and the item works from the phone anywhere there is a network.
-    //
-    // This does not touch the CAN bus. It is our own code deciding whether to
-    // talk to our own broker.
-    // Deep sleep: canbus/<base>/sleep/en  payload ON or OFF.
-    //
-    // Off by default and settable from anywhere, because a board that sleeps
-    // wrongly is a board you have to ride out to. This is the recall.
-    if (String(inTopic) == topic("sleep/en")) {
-        String v = payloadStr; v.toUpperCase();
-        const bool on = (v == "ON" || v == "1" || v == "TRUE");
+// Inbound from the broker, delivered by netPoll() in loop() context.
+//
+// Probe switches: <base>/probe/en/<name>, ON or OFF. One topic per probe rather
+// than a command channel, because that is what an openHAB Switch binds to
+// directly. Deep sleep: <base>/sleep/en -- off by default and settable from
+// anywhere, because a board that sleeps wrongly is a board you have to ride
+// out to; this is the recall. "$connected" is the task saying a new broker
+// session is up, so the retained state the loop owns is published again.
+static void onNetMessage(const char *leaf, const char *payloadIn) {
+    String payload(payloadIn); payload.toUpperCase();
+    const bool on = (payload == "ON" || payload == "1" || payload == "TRUE");
+    if (strcmp(leaf, "$connected") == 0) {
+        publishProbeFlags();
+        publishSleepStatus();
+        return;
+    }
+    if (strcmp(leaf, "sleep/en") == 0) {
         sleepSetEnabled(on);
         logEvent((String("[sleep] ") + (on ? "ENABLED" : "disabled")).c_str());
         publishSleepStatus();
         return;
     }
-
-    {
-        String prefix = topic("probe/en/");
-        String t = String(inTopic);
-        if (t.startsWith(prefix)) {
-            String name = t.substring(prefix.length());
-            int id = probeIdFromName(name.c_str());
-            if (id >= 0) {
-                String v = payloadStr; v.toUpperCase();
-                bool on = (v == "ON" || v == "1" || v == "TRUE");
-                probeSetEnabled((ProbeId)id, on);
-                logEvent((String("[probe] ") + name + " -> " + (on ? "ON" : "OFF")).c_str());
-                publishProbeFlags();
-            }
-            return;
-        }
-    }
-    // OTA trigger: canbus/indian/ota = "update" (case-insensitive)
-    if (String(inTopic) == topic("ota")) {
-        payloadStr.toLowerCase();
-        if (payloadStr == "update") {
-            logEvent("[ota] update trigger received via MQTT, starting HTTP download...");
-            publishOtaStatus("Starting download...");
-
-            // Report download progress back to openHAB every ~10%.
-            httpUpdate.onProgress([](int cur, int total) {
-                static int lastPct = -1;
-                int pct = (total > 0) ? (int)((int64_t)cur * 100 / total) : 0;
-                otaGuardKick();          // progress means it is still alive
-                if (pct != lastPct && (pct % 10 == 0)) {
-                    lastPct = pct;
-                    char m[40];
-                    snprintf(m, sizeof(m), "Downloading %d%%", pct);
-                    publishOtaStatus(m);
-                }
-            });
-            httpUpdate.rebootOnUpdate(true);
-            otaGuardStart();             // armed until the download finishes
-
-            // Download firmware from OpenHAB web server (URL in config.h — use
-            // the server LAN IP, not openhab.local: WiFiClient has no mDNS).
-            WiFiClient client;
-            // A socket that goes quiet must not block for ever either.
-            client.setTimeout(15);       // seconds, per read
-            t_httpUpdate_return ret = httpUpdate.update(client, OTA_FIRMWARE_URL);
-            otaGuardStop();              // returned, whatever the outcome
-            switch(ret) {
-                case HTTP_UPDATE_FAILED: {
-                    char m[96];
-                    snprintf(m, sizeof(m), "FAILED (%d): %s",
-                             httpUpdate.getLastError(),
-                             httpUpdate.getLastErrorString().c_str());
-                    publishOtaStatus(m);
-                    break;
-                }
-                case HTTP_UPDATE_NO_UPDATES:
-                    publishOtaStatus("No update available");
-                    break;
-                case HTTP_UPDATE_OK:
-                    // Rarely reached: rebootOnUpdate(true) restarts before this.
-                    publishOtaStatus("OK — rebooting");
-                    break;
-            }
+    const char *probePrefix = "probe/en/";
+    if (strncmp(leaf, probePrefix, strlen(probePrefix)) == 0) {
+        const char *name = leaf + strlen(probePrefix);
+        int id = probeIdFromName(name);
+        if (id >= 0) {
+            probeSetEnabled((ProbeId)id, on);
+            logEvent((String("[probe] ") + name + " -> " + (on ? "ON" : "OFF")).c_str());
+            publishProbeFlags();
         }
     }
 }
 
-// One backoff for every caller. ensureNetwork() already spaced its own calls
-// by 5 s, but publishState() and publishHeartbeat() retry inline with no spacing
-// at all -- on a parked bike with the hotspot up and no cellular, that was one
-// blocking connect attempt per loop pass, back to back. wifiConnect() resets
-// this the moment a link comes up, so a fresh association is never made to
-// wait out a backoff earned by the previous one.
-//
-// Stamped at the END of the attempt, and fifteen seconds. 2026.09.14-3 stamped
-// the time before connecting and waited five seconds from that stamp -- but a
-// connect that times out takes five seconds itself (hotspot up, broker not
-// reachable through it), so the stamp had expired by the time the attempt
-// returned and the next pass started the next one at once. loop() was blocked
-// five seconds of every five, the same outage the change was meant to cure.
-// The 2026-09-15 test ride showed it exactly: the phone's screen died the
-// moment the board joined the hotspot and came back the moment the hotspot was
-// switched off (no link, so the attempt fails instantly instead of timing out).
-//
-// Stamped afterwards, a five-second timeout is followed by fifteen seconds in
-// which loop() runs: BLE and the bus get three quarters of the time instead of
-// none of it.
-static const uint32_t MQTT_RETRY_MS = 15000;
-static uint32_t sMqttLastTry = 0;
-
-void mqttConnect() {
-    if (mqtt.connected()) return;
-    if (sMqttLastTry != 0 && millis() - sMqttLastTry < MQTT_RETRY_MS) return;
-    String willTopic = topic("status");
-    Serial.printf("[mqtt] connecting to %s:%d as clientId=%s ...\n",
-                  MQTT_BROKER, MQTT_PORT, mqttClientId());
-    if (mqtt.connect(mqttClientId(), MQTT_USERNAME, MQTT_PASSWORD,
-                     willTopic.c_str(), 0, true, "offline")) {
-        mqtt.publish(willTopic.c_str(), "online", true);
-        mqtt.setCallback(onMqttMessage);           // Set callback for incoming messages
-        mqtt.subscribe(topic("ota").c_str());      // Subscribe to OTA command topic
-        mqtt.subscribe(topic("probe/en/+").c_str());   // one switch per probe
-        mqtt.subscribe(topic("sleep/en").c_str());     // the deep-sleep recall
-        publishProbeFlags();                           // state, retained
-        publishSleepStatus();
-        // Announce the running firmware version (retained) so the UI confirms
-        // which image is live -- especially right after an OTA reboot.
-        //
-        // ONCE PER BOOT, not once per reconnect. It used to publish on every
-        // MQTT connection, which made the line indistinguishable from a boot
-        // banner: on 2026-09-04 a reconnect storm read as a reboot loop, and
-        // several hours went into chasing a crash that had never happened. The
-        // device had been up continuously the whole time.
-        //
-        // The topic is retained, so publishing once still leaves the UI with
-        // the right answer after a reconnect. What a reboot actually looks like
-        // is meta: "reset" changes, and "heap_min" jumps back up instead of
-        // creeping down.
-        static bool announced = false;
-        if (!announced) {
-            announced = true;
-            mqtt.publish(topic("ota/status").c_str(), "Running " FW_VERSION, true);
-        }
-        debugRingFlush();                          // what happened while we were away
-        logEvent("[mqtt] connected");
-    } else {
-        logEventf("[mqtt] connect failed: state=%d (%s)",
-                  mqtt.state(), mqttStateText(mqtt.state()));
-    }
-    sMqttLastTry = millis();                       // after the attempt, not before
-}
-
-// ---- DNS: forget the previous network's answers -----------------------------
-//
-// mqtt.example.com is 192.0.2.10 from inside the house and 198.51.100.10 from
-// anywhere else: the home resolver answers with the LAN address, TTL 3600.
-// lwIP caches that answer for the full hour, and the cache is NOT emptied when
-// the board moves to another network. So on 2026-09-15 the bike left the
-// garage, joined the phone's hotspot (the phone listed it: esp32s3-XXXXXX),
-// asked the cache where the broker was, got 192.0.2.10, and sent every SYN of
-// the ride into a private address that does not exist on the cellular side.
-// Each one timed out after five seconds. Nothing reached openHAB; nothing could.
-//
-// A power cycle empties the cache, and the first lookup afterwards goes to the
-// phone's resolver and gets the public address. That is why the roadside reboot
-// on the Zealand ride worked and the automatic failover never did -- and why a
-// day went into BLE coexistence and timeouts that were not the cause.
-//
-// dns_clear_cache() is lwIP's own. This core is built with
-// CONFIG_LWIP_CHECK_THREAD_SAFETY, under which lwIP core functions assert when
-// entered from outside the lwIP thread, and an assert here would be a crash
-// after every association -- the one failure OTA cannot recover from. So it
-// is handed to esp_netif_tcpip_exec(), which runs it in that thread and waits.
-static esp_err_t dnsClearInTcpipThread(void *) {
-    dns_clear_cache();
-    return ESP_OK;
-}
-
-static void flushDnsCache() {
-    esp_err_t err = esp_netif_tcpip_exec(dnsClearInTcpipThread, nullptr);
-    if (err != ESP_OK) logEventf("[wifi] DNS cache flush failed: %d", (int)err);
-}
-
-void wifiConnect() {
-    WiFi.mode(WIFI_STA);
-    // Twenty, not ten. The board runs BLE and WiFi on one radio with no
-    // coexistence tuning at all, and association has to share it with a
-    // connected phone. Ten seconds was enough on a cold boot, where nothing has
-    // paired yet -- which is exactly why a power cycle out of range worked on
-    // the Zealand ride while the automatic failover never did.
-    //
-    // Only safe because the wait above no longer blocks BLE. Doubling a
-    // blocking timeout would have doubled the outage.
-    const uint32_t WIFI_TIMEOUT_MS = 20000;  // 20 seconds per SSID
-    const char* ssidList[] = {WIFI_SSID, WIFI_SSID2, WIFI_SSID3};
-    const char* passList[] = {WIFI_PASSWORD, WIFI_PASSWORD2, WIFI_PASSWORD3};
-    
-    // Try the one that worked last time first.
-    //
-    // The list is tried in order, so a bike parked where only SSID3 reaches pays
-    // two ten-second timeouts before it connects. Measured on the motorcycle
-    // 2026-09-07: ninety-three seconds from the CAN frame that woke the board to
-    // MQTT being up, essentially all of it spent failing over. The wake itself
-    // was immediate.
-    //
-    // That cost is not new -- every OTA reboot has always paid it -- but deep
-    // sleep makes it visible, because it is now subtracted from the start of
-    // every ride rather than from a reboot nobody was watching.
-    //
-    // So the index of whichever SSID last worked is kept in NVS, and tried
-    // first. Same list, same fallback, different starting point: home is home
-    // most days, and when it is not, the first attempt costs one timeout that
-    // would have been paid anyway.
-    Preferences wifiPrefs;
-    wifiPrefs.begin("wificfg", false);
-    const int firstIdx = wifiPrefs.getUChar("last", 0) % 3;
-    wifiPrefs.end();
-
-    for (int n = 0; n < 3; n++) {
-        const int idx = (firstIdx + n) % 3;
-        // Skip if SSID is empty (fallback disabled)
-        if (!ssidList[idx] || strlen(ssidList[idx]) == 0) continue;
-        
-        Serial.printf("[wifi] attempting SSID%d: %s", idx + 1, ssidList[idx]);
-        // Fully reset the STA state before each attempt. Without this, starting
-        // a new WiFi.begin() while the previous attempt is still "connecting"
-        // fails with "wifi:sta is connecting, cannot set config" /
-        // ESP_ERR_WIFI_STATE (0x3006), so failover to SSID2/SSID3 never worked.
-        WiFi.disconnect(true);   // drop connection + clear stored config
-        delay(200);              // let the WiFi driver settle into idle
-        WiFi.begin(ssidList[idx], passList[idx]);
-        uint32_t start = millis();
-        // Service BLE while WiFi hunts.
-        //
-        // This function BLOCKS loop(), and loop() is where bleUpdate() lives.
-        // On the Zealand ride (2026-09-13) that meant the phone lost the stream
-        // for the whole scan: roughly thirty seconds dead, thirty alive, over
-        // and over, until the rider pulled over and power-cycled the board.
-        //
-        // bleUpdate() rate-limits itself at BLE_FAST_MS (100 ms), so calling it
-        // every 50 ms here costs nothing and gives the phone its normal service
-        // even while the radio is busy associating. The dot is printed on the
-        // old cadence so the serial log stays readable.
-        uint32_t lastDot = 0;
-        while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
-            // Drain first, then send: the packet the phone gets is then the
-            // bus as it is now, not as it was when the scan started. Without
-            // the drain the fast packet carried frozen values for the whole
-            // wait, and the app -- which calls anything arriving within 2.5 s
-            // "live" -- showed a needle stuck at the last speed for up to
-            // forty seconds. Dashes would have been honest; that was not.
-            drainCan();
-            bleUpdate(st);
-            delay(50);
-            if (millis() - lastDot >= 300) { lastDot = millis(); Serial.print("."); }
-        }
-        Serial.println();
-        
-        if (WiFi.status() == WL_CONNECTED) {
-            Serial.printf("[wifi] connected to SSID%d%s\n", idx + 1,
-                          (n == 0) ? " (remembered)" : "");
-            // Remember it, but only when it changed: NVS has a write budget and
-            // the common case is connecting to the same network every time.
-            if (idx != firstIdx) {
-                Preferences wp;
-                wp.begin("wificfg", false);
-                wp.putUChar("last", (uint8_t)idx);
-                wp.end();
-                Serial.printf("[wifi] will try SSID%d first next time\n", idx + 1);
-            }
-            // Logged NOW, not after MQTT is up: with the broker out of reach
-            // these lines go to the ring buffer and arrive with the next
-            // connection, which is the only way the road ever gets reported.
-            logEventf("[wifi] connected to SSID%d (%s), IP %s, rssi %d",
-                      idx + 1, ssidList[idx], WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
-            flushDnsCache();                 // this network's resolver, not the last one's
-            IPAddress brokerIp;
-            if (WiFi.hostByName(MQTT_BROKER, brokerIp)) {
-                logEventf("[wifi] broker %s resolved to %s", MQTT_BROKER, brokerIp.toString().c_str());
-            } else {
-                logEventf("[wifi] DNS failed for broker %s", MQTT_BROKER);
-            }
-
-            configTime(0, 0, "dk.pool.ntp.org", "pool.ntp.org", "time.cloudflare.com");
-            waitForClockSync();
-
-            wifiClient.setCACert(MQTT_ROOT_CA);
-            // Bound the two things that can block loop() when the hotspot is
-            // up but the cellular link is not: the core's defaults are 30 s
-            // for the TCP connect and 120 s for the TLS handshake, and
-            // ensureNetwork() retries every 5 s -- so the board was dead for
-            // 30 of every 35 seconds, BLE and CAN included. A SYN/ACK over
-            // cellular is well under a second; a handshake with a 2048-bit
-            // key on this chip is two to three. Milliseconds, both.
-            wifiClient.setConnectionTimeout(5000);
-            wifiClient.setHandshakeTimeout(10000);
-            sMqttLastTry = 0;                // a fresh link earns an immediate try
-            mqtt.setServer(MQTT_BROKER, MQTT_PORT);
-            mqtt.setBufferSize(3072);        // room for reassembled TP messages
-            // Keepalive well ABOVE the 30 s heartbeat so a single slow/dropped
-            // PINGRESP can't fire the LWT. Matters most when the ESP rides on a
-            // phone hotspot: the broker is reached via a cellular->internet->home
-            // NAT hairpin that adds latency + occasional packet loss, so the old
-            // 30 s keepalive / 10 s socket timeout produced an "online then ~30 s
-            // offline" flap whenever the bus was idle (no CAN traffic to keep the
-            // TCP socket warm). 60 s keepalive + 15 s socket timeout absorbs that.
-            mqtt.setKeepAlive(60);
-            mqtt.setSocketTimeout(15);
-            mqtt.setCallback(onMqttMessage);  // Set message callback BEFORE connect
-            mqttConnect();
-            if (mqtt.connected()) {
-                // ---- OTA Setup ----
-                ArduinoOTA.setHostname(mqttClientId());
-                ArduinoOTA.setPassword(""  /* no auth password for now */);
-                ArduinoOTA.setTimeout(120000);  // 120 second timeout for high-latency links
-                ArduinoOTA.onStart([]() {
-                    logEvent("[ota] OTA update starting...");
-                });
-                ArduinoOTA.onEnd([]() {
-                    logEvent("[ota] OTA update complete, rebooting...");
-                });
-                ArduinoOTA.onError([](ota_error_t error) {
-                    logEventf("[ota] OTA error code %u", error);
-                });
-                ArduinoOTA.begin();
-                logEvent("[ota] ready (hostname: indian-canbus.local:3232/update)");
-            }
-            return;  // Connected successfully, exit function
-        }
-    }
-    
-    // All WiFi attempts failed
-    Serial.printf("[wifi] FAILED - all SSID attempts exhausted, continuing USB-only\n");
-    logEvent("[wifi] FAILED - all SSID attempts exhausted, continuing USB-only");
-}
 
 // Publish all dirty IDs as compact JSON, respecting the throttle interval.
 // Each ID goes to its own retained topic  <base>/id/0x<ID>  so openHAB can bind
@@ -927,7 +400,7 @@ void wifiConnect() {
 void publishChanges() {
     if (millis() - lastPublish < MQTT_PUBLISH_INTERVAL_MS) return;
     lastPublish = millis();
-    if (!mqtt.connected()) { mqttConnect(); if (!mqtt.connected()) return; }
+    if (!netMqttConnected()) return;
 
     String frameTopic = topic("frame");
     for (auto &kv : idTable) {
@@ -960,12 +433,12 @@ void publishChanges() {
 
         // Per-ID retained topic (openHAB-friendly), e.g. canbus/indian/id/0x18FEF100
         String idTopic = String(MQTT_BASE_TOPIC) + "/id/" + idHex;
-        mqtt.publish(idTopic.c_str(), (const uint8_t *)payload, n, true);
+        netPublishTopic(idTopic.c_str(), payload, n, true);
         // Per-PGN retained topic for J1939 frames, e.g. canbus/indian/pgn/65262
         // (same payload). Groups all source addresses of one parameter group.
         if (j.valid) {
             String pgnTopic = String(MQTT_BASE_TOPIC) + "/pgn/" + String((unsigned long)j.pgn);
-            mqtt.publish(pgnTopic.c_str(), (const uint8_t *)payload, n, true);
+            netPublishTopic(pgnTopic.c_str(), payload, n, true);
 
             // --- TPMS split: PGN 65268 (0xFEF4) Tire Condition ---------------
             // Front & rear share this PGN. J1939 SPN 929 "Tyre Location" is in
@@ -982,15 +455,15 @@ void publishChanges() {
                 else if (loc == 0x10 || loc == 0x21 || loc == 0x01) pos = "rear";
                 if (pos) {
                     String t = String(MQTT_BASE_TOPIC) + "/tpms/" + pos;
-                    mqtt.publish(t.c_str(), (const uint8_t *)payload, n, true);
+                    netPublishTopic(t.c_str(), payload, n, true);
                 }
                 // Always publish per source address as a reliable fallback.
                 String saT = String(MQTT_BASE_TOPIC) + "/tpms/sa/" + String(j.sa);
-                mqtt.publish(saT.c_str(), (const uint8_t *)payload, n, true);
+                netPublishTopic(saT.c_str(), payload, n, true);
             }
         }
         // Rolling "latest change" stream (non-retained)
-        mqtt.publish(frameTopic.c_str(), (const uint8_t *)payload, n, false);
+        netPublishTopic(frameTopic.c_str(), payload, n, false);
     }
 }
 #endif  // FIRMWARE_MODE == MODE_DISCOVERY (publishChanges)
@@ -1013,17 +486,19 @@ static const char *resetReasonName() {
 }
 
 void publishHeartbeat() {
-    if (!mqtt.connected()) { mqttConnect(); if (!mqtt.connected()) return; }
+    if (!netMqttConnected()) return;
     if (millis() - lastHeartbeat < 30000) return;
     lastHeartbeat = millis();
 
-    mqtt.publish(topic("status").c_str(), "online", true);
+    netPublish("status", "online", 6, true);
 
     JsonDocument meta;
     meta["bitrate"] = haveSpeed ? detectedName : "none";
     meta["scan_frames"] = scanFrames;   // real detection count, not 0
     meta["can_detected"] = haveSpeed;
-    meta["ip"] = WiFi.localIP().toString();
+    meta["ip"] = netIp();
+    meta["rssi"] = netRssi();
+    meta["net_dropped"] = netDropped();   // publishes lost to a full queue since boot
     meta["fw"] = FW_VERSION;             // running firmware version (OTA verify)
     // Why the last boot happened, and how much memory is left.
     //
@@ -1042,9 +517,14 @@ void publishHeartbeat() {
     // Seconds since boot. The single unambiguous answer to "did it restart?",
     // which is the question that cost the most time on 2026-09-04.
     meta["uptime"] = (uint32_t)(millis() / 1000);
+    // Worst stalls of the last 30 s, see loop() and bleUpdate(). The app calls
+    // a stream older than 2.5 s dead, so anything above 2500 here is a freeze
+    // the rider saw.
+    meta["loop_max_ms"] = gLoopMaxMs;      gLoopMaxMs = 0;
+    meta["ble_gap_max_ms"] = bleMaxGapTake();
     char buf[260];
     size_t n = serializeJson(meta, buf, sizeof(buf));
-    mqtt.publish(topic("meta").c_str(), (const uint8_t *)buf, n, true);
+    netPublish("meta", buf, n, true);
 
     // Bus health, on its own retained topic rather than in `state`.
     //
@@ -1078,7 +558,7 @@ void publishHeartbeat() {
         bus["errs"] = health.errs[0] ? health.errs : "none";
         char hb[160];
         size_t hn = serializeJson(bus, hb, sizeof(hb));
-        mqtt.publish(topic("bus/health").c_str(), (const uint8_t *)hb, hn, true);
+        netPublish("bus/health", hb, hn, true);
     }
 }
 
@@ -1458,7 +938,7 @@ void decodeSoft(const uint8_t *b, uint16_t nn) {
 // WHEN TO REMOVE IT: when PGN 65382 bytes 1 and 4 are identified. That is the
 // last thing it is hunting.
 //
-// This is the second version. The first put mqtt.connected() at the top of a
+// This is the second version. The first put netMqttConnected() at the top of a
 // function called on EVERY frame, which is a network-stack call in the hottest
 // path on the device. That is fixed here by caching the answer: the main loop
 // sets probeOnline once per pass, and this reads a bool.
@@ -1582,7 +1062,7 @@ static void ratesFrame(const J1939 &j) {
             first = false;
         }
         n += snprintf(buf + n, sizeof(buf) - n, "]}");
-        mqtt.publish(topic("probe/rates").c_str(), buf, false);
+        netPublish("probe/rates", buf, strlen(buf), false);
         memset(gRates, 0, sizeof(gRates));
         gRatesWin = now;
     }
@@ -1612,7 +1092,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
             snprintf(msg, sizeof(msg), "b4=%02X 595=%u  b5=%02X  %d km/h",
                      b[3], (unsigned)(b[3] & 0x03), b[4],
                      isnan(st.speed) ? 0 : (int)st.speed);
-            mqtt.publish(topic("probe/cruise").c_str(), msg, false);
+            netPublish("probe/cruise", msg, strlen(msg), false);
         }
         // deliberately no return: the generic detector still sees byte 5 while
         // parked, which is the one byte of this PGN the mask lets through.
@@ -1666,7 +1146,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
                      isnan(st.fuelRate) ? -1.0f : st.fuelRate,
                      isnan(st.rpm) ? -1 : (int)st.rpm,
                      isnan(st.speed) ? 0 : (int)st.speed);
-            mqtt.publish(topic("probe/throttle").c_str(), msg, false);
+            netPublish("probe/throttle", msg, strlen(msg), false);
         }
     }
 
@@ -1692,7 +1172,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
             probe2304Val = b[0];
             char msg[24];
             snprintf(msg, sizeof(msg), "%u %+d", b[0], (int)b[0] - 113);
-            mqtt.publish(topic("probe/2304").c_str(), msg, false);
+            netPublish("probe/2304", msg, strlen(msg), false);
         }
         return;
     }
@@ -1717,7 +1197,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
             claimSa[slot] = j.sa; claimAt[slot] = cnow;
             char msg[40];
             snprintf(msg, sizeof(msg), "CLAIM sa=%u", j.sa);
-            mqtt.publish(topic("probe").c_str(), msg, false);
+            netPublish("probe", msg, strlen(msg), false);
         }
         return;
     }
@@ -1746,7 +1226,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
         char msg[48];
         snprintf(msg, sizeof(msg), "NEW pgn=%lu sa=%u dlc=%u",
                  (unsigned long)j.pgn, j.sa, nn);
-        mqtt.publish(topic("probe").c_str(), msg, false);
+        netPublish("probe", msg, strlen(msg), false);
         return;
     }
 
@@ -1757,7 +1237,7 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
         char msg[64];
         snprintf(msg, sizeof(msg), "pgn=%lu sa=%u b%u %02X->%02X  (%u)",
                  (unsigned long)j.pgn, j.sa, i, slot->data[i], b[i], b[i]);
-        mqtt.publish(topic("probe").c_str(), msg, false);
+        netPublish("probe", msg, strlen(msg), false);
         slot->data[i] = b[i];
         probeLastPub = now;
     }
@@ -1793,7 +1273,7 @@ static const char *standState();   // defined below; used by gearChanged()
 // is finally cleaned the same counter says whether it worked.
 static void gearChanged(char to) {
     if (st.gear[0] == 0) return;              // first reading, not a change
-    if (!mqtt.connected()) return;
+    if (!netMqttConnected()) return;
 
     const bool still   = !isnan(st.speed) && st.speed < 2.0f;
     const char *stand  = standState();
@@ -1809,7 +1289,7 @@ static void gearChanged(char to) {
     snprintf(msg, sizeof(msg), "%c->%c rpm=%d speed=%.0f stand=%s%s",
              st.gear[0], to, rpm, isnan(st.speed) ? 0.0f : st.speed,
              stand ? stand : "?", suspect ? "  SUSPECT" : "");
-    mqtt.publish(topic("gear").c_str(), msg, false);
+    netPublish("gear", msg, strlen(msg), false);
 }
 
 // Decode one CAN frame into the vehicle state. Scales mirror the JS transforms.
@@ -2866,7 +2346,7 @@ void publishState() {
     bool heartbeat = (STATE_HEARTBEAT_MS > 0) &&
                      (millis() - lastStatePub >= STATE_HEARTBEAT_MS);
     if (!stateDirty && !heartbeat) return;
-    if (!mqtt.connected()) { mqttConnect(); if (!mqtt.connected()) return; }
+    if (!netMqttConnected()) return;
     lastStatePub = millis();
     stateDirty = false;
 
@@ -2893,7 +2373,7 @@ void publishState() {
         stateDirty = true;               // try again as soon as something shrinks
         return;
     }
-    mqtt.publish(topic("state").c_str(), (const uint8_t *)payload, n, true);
+    netPublish("state", payload, n, true);
 }
 #endif  // FIRMWARE_MODE == MODE_PRODUCTION
 
@@ -2945,7 +2425,7 @@ TpSession *tpAlloc(uint8_t sa) {
 // Reassembled message -> same JSON shape as a normal frame so the existing
 // openHAB transforms / capture scripts just work, plus tp:true and len.
 void tpPublish(TpSession *s) {
-    if (!mqtt.connected()) return;
+    if (!netMqttConnected()) return;
     JsonDocument doc;
     doc["pgn"] = s->pgn;
     doc["sa"]  = s->sa;
@@ -2956,8 +2436,8 @@ void tpPublish(TpSession *s) {
     static char payload[TP_MAX_BYTES * 5 + 64];
     size_t n = serializeJson(doc, payload, sizeof(payload));
     String t = String(MQTT_BASE_TOPIC) + "/pgn/" + String((unsigned long)s->pgn);
-    mqtt.publish(t.c_str(), (const uint8_t *)payload, n, true);
-    mqtt.publish(topic("frame").c_str(), (const uint8_t *)payload, n, false);
+    netPublishTopic(t.c_str(), payload, n, true);
+    netPublish("frame", payload, n, false);
 }
 
 // Completion hook for a fully reassembled multi-packet message.
@@ -3008,7 +2488,6 @@ void handleTransport(const J1939 &j, const CanFrame &f) {
     }
 }
 #endif // TP_REASSEMBLY
-#endif // ENABLE_MQTT
 
 // Scan one bitrate in listen-only for windowMs, counting frames. Bitrate
 // scanning is ALWAYS listen-only, even if TX is enabled — we must never
@@ -3021,6 +2500,12 @@ bool tryRate(uint32_t bitrate, uint32_t windowMs, uint32_t &frameCount) {
     CanFrame msg;
     while (millis() - start < windowMs) {
         if (canReceive(msg, 5)) frameCount++;
+        // A scan window is 1.5 s, and with the ignition off it repeats every
+        // few seconds. That was the 2.4 s BLE gap in the first heartbeat after
+        // every boot (2026-09-27). bleUpdate() rate-limits itself, so calling it
+        // here costs nothing and the phone keeps its cadence while the bus is
+        // listened for.
+        bleUpdate(st);
     }
     canStop();
     return true;
@@ -3275,17 +2760,15 @@ bool scanAndEnterBus(bool firstBoot) {
     Serial.println("[tx] TX_ENABLED=1 — device CAN transmit. Use with care.");
 #endif
 
-#if ENABLE_MQTT
-    if (mqtt.connected()) {
+    if (netMqttConnected()) {
         JsonDocument meta;
         meta["bitrate"] = detectedName;
         meta["scan_frames"] = best;
         char buf[128]; size_t n = serializeJson(meta, buf, sizeof(buf));
-        mqtt.publish(topic("meta").c_str(), (const uint8_t *)buf, n, true);
+        netPublish("meta", buf, n, true);
         logEventf(">> Detected bus: %s (%lu frames / %d ms)",
                   detectedName, (unsigned long) best, SCAN_WINDOW_MS);
     }
-#endif
     logEvent("Logging frames (USB) + publishing changes (MQTT):");
 #if FIRMWARE_MODE == MODE_DISCOVERY && TPMS_DISCOVERY
     // >>> REMOVE ON CLEANUP <<<
@@ -3322,19 +2805,11 @@ void ledSetup() {
 static LedState ledCurrentState() {
     if (gLedFault) return LED_FAULT;
     if (haveSpeed) {                      // CAN bus locked = the important bit
-#if ENABLE_MQTT
-        return mqtt.connected() ? LED_RUN : LED_RUN_NONET;
-#else
-        return LED_RUN_NONET;             // USB-only build: no network to expect
-#endif
+        return netMqttConnected() ? LED_RUN : LED_RUN_NONET;
     }
-#if ENABLE_MQTT
-    if (WiFi.status() != WL_CONNECTED) return LED_WIFI;
-    if (!mqtt.connected())             return LED_MQTT;
+    if (!netWifiConnected()) return LED_WIFI;
+    if (!netMqttConnected()) return LED_MQTT;
     return LED_NOCAN;                     // fully online, just waiting for the bus
-#else
-    return LED_NOCAN;
-#endif
 }
 
 // Non-blocking: recompute colour+brightness from millis() and push at ~30 Hz.
@@ -3424,9 +2899,7 @@ void setup() {
     sleepBegin();         // deep-sleep setting, and why this boot happened
     bleSetup();
 
-#if ENABLE_MQTT
-    wifiConnect();
-#endif
+    netBegin(onNetMessage);   // WiFi, MQTT and OTA come up in their own task
 
     // First detection: probe every rate once. If the ignition is OFF (silent
     // bus) this returns without locking and loop() keeps retrying — the device
@@ -3435,54 +2908,6 @@ void setup() {
     scanAndEnterBus(true);
 }
 
-#if ENABLE_MQTT
-// Non-blocking network watchdog: reconnect WiFi (10 s backoff) and MQTT (5 s
-// backoff) WITHOUT rebooting, so a dropped link self-heals in place.
-uint32_t lastWifiRetry = 0;
-uint32_t lastMqttRetry = 0;
-uint8_t  wifiRetriesOnSameSsid = 0;
-void ensureNetwork() {
-    if (WiFi.status() != WL_CONNECTED) {
-        if (millis() - lastWifiRetry > 10000) {
-            lastWifiRetry = millis();
-            // WiFi.reconnect() retries the SSID we are already configured for.
-            // That is right for a router that rebooted, and wrong for a bike
-            // that rode away: leaving the garage on home WiFi, the home SSID is
-            // simply gone, and reconnect() would keep asking for it every ten
-            // seconds for the rest of the ride while the phone hotspot sat
-            // there unused. wifiConnect() is the only code that walks the SSID
-            // list, and it only ran from setup() -- so the failover worked on
-            // wake but never in motion.
-            //
-            // So: three cheap reconnects (30 s, covers a router reboot or a
-            // brief dropout), then fall back to the full list. wifiConnect()
-            // re-runs the same path as boot, including remembering the SSID
-            // that worked in NVS, so once the hotspot has carried one ride it
-            // is tried first on the next wake. ArduinoOTA.begin() is guarded by
-            // its own _initialized flag, so calling it again is a no-op.
-            if (++wifiRetriesOnSameSsid <= 3) {
-                logEventf("[wifi] link down - reconnecting (%u/3)", wifiRetriesOnSameSsid);
-                WiFi.disconnect();
-                WiFi.reconnect();
-            } else {
-                logEvent("[wifi] link down - rescanning all SSIDs");
-                wifiRetriesOnSameSsid = 0;   // cheap retries again after this
-                wifiConnect();               // blocks up to 30 s, as at boot
-                lastWifiRetry = millis();    // re-arm from when the scan ended
-            }
-        }
-        return;                            // no point touching MQTT yet
-    }
-    wifiRetriesOnSameSsid = 0;             // link is up; start the count over
-    if (!mqtt.connected()) {
-        if (millis() - lastMqttRetry > 5000) {
-            lastMqttRetry = millis();
-            mqttConnect();
-        }
-    }
-    mqtt.loop();                           // service keepalive / RX
-}
-#endif
 
 /**
  * Empty the CAN receive queue and decode what was in it. At most
@@ -3490,7 +2915,7 @@ void ensureNetwork() {
  * network stack (that starvation is what caused the MQTT flapping).
  *
  * This WAS the top of loop(). It is a function now because loop() is not the
- * only place that needs the bus read: wifiConnect() and waitForClockSync()
+ * only place that needs the bus read: until 2026-09-27 wifiConnect() and waitForClockSync()
  * block for up to twenty seconds each, and during the Zealand ride that meant
  * the bus went unread and the phone was fed frozen values for the whole wait.
  * Both now call this. Guarded on haveSpeed, so it is a no-op from setup()
@@ -3512,7 +2937,7 @@ void drainCan() {
 #endif
 #if FIRMWARE_MODE == MODE_PRODUCTION
         decodeState(id, ext, frame);      // in-firmware decode -> one state JSON
-#if ENABLE_MQTT && TP_REASSEMBLY
+#if TP_REASSEMBLY
         if (ext) {                        // stitch VIN/SW/DM1 multi-packet msgs
             J1939 jt = decodeJ1939(id, ext);
             if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
@@ -3521,7 +2946,7 @@ void drainCan() {
 #endif
 #else
         updateTable(id, ext, frame);      // table for MQTT (changes only)
-#if ENABLE_MQTT && TP_REASSEMBLY
+#if TP_REASSEMBLY
         if (ext) {                        // stitch multi-packet TP/BAM messages
             J1939 jt = decodeJ1939(id, ext);
             if (jt.valid && (jt.pgn == 60416 || jt.pgn == 60160))
@@ -3535,12 +2960,24 @@ void drainCan() {
     }
 }
 
+// Worst time between two entries of loop() since the last heartbeat. Anything
+// that blocks -- a connect attempt to a broker that is not there, an SNTP wait,
+// an OTA download -- is the whole gap, CAN and BLE included. Instrumentation
+// for the loop-stall work (2026-09-27); published in meta as loop_max_ms and
+// reset there, so the figure is "worst stall in the last 30 s".
+static uint32_t sLoopPrevMs = 0;
+uint32_t gLoopMaxMs = 0;
+
 void loop() {
-#if ENABLE_MQTT
-    ensureNetwork();
+    {
+        const uint32_t t = millis();
+        if (sLoopPrevMs != 0 && t - sLoopPrevMs > gLoopMaxMs) gLoopMaxMs = t - sLoopPrevMs;
+        sLoopPrevMs = t;
+    }
+    netPoll();                    // inbound broker messages, handled here, not in the task
 #if FIRMWARE_MODE == MODE_PRODUCTION && PROBE_CHANGES
     // Once per pass, so probeFrame never reaches into the network stack.
-    probeOnline = mqtt.connected();
+    probeOnline = netMqttConnected();
     cruiseUpdate();          // derived cruise hold; see the cruise section above
 #endif
 #if FIRMWARE_MODE == MODE_PRODUCTION
@@ -3553,21 +2990,14 @@ void loop() {
         liveCleared = false;
     }
 #endif
-    if (mqtt.connected()) {
-        mqtt.loop();              // MQTT message processing (calls callback)
-        buttonsTick(millis());    // resolves a short press once the double-press gap has passed
-        publishHeartbeat();
-        ArduinoOTA.handle();       // OTA update handler (non-blocking when idle)
-    }
-#else
-    ArduinoOTA.handle();
-#endif
+    buttonsTick(millis());        // resolves a short press once the double-press gap has passed
+    publishHeartbeat();           // returns at once without a broker
 #if STATUS_LED
     ledUpdate();                          // refresh onboard health LED (~30 Hz)
 #endif
 
 #if FIRMWARE_MODE == MODE_PRODUCTION
-    // Deliberately outside the ENABLE_MQTT/mqtt.connected() guards below: BLE is
+    // Deliberately outside the ENABLE_MQTT/netMqttConnected() guards below: BLE is
     // the transport that must keep working with no WiFi. Placed before the
     // !haveSpeed return for the same reason the MQTT heartbeat is — a connected
     // phone should keep seeing the last known values on a bike with the ignition
@@ -3604,7 +3034,7 @@ void loop() {
         // end of loop() is unreachable in the one situation it was written for.
         // Found on the bike within a minute of switching the feature on: it was
         // enabled, the bus had been quiet for 481 seconds, and it stayed awake.
-        sleepTick(mqtt.connected(), false);
+        sleepTick(netMqttConnected(), netBusy());
 
         delay(50);
         return;
@@ -3616,23 +3046,18 @@ void loop() {
     discPoll();                           // >>> REMOVE ON CLEANUP <<< : z=reset r=report
 #endif
 
-#if ENABLE_MQTT
-    if (mqtt.connected()) {
-        mqtt.loop();
 #if FIRMWARE_MODE == MODE_PRODUCTION
-        publishState();                   // ONE retained state JSON, throttled
+    publishState();                       // ONE retained state JSON, throttled; nothing without a broker
 #else
-        publishChanges();                 // MQTT: throttled, changes only
+    publishChanges();                     // MQTT: throttled, changes only
 #endif
-    }
 #if TP_REASSEMBLY
     tpExpire();                           // drop stalled multi-packet transfers
-#endif
 #endif
 
     // Last thing in the loop, so anything with work in hand has already had it.
     // Does nothing at all unless deep sleep has been switched on from openHAB,
     // and cannot fire within the first ninety seconds of any wake -- see
     // sleep.h for why that window is what makes the feature recoverable.
-    sleepTick(mqtt.connected(), false);
+    sleepTick(netMqttConnected(), netBusy());
 }

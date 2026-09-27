@@ -358,7 +358,26 @@ static void buildFastPacket(const VehState &st, uint8_t *out) {
     out[7] = valid;
 }
 
+// How long the phone went without service, at worst, since the last time
+// anyone asked. Measured at the entry of bleUpdate() -- wherever it is called
+// from -- so a stall anywhere in loop() (a blocking network call, a long
+// decode) shows up here as the gap the app would have seen. Read and reset by
+// the MQTT heartbeat, so meta carries the worst gap of the last 30 s.
+static uint32_t sBleGapPrevMs = 0;
+static uint32_t sBleGapMaxMs  = 0;
+
+uint32_t bleMaxGapTake() {
+    const uint32_t v = sBleGapMaxMs;
+    sBleGapMaxMs = 0;
+    return v;
+}
+
 void bleUpdate(const VehState &st) {
+    {
+        const uint32_t t = millis();
+        if (sBleGapPrevMs != 0 && t - sBleGapPrevMs > sBleGapMaxMs) sBleGapMaxMs = t - sBleGapPrevMs;
+        sBleGapPrevMs = t;
+    }
     if (!gPaired || !gChFast || !gChState) return;
 
     const uint32_t now = millis();

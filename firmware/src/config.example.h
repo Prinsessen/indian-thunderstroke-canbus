@@ -82,7 +82,14 @@ MrY=
 #define MQTT_PUBLISH_INTERVAL_MS  1000
 
 // Set to 1 to also enable MQTT, 0 for USB-only (no WiFi).
+#if NO_MQTT_BUILD
+#define ENABLE_MQTT  0
+#else
 #define ENABLE_MQTT  1
+#endif
+// WiFi without a broker: ArduinoOTA over the LAN still works, nothing is
+// published. Implied by ENABLE_MQTT; set to 1 with ENABLE_MQTT 0 for that.
+#define ENABLE_WIFI  ENABLE_MQTT
 
 // ---- BLE local phone link ---------------------------------------------------
 // 1 = also serve the decoded state over a BLE GATT service so a phone app can

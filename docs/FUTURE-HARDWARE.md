@@ -146,4 +146,4 @@ power profile is known, the module moves onto the board in rev 2 with a proper
    month is plenty — state JSON at 5 Hz is under 20 MB an hour.
 
 An integrated uplink removes the need for the RUTM50, for the phone hotspot,
-and for most of `wifiConnect()` on the road.
+and for most of the WiFi handling in `net.cpp` on the road.

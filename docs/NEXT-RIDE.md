@@ -6,6 +6,16 @@
 
 ### 1. The WiFi failover starves BLE, and everything else
 
+**Resolved 2026-09-27 (firmware 2026.09.27-2).** The whole network -- WiFi,
+SNTP, MQTT, OTA -- now runs in its own task on core 0 (`src/net.cpp`), and
+`loop()` never waits for it. Reproduced in the garage first by blocking the
+broker for the bike: on 27-1 the worst loop gap was 5019 ms and the phone went
+6656 ms without a packet, "on and off at regular intervals"; on 27-2, same test,
+4 ms and 3 ms with 22 failed connect attempts running in the background. The
+paragraphs below are the history of how the mechanism was found, kept as
+written.
+
+
 **Settled 2026-09-15, and the paragraphs below got the mechanism wrong.** A
 ten-minute test ride on `2026.09.14-4` (wake 15:51:40, last packet from home
 15:56:06, last-will 15:57:37, back on `Devices` at 16:06:18 by an in-motion

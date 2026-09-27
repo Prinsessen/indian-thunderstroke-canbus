@@ -18,13 +18,13 @@ No cable. No laptop. No mDNS. No inbound connections to the device.
       ▼  (automation/js/canbus-ota.js)
  publishMQTT  ──►  MQTT topic  canbus/indian/ota  = "update"
       │
-      ▼  (ESP32 subscribed, onMqttMessage in main.cpp)
+      ▼  (ESP32 subscribed; since 2026-09-27 the network task in net.cpp)
  httpUpdate.update("http://192.0.2.10:8080/static/indian-canbus-firmware.bin")
       │            └─ progress ──►  canbus/indian/ota/status  = "Downloading NN%"
       ▼
  flash + reboot
       │
-      ▼  (on boot, mqttConnect)
+      ▼  (on boot, first broker connection, net.cpp)
  publish  canbus/indian/ota/status = "Running <FW_VERSION>"
           canbus/indian/meta       = {..., "fw":"<FW_VERSION>"}
 ```
@@ -152,9 +152,9 @@ JSRule on the command is deterministic and logs each step.
 |--------|-------|------|
 | `OTA_FIRMWARE_URL` | `config.h` (fallback in `main.cpp`) | HTTP URL of the image. Must be the server **IP**, e.g. `http://192.0.2.10:8080/static/indian-canbus-firmware.bin`. |
 | `FW_VERSION` | `config.h` (fallback `"dev"` in `main.cpp`) | Version string, published in `/meta` and as `Running <ver>`. |
-| `onMqttMessage()` | `main.cpp` | On `canbus/indian/ota == "update"`: registers `httpUpdate.onProgress`, `rebootOnUpdate(true)`, runs `httpUpdate.update()`, publishes result. |
-| `publishOtaStatus()` | `main.cpp` | Retained publish to `canbus/indian/ota/status` (also mirrored to `/debug`). |
-| `mqttConnect()` | `main.cpp` | On connect, subscribes to `.../ota` and publishes `Running <FW_VERSION>`. |
+| `runHttpOta()` | `net.cpp` (was `onMqttMessage()` in `main.cpp` until 2026-09-27) | On `<base>/ota == "update"`: registers `httpUpdate.onProgress`, `rebootOnUpdate(true)`, runs `httpUpdate.update()` **in the network task**, so the bus and the phone keep running during the download; `netBusy()` holds deep sleep off meanwhile. |
+| `publishOtaStatus()` | `net.cpp` | Retained publish to `<base>/ota/status` (also mirrored to `/debug`). |
+| `mqttConnectMaybe()` | `net.cpp` | On connect, subscribes to `.../ota` and publishes `Running <FW_VERSION>` once per boot. |
 | WiFi failover | `main.cpp` `wifiConnect()` | Tries SSID1→2→3. Calls `WiFi.disconnect(true)` + delay **before each** attempt (fixes `sta is connecting, cannot set config` / `ESP_ERR_WIFI_STATE 0x3006` that previously broke fallback). |
 
 The `#ifndef` fallbacks for `OTA_FIRMWARE_URL` / `FW_VERSION` in `main.cpp` mean
@@ -209,7 +209,7 @@ echo "openhab:send CanBus_OTA update" | /usr/share/openhab/runtime/bin/client -p
 Then watch `OTA Status` until it reads `Running 2026.09.14-2`. To go back in
 *source*: `git checkout known-good-2026.09.14-2 -- src/main.cpp`, rebuild, deploy.
 
-**What OTA cannot undo:** an image that crashes before `mqttConnect()` has run,
+**What OTA cannot undo:** an image that crashes before the network task has connected,
 or that never joins WiFi, cannot receive the next `update`. Every change since
 2026-09-14 has therefore been reviewed against one question first — *does any
 of it run before the network is up, and can it crash there?* — and the answer
@@ -260,6 +260,7 @@ OTA.
 | `HTTP_UPDATE_FAILED (-1): connection refused` | Old firmware still has `openhab.local`, or wrong IP | Reflash a build with `OTA_FIRMWARE_URL` = server IP; verify `curl` serves the `.bin` |
 | Device offline, never reconnects on the bench | SSID1 absent + old WiFi-failover bug | Reflash the WiFi-failover fix, or move device where an SSID from `config.h` exists |
 | UI shows old version after OTA | Browser cache | **Ctrl+Shift+R**; trust the item states / MQTT |
+| First `update` after a wake fails at once (`FAILED (-11): HTTP error: read Timeout`) or crawls and dies | Not understood (seen three times on 2026-09-27, on the old and the new code path); the second `update` a minute later ran in 20-40 s every time | Send `update` again. The guard restarts the chip if a download stalls for 300 s, so a failed first attempt costs at most five minutes. |
 | Downloads then boot-loops | Bad/corrupt image | USB recovery flash (see above) |
 
 ---
@@ -268,6 +269,9 @@ OTA.
 
 | Version | Notes |
 |---------|-------|
+| `2026.09.27-3` | The `asleep` marker is given 250 ms to leave the radio after `netFlush()`; on 27-2 the chip went down with it still in the TCP buffer and openHAB got only the last will. |
+| `2026.09.27-2` | **The network in its own task** (`src/net.cpp`): WiFi, SNTP, MQTT and OTA on core 0 behind two queues; `loop()` never waits for the broker. Measured with the broker blocked: loop gap 5019 → 4 ms, BLE gap 6656 → 3 ms, app uninterrupted. The network is now chosen by scan and signal, not by which SSID worked last. `ENABLE_MQTT 0` compiles again; env `sniffer-t2can-nomqtt` keeps it that way. |
+| `2026.09.27-1` | Two gauges in `meta`: `loop_max_ms` and `ble_gap_max_ms`, worst of the last 30 s, so a stall can be measured from the garage instead of felt on the road. |
 | `2026.09.15-1` | **The failover to the hotspot works now.** The association always did; the broker was being looked up in lwIP's DNS cache, which still held the home resolver's answer (`192.0.2.10`, TTL 3600) for an hour after leaving the garage, so every connect went to a LAN address over cellular and timed out. `wifiConnect()` now flushes the cache (`dns_clear_cache()` via `esp_netif_tcpip_exec`, in the lwIP thread) after every association. Also: MQTT retry stamped at the *end* of the attempt and 15 s apart (the 5 s stamp-before-connect of `-3` expired during the 5 s timeout, so loop() was blocked back to back and BLE died whenever the hotspot was up); and `logEvent()` lines written while offline are buffered (24 lines, repeats collapsed) and published with the next connection, so the road finally reports. **Proven on a test ride the same afternoon**: 55 s from link loss to online over the hotspot, broker resolved to the public address, 11 min on cellular with no drop, and back to home WiFi on return. Rollback image: `releases/…-2026.09.14-4.bin`, md5 `72d6c6239db2cc460333e3b66df35b41`. |
 | `2026.09.14-4` | Range to empty decoded as 16 bits (`b[3] | b[4]<<8`); it wrapped at 256 and a full tank read 85. `probe/throttle` prints `b5`. Proven at the 2026-09-15 fill-up: 254 → 257 → … → 272 without a wrap. Rollback image: `releases/…-2026.09.14-3.bin`. |
 | `2026.09.14-3` | State JSON buffer 900 → 1536 with a tripwire (the 900-byte cut froze openHAB items for ~6 h on the Zealand ride, silently); TLS connect/handshake bounded at 5 s / 10 s (were 30 s / 120 s, blocking BLE+CAN 30 s of every 35 with the hotspot up and cellular down); one 5-s MQTT retry cadence for every caller; CAN drained and BLE fed inside the WiFi and NTP waits via `drainCan()` (no more frozen needle during a scan). Rollback image: `releases/…-2026.09.14-2.bin`. |

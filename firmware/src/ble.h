@@ -56,6 +56,10 @@ void bleSetup();
 // 8-byte packet costs nothing and keeps the two transports independent.
 void bleUpdate(const VehState &st);
 
+// Worst gap between two bleUpdate() calls since the previous take, in ms.
+// Instrumentation for the loop-stall work (2026-09-27); published in meta.
+uint32_t bleMaxGapTake();
+
 // True while a phone is connected AND has completed pairing.
 bool bleClientConnected();
 
@@ -69,6 +73,7 @@ void bleButtonEvent(uint8_t code);
 
 static inline void bleSetup() {}
 static inline void bleUpdate(const VehState &) {}
+static inline uint32_t bleMaxGapTake() { return 0; }
 static inline bool bleClientConnected() { return false; }
 static inline void bleButtonEvent(uint8_t) {}
 

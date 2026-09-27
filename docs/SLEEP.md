@@ -99,9 +99,11 @@ the remembered WiFi network.
 
 Measured on the bike, 2026-09-07: **about 90 seconds** from the CAN frame that
 woke the board to MQTT being up. The wake itself was immediate; essentially all
-of that was WiFi failing over between networks. See `wifiConnect()` — the
-winning SSID is now remembered in NVS and tried first, which removes most of it
-when the same network is used twice running.
+of that was WiFi failing over between networks. From 2026-09-15 the winning SSID
+was remembered in NVS and tried first; since 2026-09-27 the network task scans
+and takes the strongest known network instead (`net.cpp`), which is both faster
+and right -- the remembered one had kept the bike on a -82 dBm house network with
+the phone's hotspot standing next to it.
 
 ### Measured, 2026-09-07
 
@@ -210,6 +212,15 @@ command is retained, so it is applied the moment the board next connects.
 
 Four faults, none of which showed up on the bench. Recorded because each one
 looked like success from the desk.
+
+**0. The `asleep` marker was lost (2026-09-27, the day the network moved into
+its own task).** `sleepPublishAsleep()` handed the retained marker to the
+out-queue and `netFlush()` returned as soon as the task had written it to the
+TCP stack -- not when it had left the radio. The chip went down, openHAB got the
+last will and never `asleep`. The old code had waited 120 ms after its
+synchronous publish for exactly this; 27-3 waits 250 ms after the flush. A
+useful reminder that "sent" has three meanings on this chip: queued, written to
+the socket, and on the air.
 
 **1. `sleepTick()` was unreachable.** It was called at the foot of `loop()`, but
 the only branch reachable with the bus quiet is the `if (!haveSpeed) { ... return; }`

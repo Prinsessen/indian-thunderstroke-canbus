@@ -210,7 +210,8 @@ CANH/CANL not swapped, common GND, and ignition ON.
 
 > **Note (2026-08-14):** the boot scan no longer has to succeed. If the ignition
 > is OFF at boot the firmware keeps re-scanning from `loop()` (one rate per
-> attempt) and **auto-attaches when the bus wakes up — no reboot required**.
+> attempt, and since 2026-09-27 the scan window services the phone link while it
+> waits) and **auto-attaches when the bus wakes up — no reboot required**.
 > You'll see `No frames on any rate (ignition OFF?)` followed by silent retries
 > until `>> Detected bus:` appears.
 

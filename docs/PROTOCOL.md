@@ -132,9 +132,10 @@ FF FF FF FF FF 00 00 00
 ```
 
 Everything unknown, no valid flags. This is the **correct** output for a silent
-bus, not a fault. Note that while the bus is silent the firmware runs a blocking
-bitrate scan, so notifications drop to roughly one every 1.5-3 s. Full rate
-resumes the moment the bus is detected.
+bus, not a fault. Until 2026-09-27 the bitrate scan the firmware runs while the
+bus is silent blocked the loop, so notifications dropped to roughly one every
+1.5-3 s; the scan window now services BLE while it waits, and the cadence is the
+same with the bus silent as with it running.
 
 ## 4b. `button` characteristic — 2 bytes, one notification per press
 

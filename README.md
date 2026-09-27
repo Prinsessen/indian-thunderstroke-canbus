@@ -282,6 +282,14 @@ cd firmware && pio run -e sniffer-t2can -t upload
 Over-the-air updates are supported after the first flash; see
 [`docs/OTA.md`](docs/OTA.md).
 
+The network -- WiFi, SNTP, MQTT, OTA -- runs in its own task on core 0
+(`firmware/src/net.cpp`, since 2026-09-27); the loop that reads the bus and feeds
+the phone never waits for a broker. `ENABLE_MQTT 0` in `config.h` compiles that
+half out, and `pio run -e sniffer-t2can-nomqtt` builds exactly that variant, for a
+board that only talks to the phone. Two fields in the `meta` topic, `loop_max_ms`
+and `ble_gap_max_ms`, say whether the loop is healthy; at rest they read under
+10 ms.
+
 **App.** Android Studio, or `./gradlew assembleDebug`. Note that the bundled JDK
 is too new for this toolchain — see [`docs/BUILD-SETUP.md`](docs/BUILD-SETUP.md).
 
