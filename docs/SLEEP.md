@@ -131,8 +131,12 @@ further down shows how much room there is.
 |---|---|---|
 | Awake | 50–73 mA, wandering | 0.6–0.9 W |
 | **Asleep** | **17 mA, steady** | **0.20 W** |
+| **Asleep, CANFD-MC rev 1.0** (2026-09-27, bench, no bus) | **4.62 mA, steady** | **0.055 W** |
+| Awake, CANFD-MC rev 1.0 (WiFi + BLE + MQTT, no bus) | 25–31 mA | 0.3–0.4 W |
 
-**A factor of four.** Against an 18 Ah AGM that is the difference between
+**A factor of four** — and on the CANFD-MC board, with the LM5164 buck in place of the LilyGO's linear regulator, another factor of 3.7 on top: against the same 18 Ah AGM the bench board reaches half charge in **about eighty days**. What is left in those 4.62 mA is the MCP2518FD in Normal mode and the transceiver (IDEAS.md D6).
+
+**On the LilyGO: a factor of four.** Against an 18 Ah AGM that is the difference between
 reaching half charge in **five and a half days** and reaching it in **twenty-two**
 — which is the difference between a board that has to be unplugged and one that
 can stay wired in.

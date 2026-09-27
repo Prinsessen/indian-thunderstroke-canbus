@@ -58,6 +58,7 @@ garage evening decides it), **ready** (all facts known, only work left),
 | D2 | Mask the grips' 0xFA pulse at cranking; `CanBus_EngineRunning` from 65265 b3 bit 6 | ready | — | `DECODE-PLAN.md` garage run 3 |
 | D3 | Frame-rate capture of 65217 while riding (rates probe from the phone) | measure | a ride | `DECODE-PLAN.md` |
 | D4 | One item per button side in openHAB instead of the shared `CanBus_Button` | dropped 2026-09-19 — one item with a reason field was judged simpler | — | `canbus.items` |
+| D6 | **Put the MCP2518FD to sleep too.** Measured 2026-09-27 on CANFD-MC rev 1.0, board 1, on the bench without a bus: **4.62 mA at 12 V asleep** (25–31 mA awake with WiFi, BLE and MQTT up), against the LilyGO's 17 mA in SLEEP.md — the buck alone took it below the 7–9 mA the design document hoped for. What is left is the controller in Normal mode plus the transceiver, about 13 mA at 3.3 V; the ESP32-S3 itself is microamps. Sleep mode with the wake-on-CAN filter (CiCON REQOP, raw SPI writes ACAN2517FD does not expose) would take the board to ~1 mA. The objection in SLEEP.md was that it could not be tested off the bike — a CANFD-MC on the bench with a USB-CAN adapter removes it | measure | a bench board (there are five), a USB-CAN adapter for the wake frame | `SLEEP.md` "How it wakes" |
 
 ## The garage evening that answers most of section A
 
