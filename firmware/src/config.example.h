@@ -25,7 +25,11 @@
 // (e.g. "indian-canbus-XXXXXX") so two boards flashed from the same config.h
 // don't collide on the broker (duplicate MQTT client IDs make the broker evict
 // one board when the other connects). Publish topics use MQTT_BASE_TOPIC as-is.
+#if BENCH_BOARD
+#define MQTT_CLIENT_ID  "canfd-bench"     // env bench-canfdmc: a CANFD-MC on the bench next to the live board
+#else
 #define MQTT_CLIENT_ID  "indian-canbus"
+#endif
 
 // TLS root CA for mqtt.example.com (DigiCert Global Root G2).
 // Public root certificate, pinned so the broker's leaf cert can renew without
@@ -59,7 +63,13 @@ MrY=
 //   <base>/status   -> "online" / "offline" (retained, LWT)
 //   <base>/frame    -> JSON per CAN ID on change (throttled)
 //   <base>/meta     -> JSON scan result (detected bitrate, id count)
+// A bench board (env bench-canfdmc, -D BENCH_BOARD=1) gets its own base topic so
+// its last will cannot mark the live board offline.
+#if BENCH_BOARD
+#define MQTT_BASE_TOPIC "canbus/bench"
+#else
 #define MQTT_BASE_TOPIC "canbus/indian"
+#endif
 
 // ---- Publish behaviour ----
 // Minimum time between MQTT publishes of changed IDs (ms).
@@ -86,7 +96,11 @@ MrY=
 
 // Advertised name. Keep it short — it shares the 31-byte advertising packet
 // with the service UUID.
+#if BENCH_BOARD
+#define BLE_DEVICE_NAME  "CANFD-bench"   // 11 chars, same length as "Springfield"
+#else
 #define BLE_DEVICE_NAME  "Springfield"
+#endif
 
 // 6-digit passkey the phone must type to bond. MITM protection is on, so an
 // unpaired phone gets nothing: the link is dropped unless it encrypts.
