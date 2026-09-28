@@ -17,7 +17,7 @@
 # every line), REVERSE_ENGINEERING.md, GIT-NOTES.md, canbus_production.*,
 # the app's README/IDEAS, and any binary. WIRING-DIAGRAMS.md and images/wiring-*
 # (excerpts of Polaris' service manual) ARE published, by the owner's decision.
- Adding to the public surface is a
+# Adding to the public surface is a
 # decision, so the lists below are explicit rather than "everything".
 #
 # Redactions live OUTSIDE the repositories (a list of what you must not publish
