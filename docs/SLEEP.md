@@ -28,9 +28,18 @@ The status payload:
 {"enabled":"ON","state":"awake","wake":"can","quiet_s":12,"after_s":300}
 ```
 
-`quiet_s` is how long the bus has been silent; `after_s` is how long it must stay
-silent before sleeping. Watching those two converge is how you tell it is about
-to go down.
+`quiet_s` is how long the bus had been silent **when the payload was written**;
+`after_s` is how long it must stay silent before sleeping. The payload is
+published only on a new broker session, on a `sleep/en` command and just before
+sleeping, so `quiet_s` is not a live counter. A board can show `quiet_s: 0`
+minutes after the ignition went off. To tell whether the bus is live, use `efmsg`
+in `bus/health` (it climbs only while frames arrive). See "Before pressing Update" in
+[OTA.md](OTA.md).
+
+The flag lives in NVS. It survives reboots and OTA, but a USB flash of
+`firmware.factory.bin` at `0x0` resets it to **off**. After a fresh flash, switch
+`CanBus_Sleep` ON again and confirm `"enabled":"ON"` in the board's reply (see
+"Swapping in a new board" in [FLASHING.md](FLASHING.md)).
 
 ---
 

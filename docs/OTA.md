@@ -222,6 +222,32 @@ automatic rollback partition; the tripwires are the review and this file.
 2. `md5sum` of the served file equals `md5sum` of `.pio/build/sniffer-t2can/firmware.bin`.
 3. The previous image is in `releases/` and its md5 is written next to its tag.
 4. The bike is on home WiFi. If the new image is wrong, the rollback OTA still has to reach it.
+5. **The ignition is on, proven by the bus.** `efmsg` in the health JSON
+   (`canbus/<base>/bus/health`, `CanBus_Bus_CleanMsgs` / `CanBench_Health` in openHAB) is the controller's error-free message count, so it only
+   climbs while frames arrive. Read it twice, 30 s apart. If it climbed, the
+   ignition is on. Nothing else proves it:
+   - `status = online` and a fresh `meta` only prove WiFi and MQTT.
+   - The `state` JSON goes on republishing the last decoded values (odometer,
+     battery) after the bus has gone quiet.
+   - `quiet_s` in `sleep/status` is a snapshot from the last connect or `sleep/en`
+     command, not a live value (see [SLEEP.md](SLEEP.md)).
+   - openHAB logs a health event only when the payload *changes*. More than 30 s
+     with no new health line in `events.log` means the bus is silent.
+
+   Losing power mid-download does not brick the board. The image goes to the
+   inactive app slot, and the boot partition switches over only after
+   `Update.end()` has verified it, so the board boots the old image again. What it
+   does cost is a half-finished OTA that nobody can read: `Downloading 90%` stays on
+   the item, and you cannot tell whether the board took the image. Say how long the
+   ignition must stay on before sending: about 35 s of download plus 15 s for the
+   reboot, on home WiFi at RSSI around -87.
+6. **Know which identity the board has, and which image the URL serves.**
+   `bench-canfdmc` and `sniffer-t2can` share this URL. See "Swapping in a new board"
+   in [FLASHING.md](FLASHING.md).
+7. **Send `update` once.** If the call that sent it was interrupted, read
+   `events.log` for the command and for `Downloading` lines before sending again.
+   A second `update` that nobody meant to send cost one extra identity round trip
+   on 2026-10-03.
 
 ## First flash / emergency recovery (USB cable)
 

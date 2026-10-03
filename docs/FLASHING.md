@@ -191,6 +191,12 @@ device on the phone at the same time.**
 
 OTA writes only the app partition, so it never has this problem.
 
+BLE keys are not all NVS holds. A factory flash also resets the **deep-sleep flag
+to off** (`sleepcfg/en`, see [SLEEP.md](SLEEP.md)), the ride counters and the
+remembered WiFi network, and it blanks `otadata`, so the board boots `app0`.
+Checked 2026-10-03 against the CANFD-MC kit: the factory image is 0xFF across the
+whole `nvs` range, `0x9000`-`0xdfff`.
+
 Expected boot output:
 
 ```
@@ -214,6 +220,58 @@ CANH/CANL not swapped, common GND, and ignition ON.
 > waits) and **auto-attaches when the bus wakes up — no reboot required**.
 > You'll see `No frames on any rate (ignition OFF?)` followed by silent retries
 > until `>> Detected bus:` appears.
+
+---
+
+## 5b. Swapping in a new board (a CANFD-MC replacing the bike's)
+
+Everything below went wrong once, on 2026-10-03, when a spare board replaced a
+broken bike board. It took four OTAs to get back to "as before". Done in this
+order, it takes one USB flash and one switch.
+
+**1. Decide the role before you build anything.** Two environments build the same
+code under different identities:
+
+| env | MQTT base | client id | BLE name | openHAB items |
+|-----|-----------|-----------|----------|---------------|
+| `sniffer-t2can` | `canbus/springfield` | `indian-canbus-<mac>` | Springfield | `CanBus_*` |
+| `bench-canfdmc` | `canbus/bench` | `canfd-bench-<mac>` | CANFD-bench | `CanBench_*` |
+
+A board that replaces the bike's board is built from **`sniffer-t2can`**, even if it
+sat on the bench yesterday. Flashing the bench kit "because it is a bench board"
+turns the replacement into a second bench board. You then have to OTA it across,
+and that runs straight into the shared-URL trap in step 4.
+
+**2. Flash over USB from the build you would OTA.** Build `sniffer-t2can` with the
+current `FW_VERSION` and check that the image in `/etc/openhab/html/` has the same
+md5 as `.pio/build/sniffer-t2can/firmware.bin`. A new board has no app, so it needs
+`firmware.factory.bin` at `0x0`. Remember that this wipes NVS (see the table above).
+
+**3. Put back what the wipe removed.** With the ignition on and the board reporting
+on `canbus/springfield`:
+- **Deep sleep:** switch `CanBus_Sleep` ON. Confirm it from the board's own reply,
+  `CanBus_SleepState` / the retained `sleep/status` showing `"enabled":"ON"`,
+  not from the switch. The board's MQTT account may read and write all of
+  `canbus/#`, so the bike topic works. Do not detour through the bench identity
+  to set it.
+- **BLE:** the board has a new MAC. On the phone and on the navigator, forget the
+  old "Springfield" in the system Bluetooth settings, not just in the app, and pair
+  again.
+- **Counters** start again from zero. That is expected.
+
+**4. If you must cross identities by OTA, know the trap.** Both environments use
+the same `OTA_FIRMWARE_URL`, which serves the **bike** image. An `update` on
+`canbus/bench/ota` therefore turns a bench board into a bike board. To give a bike
+board the bench identity, the bench image has to go into that file temporarily,
+and the bike image has to go back as soon as the board reports
+`Downloading 100%`. Each crossing is a full OTA. Check the ignition before every
+one (see "Before pressing Update" in [OTA.md](OTA.md)).
+
+**5. Check the result** on `CanBus_MetaRaw`: `fw` is the expected version,
+`reset: sw` (OTA) or `poweron` (USB), `can_detected: true`, and `CanBus_OTA` reads
+`Running <version>`. The same `FW_VERSION` before and after is correct when the
+point was the identity rather than new code. The version is bumped only when
+`src/` changes.
 
 ---
 
