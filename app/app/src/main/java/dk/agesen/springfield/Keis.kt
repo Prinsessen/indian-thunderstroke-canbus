@@ -6,19 +6,18 @@ import android.os.Looper
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * The heated clothing: state, automatic control, and the one hole that is not
- * fillable yet.
+ * The heated clothing: state and automatic control.
  *
- * Everything here is written and working **except** talking to the hardware.
- * The Keis protocol is undocumented and has to be reverse-engineered from
- * captures of Keis iControl, so `KeisDevice` is an interface with a deliberately
- * inert implementation. When the capture is analysed, one class is written and
- * nothing else in the app changes.
+ * The hardware sits behind the `KeisDevice` interface. It was written with an
+ * inert implementation first, while the Keis protocol was still unknown; the
+ * protocol was then recovered from Keis iControl (KEIS-PROTOCOL.md) and
+ * `KeisBleDevice` is the real driver. Nothing else in the app changed when it
+ * arrived.
  *
- * That split is the point of building it this way: the arithmetic, the curves,
- * the hysteresis and the page can all be got right and tested now, and the part
- * that must wait is fifty lines behind an interface rather than tangled through
- * the feature.
+ * That split was the point of building it this way: the arithmetic, the curves,
+ * the hysteresis and the page could all be got right and tested first, and the
+ * part that had to wait was one class behind an interface rather than tangled
+ * through the feature.
  */
 
 /**

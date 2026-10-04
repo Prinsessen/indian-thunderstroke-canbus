@@ -133,6 +133,10 @@ class BleService : Service(), BikeBleClient.Listener {
         // Fed here rather than from a page: the filter needs every reading the
         // bike sends, and a page only exists while someone is looking at it.
         FuelLevel.feed(state.fuelPct, BikeRepository.fast?.speedKmh ?: state.speedKmh)
+        // Same reason. From the RIDE page it was fed on every fast packet, ten
+        // times a second and only while that page was in front, so the window
+        // of 180 samples covered about twenty seconds instead of three minutes.
+        FuelRange.feed(state.fuelEconomy)
     }
 
     // --------------------------------------------------------- notification

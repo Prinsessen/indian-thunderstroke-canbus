@@ -12,13 +12,14 @@ import kotlin.math.min
 
 /**
  * One wheel: a tyre ring whose fill tracks pressure against target, with the
- * cold-equivalent figure in the hub.
+ * measured pressure in the hub.
  *
- * The hub shows the **cold equivalent**, not the raw sensor reading, because
- * that is the number a rider acts on — a tyre at 44.7 PSI and 42 °C is not
- * over-inflated, it is warm. The raw pair is kept underneath so nothing is
- * hidden, and the ring is scaled to ±8 PSI around target, which is wide enough
- * to cover a genuinely soft tyre and tight enough that a 2 PSI drift is visible.
+ * The hub shows what the sensor reads, the same number the bike's own dash
+ * shows. Under it sit COLD (that pressure brought to a fixed 20 °C, the figure
+ * the alert judges — a tyre at 44.7 PSI and 42 °C is not over-inflated, it is
+ * warm) and TEMP, then TARGET and OUT. The ring is scaled to ±8 PSI around
+ * target, which is wide enough to cover a genuinely soft tyre and tight enough
+ * that a 2 PSI drift is visible.
  */
 class TyreView @JvmOverloads constructor(
     context: Context,

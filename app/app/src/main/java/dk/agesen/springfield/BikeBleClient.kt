@@ -263,7 +263,7 @@ class BikeBleClient(
                 if (status == 0x216) pairingFailures++
                 report(
                     if (pairingFailures >= PAIRING_FAILURES_BEFORE_ADVICE)
-                        "Pairing refused — forget \"Springfield\" in Bluetooth settings"
+                        "Pairing refused — forget \"${g.device.name ?: "Springfield"}\" in Bluetooth settings"
                     else "Disconnected (status $status)"
                 )
                 main.removeCallbacks(rssiPoll)
@@ -398,7 +398,7 @@ class BikeBleClient(
         // rather than reporting "not reachable" for a bike that plainly is.
         val chr = g.getService(SERVICE_UUID)?.getCharacteristic(CHR_SERVICE_UUID)
             ?: return "the phone's Bluetooth cache predates this firmware — " +
-                      "forget \"Springfield\" in Bluetooth settings and pair again"
+                      "forget \"${g.device.name ?: "Springfield"}\" in Bluetooth settings and pair again"
         val payload = byteArrayOf(
             (km and 0xFF).toByte(),
             ((km shr 8) and 0xFF).toByte(),

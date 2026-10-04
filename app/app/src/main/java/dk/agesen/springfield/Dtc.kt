@@ -908,7 +908,7 @@ object Dtc {
     /**
      * Whether the bike lights its own check-engine lamp for this fault.
      *
-     * From the manual's MIL column, and 24 of the 249 documented conditions
+     * From the manual's MIL column, and 23 of the documented conditions
      * have it off. Those are the ones the bike deliberately does not interrupt
      * you about — a key fob battery, a tyre pressure sensor going flat, coolant
      * merely warm. Treating them as red was the app shouting where the

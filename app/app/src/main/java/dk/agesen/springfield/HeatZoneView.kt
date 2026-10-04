@@ -337,6 +337,10 @@ class HeatZoneView @JvmOverloads constructor(
         // hint while it fails is what makes the control look broken.
         val blocked = Keis.blockedReason(zone)
         val foot = when {
+            // First, because a device set to "another device" never connects:
+            // behind !connected this line could not be reached, and the page
+            // told the rider to switch on clothing that was already running.
+            !Settings.heatOwner -> blocked
             !connected -> "not on the bike — connects by itself when switched on"
             blocked != null -> blocked
             capped -> "asked for ${asked?.label ?: "more"} — the bike cannot feed it"

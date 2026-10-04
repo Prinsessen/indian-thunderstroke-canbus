@@ -2755,8 +2755,13 @@ bool scanAndEnterBus(bool firstBoot) {
         if (firstBoot) {
             logEvent("!! No frames on any rate (ignition OFF?).");
             logEvent("   Will keep re-scanning until the bus wakes up — NO reboot needed.");
+#if CAN_BACKEND == CAN_BACKEND_MCP2518
+            logEvent("   If it never appears, check: CANH/CANL swapped, GND, the 12 V feed,");
+            logEvent("   and the 40 MHz crystal setting (can_hal_mcp.cpp).");
+#else
             logEvent("   If it never appears, check: PIN_5V_EN HIGH (transceiver");
             logEvent("   power), CAN_SE LOW, onboard 120R jumper, CANH/CANL swap, GND.");
+#endif
             noCanReported = true;
             logEvent("   MQTT heartbeat continues meanwhile.");
         }
@@ -2878,7 +2883,7 @@ void setup() {
     Serial.println("========================================================");
     Serial.println(" Indian Springfield 2017 - CAN sniffer (LISTEN-ONLY)");
 #if CAN_BACKEND == CAN_BACKEND_MCP2518
-    Serial.println(" USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A) | never TX");
+    Serial.println(" MQTT + BLE | ESP32-S3 + MCP2518FD (CANFD-MC, T-2CANFD) | never TX");
 #else
     Serial.println(" USB + MQTT | LilyGO T-CAN485 (ESP32 TWAI) | never TX");
 #endif
@@ -2895,7 +2900,7 @@ void setup() {
 
 #if FIRMWARE_MODE == MODE_PRODUCTION
     resetState();
-    Serial.println(" MODE: PRODUCTION — decoding in-firmware, publishing canbus/indian/state");
+    Serial.println(" MODE: PRODUCTION — decoding in-firmware, publishing " MQTT_BASE_TOPIC "/state");
 #else
     Serial.println(" MODE: DISCOVERY — raw firehose (every id/pgn/frame)");
 #endif

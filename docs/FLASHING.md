@@ -294,8 +294,8 @@ in between):
 
 ```
  Indian Springfield 2017 - CAN sniffer (LISTEN-ONLY)
- USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A) | never TX
- MODE: PRODUCTION — decoding in-firmware, publishing canbus/indian/state
+ MQTT + BLE | ESP32-S3 + MCP2518FD (CANFD-MC, T-2CANFD) | never TX
+ MODE: PRODUCTION — decoding in-firmware, publishing canbus/springfield/state
 [rollback] running app0, state none, other slot none
 [ble] advertising as "Springfield" (passkey pairing required)
 Fixed bitrate 250000: listening frames=NNNN
@@ -307,10 +307,11 @@ Logging frames (USB) + publishing changes (MQTT):
 
 Three things in it are not what they seem:
 
-- **The banner names the older board.** It is chosen by the CAN backend, and the
-  CANFD-MC uses the same MCP2518FD backend as the LilyGO T-2CANFD, so the
-  firmware still prints `LilyGO T-2CANFD` on a CANFD-MC. The `MODE` line likewise
-  prints a fixed topic text; the board publishes under its real base topic.
+- **Images up to 2026.10.04-2 print an older banner**, the one on the bike
+  included: `USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A)` and a fixed
+  `canbus/indian/state` on the `MODE` line, whatever the board and its base topic.
+  The source was corrected on 2026-10-04; the lines above are what the next image
+  prints (the topic is the build's own base topic).
 - **There is no bitrate scan.** `CAN_FIXED_BITRATE` is 250000 in `config.h`, so
   the firmware listens at 250 kbit/s only ([SLEEP.md](SLEEP.md) has the reason).
 - **`[rollback]`** reads `state none` after a USB flash and `state pending` on
@@ -319,8 +320,9 @@ Three things in it are not what they seem:
 
 If **no frames arrive** with the ignition ON: check the four pads (CANH/CANL not
 swapped, GND, 12 V on VBAT) and the 60 Ω reading in §4. The firmware's own hint
-at this point still lists `PIN_5V_EN`, `CAN_SE` and the 120 Ω jumper; those are
-T-CAN485 parts and do not exist on the CANFD-MC.
+at this point says the same from the next image on; images up to 2026.10.04-2
+still list `PIN_5V_EN`, `CAN_SE` and the 120 Ω jumper, which are T-CAN485 parts
+and do not exist on the CANFD-MC.
 
 > **Note (2026-08-14):** the first attempt no longer has to succeed. If the ignition
 > is OFF at boot the firmware keeps retrying from `loop()` (and since 2026-09-27

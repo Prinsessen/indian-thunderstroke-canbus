@@ -159,7 +159,7 @@ String CanBus_StandSwitch      "Sidestand [%s]"                  <switch>      (
 // module, which is why it still reports with the kill switch blocking the crank.
 // Expect PRESSED only while held.)
 String CanBus_Button           "Handlebar button [%s]"           <switch>      (gCanBus_Interlock) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:button" }
-String CanBus_Button_Result    "Handlebar [%s]"                  <switch>      (gCanBus_Interlock)   // what the last press did, written by vehicle-motorcycle-button-garage.js  ["Status", "Info"]
+String CanBus_Button_Result    "Handlebar [%s]"                  <switch>      (gCanBus_Interlock) ["Status", "Info"]   // what the last press did, written by vehicle-motorcycle-button-garage.js
 String CanBus_StartButton      "Start button [%s]"               <switch>      (gCanBus_Interlock) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:startButton" }
 // UPRIGHT / STAND / DOWN, and only while stationary. Derived from the tilt, so
 // it answers whether the bike is RESTING on the stand -- not where the stand is.
@@ -174,12 +174,12 @@ String CanBus_Stand            "Hviler på støtteben [%s]"        <switch>     
 // vertical axis, so it reads upright however far over you are. The August rides
 // confirm it -- at road speed it never left 127, while every long excursion sits
 // at 114 with the speed at zero, which is a stop with the bike on its stand.
-Number CanBus_Lean             "Static roll angle [%d]"          <chart-blue>        (gCanBus_Interlock) ["Measurement"] { channel="mqtt:topic:broker:canbus:lean" }
+Number CanBus_Lean             "Tilt sensor raw [%d]"            <chart-blue>        (gCanBus_Interlock) ["Measurement"] { channel="mqtt:topic:broker:canbus:lean" }
 // Seconds since PGN 65381 SA 0 last arrived -- the message carrying BOTH the
 // kill switch and the sidestand, so one age is correct for both. Hidden from the
 // sitemap; it feeds CanBus_Interlocks_Seen below.
 Number CanBus_Interlock_Age    "Interlock reading age [%d s]"    <clock-schedule-blue>        (gCanBus_Interlock) ["Measurement"] { channel="mqtt:topic:broker:canbus:interlockAge" }
-// "sidst set 15:27", written once when the machine goes off. The interlocks are
+// "last seen 15:27", written once when the machine goes off. The interlocks are
 // worth keeping -- walking up to a machine that will not start, STOP is exactly
 // what you want to see -- but 65381 SA 0 is event-driven, and in the August
 // captures it fell silent three minutes before the bus did on one ride and

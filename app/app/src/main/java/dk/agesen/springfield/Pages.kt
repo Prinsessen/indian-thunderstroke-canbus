@@ -148,8 +148,8 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
 
         // Fuel and headlight both ride on the 1 Hz JSON rather than the fast
         // packet. Neither needs ten updates a second, and the packet's two spare
-        // bits are better kept for something that does.
-        FuelRange.feed(state?.fuelEconomy)
+        // bits are better kept for something that does. (FuelRange is fed in
+        // BleService.onState, once per state and whether or not this page shows.)
         fuel?.apply {
             // The bar shows the sender, because a gauge that disagreed with the
             // bike's own would be its own kind of lie. The range is a decision,
@@ -279,13 +279,12 @@ class TyresFragment : BikePage(R.layout.fragment_tyres) {
             )
         }
 
-        val ambient = reading?.ambientC
+        // COLD is normalised to a fixed 20 °C (TyreMemory.REFERENCE_C), with or
+        // without an ambient reading; only the OUT figure needs ambient.
         v.findViewById<TextView>(R.id.tyreAge).text = when {
             reading == null -> "no reading yet · sensors wake once the wheels turn"
-            ambient == null ->
-                "measured ${TyreMemory.formatAge(reading.ageMillis)} · no ambient, showing raw pressure"
             else ->
-                "measured ${TyreMemory.formatAge(reading.ageMillis)} · corrected to ${"%.0f".format(ambient)}°C ambient"
+                "measured ${TyreMemory.formatAge(reading.ageMillis)} · COLD is corrected to 20°C"
         }
     }
 }
@@ -435,9 +434,9 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
 /**
  * Heated clothing.
  *
- * The page is complete; the drivers behind it are not. Until the Keis protocol
- * is captured the zones will show "not connected" and refuse to send anything,
- * which is the honest state rather than a pretence of control.
+ * The page and the drivers behind it are both in (KeisBleDevice). A zone whose
+ * controller is not on the air shows WAITING and sends nothing, which is the
+ * honest state rather than a pretence of control.
  */
 class HeatFragment : BikePage(R.layout.fragment_heat), Keis.Observer {
 

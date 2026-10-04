@@ -61,12 +61,12 @@ const MOMENTARY = [
   'CanBus_FuelEconInst'
 ];
 
-/** "sidst set 15:27" from an age in seconds, or null if the age is unknown. */
+/** "last seen 15:27" from an age in seconds, or null if the age is unknown. */
 function seenAt(ageItemName) {
   try {
     const age = items.getItem(ageItemName).numericState;
     if (age === null || age === undefined || age < 0) return null;
-    return 'sidst set ' + time.ZonedDateTime.now().minusSeconds(Math.round(age))
+    return 'last seen ' + time.ZonedDateTime.now().minusSeconds(Math.round(age))
                               .format(time.DateTimeFormatter.ofPattern('HH:mm'));
   } catch (e) {
     console.warn(`canbus-clear-live-values: ${ageItemName}: ${e.message}`);

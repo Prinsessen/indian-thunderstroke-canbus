@@ -122,10 +122,9 @@ data class BikeJsonState(
     /**
      * Odometer reading at the last service, as the *bike* remembers it.
      *
-     * Absent from every firmware built so far, and harmless when absent — the
-     * app falls back to its own setting. It is declared now so that the day the
-     * ESP32 starts reporting it, the app already prefers it with no change here
-     * and no second migration.
+     * Reported by the firmware once one has been recorded on the bike (key
+     * `sk`, written through the service characteristic). Harmless when absent:
+     * the app falls back to its own setting.
      */
     val serviceKm: Int? = null,
     val tripKm: Double? = null,

@@ -85,7 +85,7 @@
     <LinearLayout style="@style/SettingRow">
         <LinearLayout style="@style/SettingText">
             <TextView style="@style/SettingTitle" android:text="Trousers: off at" />
-            <TextView style="@style/SettingSub" android:text="Felt temperature. Legs lead the jacket — they are in the wind" />
+            <TextView style="@style/SettingSub" android:text="Felt temperature. Starts on the same curve as the jacket" />
         </LinearLayout>
         <Button android:id="@+id/legsOffMinus" style="@style/StepButton" android:text="–" />
         <TextView android:id="@+id/legsOffValue" style="@style/SettingValue" />
@@ -190,7 +190,7 @@
     <LinearLayout style="@style/SettingRow">
         <LinearLayout style="@style/SettingText">
             <TextView style="@style/SettingTitle" android:text="Last service" />
-            <TextView style="@style/SettingSub" android:text="Tap to record one at the odometer showing now" />
+            <TextView style="@style/SettingSub" android:text="Tap to enter the odometer reading at the last service" />
         </LinearLayout>
         <Button android:id="@+id/svcRecord" style="@style/WideButton" />
     </LinearLayout>
@@ -214,7 +214,7 @@
     <LinearLayout style="@style/SettingRow">
         <LinearLayout style="@style/SettingText">
             <TextView style="@style/SettingTitle" android:text="Bluetooth pairing" />
-            <TextView style="@style/SettingSub" android:text="If pairing keeps failing, forget Springfield here and connect again" />
+            <TextView style="@style/SettingSub" android:text="If pairing keeps failing, forget the bike here (listed as Springfield) and connect again" />
         </LinearLayout>
         <Button android:id="@+id/bluetoothButton" style="@style/WideButton" android:text="OPEN" />
     </LinearLayout>
