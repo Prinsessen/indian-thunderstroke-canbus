@@ -18,7 +18,7 @@ written.
 
 **Settled 2026-09-15, and the paragraphs below got the mechanism wrong.** A
 ten-minute test ride on `2026.09.14-4` (wake 15:51:40, last packet from home
-15:56:06, last-will 15:57:37, back on `Devices` at 16:06:18 by an in-motion
+15:56:06, last-will 15:57:37, back on `HomeWiFi` at 16:06:18 by an in-motion
 rescan — no boot banner, so `ensureNetwork()` → `wifiConnect()` does run in
 motion) never reported from the road, and the phone's hotspot listed
 `esp32s3-XXXXXX` as a connected client the whole time. So the association to
@@ -38,11 +38,11 @@ stamped after the attempt and 15 s apart, and offline log lines buffered and
 delivered with the next connection. See OTA.md.
 
 **Proven the same afternoon.** Test ride on `2026.09.15-1`, 16:24–16:40: link
-to `Devices` lost at uptime +333 s, three reconnects, rescan at +363 s, joined
+to `HomeWiFi` lost at uptime +333 s, three reconnects, rescan at +363 s, joined
 `PhoneHotspot` at +388 s (IP 192.0.2.30, rssi −45), broker resolved to
 `198.51.100.10`, MQTT up — 55 s from link loss to online over the hotspot. Eleven
 minutes on cellular at ~500 item updates a minute, up to 110.7 km/h, no drop.
-Back at the garage: hotspot link lost at +1032 s, rescan, `Devices` at +1084 s,
+Back at the garage: hotspot link lost at +1032 s, rescan, `HomeWiFi` at +1084 s,
 broker back to `192.0.2.10`. The road reported both transitions itself through
 the new buffer. Rider's verdict: flawless, and the phone's screen stayed live.
 Range to empty (item 2 below) also read right on this ride.
@@ -134,10 +134,10 @@ J1939 lays two-byte values out little-endian, so `2026.09.14-4` decodes
 `km = b[3] | (b[4] << 8)` (0xFF in `b[4]` counts as no high byte), and
 `probe/throttle` now prints `b5` (= `b[4]`) beside the other two.
 
-**Still unproven above 255.** The tank was at 20 % when this shipped. At the
-next fill-up, ignition on in the garage: `CanBus_Range` should match the dash
-(~340). If it reads the dash minus 256, `b[4]` is not it either — enable
-`probe/throttle` and the line shows every candidate at once.
+Written 2026-09-14, when the tank was at 20 % and the decode was still unproven
+above 255; answered by the fill-up of 2026-09-15 at the top of this section. Had
+`CanBus_Range` read the dash minus 256, `b[4]` would not have been it either,
+and `probe/throttle` shows every candidate at once.
 
 ### 3. The capture never ran
 
@@ -160,7 +160,7 @@ it was not run. Writing the instruction down was not enough.
 ---
 
 Everything waiting on wheels, in one list, so it takes one outing instead of
-three. Firmware `2026.09.04-32` or later.
+three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.04-2`.
 
 Most of it is passive: ride normally and the data arrives. Only two things ask
 anything of the rider, and both take four minutes.
@@ -196,8 +196,9 @@ When you get back, **while the ride could still be repeated**:
 git add captures/ && git commit          # it cannot be rebuilt
 ```
 
-Probe configuration confirmed live tonight —
-`{"scan":"OFF","cruise":"ON","throttle":"ON","claims":"ON"}`. `scan` is off on
+Probe configuration confirmed live when this was written —
+`{"scan":"OFF","cruise":"ON","throttle":"ON","claims":"ON"}`; a fifth probe,
+`rates`, has been added since and appears in the same JSON. `scan` is off on
 purpose: `probe` and `probe/2304` are stationary-only and would spend radio
 budget a moving bike needs. `probe/throttle` (2 Hz) and `probe/cruise` publish
 at any speed, and they are the two the ride is for.
@@ -245,12 +246,18 @@ from it.
 Byte 4 was the other half of this task and it is done: it turned out to be the
 dash's range to empty (2026-09-08). One byte left in this message.
 
-> **The sitemap switch cannot reach a sleeping board.** The MQTT channel for
-> these switches has a `commandTopic` with no `retained` flag, so a press while
-> the board is asleep publishes into nothing and is lost. The switch only works
-> while the ignition is on and the board is connected.
+> **The sitemap switch cannot reach a sleeping board directly.** The MQTT channel
+> for these switches has a `commandTopic` with no `retained` flag, so a press
+> while the board is asleep publishes into nothing.
 >
-> To set a probe that survives the next sleep, publish it retained instead:
+> Since 2026-09-19 an openHAB rule (`canbus-probe-queue.js`) covers that: it
+> remembers the last command for each probe switch while `CanBus_Status` is not
+> `online` and sends it again a few seconds after the board reports online. The
+> queue is in memory only, so an openHAB restart forgets it; flip the switch
+> again.
+>
+> The older way, which does not depend on the rule, is to publish the value
+> retained:
 >
 > ```bash
 > mosquitto_pub -h <broker> -p 8884 -u <user> -P <pass> --capath /etc/ssl/certs \
@@ -284,8 +291,9 @@ after the test ride of 2026-09-15 became the second ride to lose the whole
 stream because `ride_capture.py` was not running. `ride_capture.py` is still
 the only thing that records raw frames; the probe lines now come home either way.
 
-**Switch `probe/throttle` back on before riding.** All four probes were turned
-off on 2026-09-08 once the range was settled, so this ride reports nothing
+**Switch `probe/throttle` back on before riding.** All four probes of the time
+were turned off on 2026-09-08 once the range was settled (there are five now:
+scan, cruise, throttle, claims, rates), so this ride reports nothing
 unless one is re-enabled — `CanBus_Probe_Throttle` on the Springcommand page,
 or the retained topic `probe/en/throttle`. A ride spent with the probe silent is
 the exact failure this file exists to prevent.
@@ -311,8 +319,10 @@ Just ride, and these answer themselves from the log afterwards:
   module, which would be a third independent speed.
 - **Grip temperature** should fall with speed while the heat is off -- the last
   loose end on that decode.
-- **Link stability** with the phone's WiFi off, which is the configuration that
-  was stable when it was tested.
+- **Link stability** across the WiFi handovers (home → hotspot or bike router →
+  home). Since 2026.09.27-2 the network runs in its own task and should not
+  touch the phone link: `loop_max_ms` and `ble_gap_max_ms` in `meta` should stay
+  far below 2500.
 
 ---
 

@@ -5,7 +5,9 @@ firmware, written so it can be implemented **without reading the firmware
 source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
 lives in the "BLE phone link" section of [README.md](../README.md).
 
-Firmware from `2026.09.02-2` onwards. Verified on the bike 2026-09-02.
+Describes firmware `2026.10.04-2`, the image on the bike. The first BLE build
+was `2026.09.02-2` (verified on the bike 2026-09-02); where an older build
+differs, the section says from which version.
 
 ---
 
@@ -13,12 +15,24 @@ Firmware from `2026.09.02-2` onwards. Verified on the bike 2026-09-02.
 
 | | |
 |---|---|
-| Advertised name | `Springfield` |
+| Advertised name | `Springfield` (a bench board built as `bench-canfdmc` advertises `CANFD-bench`) |
 | Service UUID | `5f6d0000-9b2a-4c31-8f0e-2a7c1d3e4b50` |
-| Advertised | Continuously while powered, including with the ignition off |
+| Advertised | While the board is awake and fewer than two phones are connected, including with the ignition off |
 
 The service UUID is in the advertising packet, so scan-filter on it rather than
 on the name.
+
+**Deep sleep takes the board off the air.** With deep sleep enabled (it is
+switched from openHAB and is off after a factory flash; see SLEEP.md) the board
+goes down once the bus has been quiet for five minutes, counted from the last
+CAN frame or from the wake if no frame arrives. Asleep it neither advertises
+nor holds a connection: a connected phone sees the link drop. It comes back on
+the first CAN frame after the ignition is switched on, or once an hour on its
+timer backstop, which with the bus still silent keeps it up for five minutes.
+Deep sleep is a restart, so everything in `state` starts again
+from "unknown" and the `button` sequence starts again from 0; the bond and the
+service memory are kept. A client should treat "not found" on a parked bike as
+normal and keep scanning.
 
 > **The device is an ESP32-S3, which has BLE only — no Bluetooth Classic.** There
 > is no SPP / "Bluetooth serial" endpoint and there never will be on this
@@ -27,9 +41,11 @@ on the name.
 
 ## 2. Characteristics
 
-Both live under the service above and are **`READ | NOTIFY`**, gated
-`READ_ENC | READ_AUTHEN` — the stack refuses both reads and CCCD writes on a link
-that is not encrypted *and* authenticated.
+`fast`, `state` and `button` live under the service above and are
+**`READ | NOTIFY`**, gated `READ_ENC | READ_AUTHEN` — the stack refuses both
+reads and CCCD writes on a link that is not encrypted *and* authenticated. A
+fourth characteristic, the service memory (`5f6d0003-…`, described further
+down), is `READ | WRITE` behind the same gate.
 
 | Name | UUID | Default rate | Payload |
 |------|------|--------------|---------|
@@ -113,7 +129,7 @@ render the signal as unknown.
 ### Worked example
 
 ```
-6A 04 00 00 00 4E 00 3F
+6A 04 00 00 00 4E 00 FF
 ```
 
 | Bytes | Value | Meaning |
@@ -122,17 +138,35 @@ render the signal as unknown.
 | `00 00` | 0 | 0.0 km/h |
 | `00` | 0 | 0 % throttle |
 | `4E` | `'N'` | neutral |
-| `00` | `0b000000` | nothing pressed/on |
-| `3F` | `0b111111` | all six signals are known |
+| `00` | `0b00000000` | nothing pressed/on |
+| `FF` | `0b11111111` | all eight signals are known |
 
 ### With the ignition off
+
+There are two cases, and they look different.
+
+**The board started on a silent bus** (power-on, or a wake from deep sleep on
+the timer with the ignition off):
 
 ```
 FF FF FF FF FF 00 00 00
 ```
 
-Everything unknown, no valid flags. This is the **correct** output for a silent
-bus, not a fault. Until 2026-09-27 the bitrate scan the firmware runs while the
+Everything unknown, no valid flags. This is the **correct** output for a bus
+that has said nothing since the board started, not a fault.
+
+**The bus went quiet while the board was running** (the ignition was switched
+off). Three seconds after the last frame the firmware sets rpm and speed to 0,
+because a parked machine genuinely reads zero, and marks every switch unknown.
+Throttle and gear keep their last reading: the throttle plate rests on its idle
+stop and the gearbox is in whatever gear it was left in. For example, parked in
+neutral with the throttle at 6 %:
+
+```
+00 00 00 00 06 4E 00 00
+```
+
+Until 2026-09-27 the bitrate scan the firmware runs while the
 bus is silent blocked the loop, so notifications dropped to roughly one every
 1.5-3 s; the scan window now services BLE while it waits, and the cadence is the
 same with the bus silent as with it running.
@@ -162,60 +196,78 @@ stays exactly what it was. The same events go to openHAB over MQTT on
 
 ## 5. `state` characteristic — JSON
 
-A UTF-8 JSON object, ~350-450 bytes when fully populated.
+A UTF-8 JSON object, ~350-450 bytes when fully populated and never more than
+514 (see "Payload budget").
+
+**The keys on BLE are the short ones.** The same serialiser feeds both
+transports, with two sets of names: MQTT carries the long key in the first
+column of the table below, the `state` characteristic carries the short key in
+the second (since 2026-09-04; long names did not fit one notification). The
+short keys are case-sensitive — `gR` is the right grip, `gr` the grip level. A
+field marked "MQTT only" is never sent over BLE. Types, units and values are the
+same on both transports, with one exception: `dm1`, whose BLE form is compact
+(see its row).
 
 **A key is absent when the value is unavailable** — the client must treat a
-missing key as "unknown", never as zero. On a silent bus the payload is literally
-`{}`, which is valid and expected.
+missing key as "unknown", never as zero. The payload is never empty: `wf` and
+`wr` are always sent, `ig` from ten seconds after the board started, `sk` once
+a service has been recorded, and `fw` on its own schedule (see its row). A board
+that started on a silent bus sends only those. One that has seen the bus keeps
+sending the last reading of the measured fields after the ignition goes off —
+fuel, odometer, range, gear, throttle, battery, temperatures, tyres, the
+interlocks — with three exceptions: `r`, `sp` and `sf` are set to 0, the
+momentary rider inputs (`br`, `cc`, `ce`, `cs`, `hz`, `il`, `ir`) and `fi`
+disappear, and `ig` reads `"OFF"`. All of it starts again from "unknown" when
+the board restarts, which every wake from deep sleep is.
 
-| Key | Type | Unit | Notes |
-|-----|------|------|-------|
-| `rpm` | int | rpm | |
-| `throttle` | int | % | |
-| `gear` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
-| `gearGlitches` | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly. **MQTT only since 2026.09.09-3.** It is the counter behind three gear position sensors replaced under warranty, so it went to the transport that KEEPS it: openHAB holds and persists the history, which is what a service desk has to be shown. The radio bytes went to the engine data still being decoded |
-| `coolant` | int | °C | **Cylinder head temperature.** The key is a misnomer kept for continuity: this engine is air-cooled and has no coolant, and no oil temperature sensor either — the manual lists exactly one engine temperature sensor, the CHT on the front cylinder head. |
-| `speed` | float | km/h | 1 decimal. From the ABS module, and the figure the dash shows |
-| `speedFront` | float | km/h | The front wheel, from the same module. Kept separate on purpose: comparing the two is how a failing wheel-speed sensor is caught before the ABS decides anything is wrong |
-| `fuel` | int | % | |
-| `odometer` | int | km | |
-| `svcKm` | int | km | Odometer at the last service. Held in the ESP32's NVS, not on the bike |
-| `trip` | float | km | 1 decimal |
-| `fuelEconomy` | float | l/100 km | 1 decimal, the bike's own average |
-| `fuelEconInst` | float | l/100 km | Instantaneous |
-| `fuelRate` | float | L/h | SPN 183. The discriminator for anything that might be injector duty. **MQTT only since 2026.09.08-2**, and one decimal rather than two: it was traded off the radio so `range` could go on, because "fuelRate" costs 11 bytes and "range" costs 9. It is not gone -- it is what proved the range estimator changes its mind rather than the tank falling |
-| `range` | int | km | **Range to empty, exactly as the original dash shows it.** PGN 65382 SA 0 byte 3, one count per km, no offset, identified 2026-09-08. Deliberately pessimistic -- it runs on a recent-consumption window, so it read 212 on a full tank while `fuelEconomy`, the lifetime average, said 6.6. Not cleared when the bus goes quiet: like `fuel` and `odometer` it is a true statement about a parked machine. Bursts of exactly 29 are filtered on step size; see the decoded-signal entry below |
-| `battery` | float | V | 1 decimal. >13.5 V ⇒ engine running/charging |
-| `ambient` | float | °C | 1 decimal |
-| `tyreFront` | float | PSI | 1 decimal |
-| `tyreRear` | float | PSI | 1 decimal |
-| `tyreFrontTemp` | float | °C | 1 decimal |
-| `tyreRearTemp` | float | °C | 1 decimal |
-| `tyreAge` | int | s | Seconds since the last TPMS frame arrived. **MQTT only.** The pressures are retained and republished at 1 Hz, so a value alone cannot say whether it is fresh -- a week-old reading looks identical to one taken a second ago. This is what separates them. Absent until a frame has been seen |
-| `brakeRear` | string | | `"PRESSED"` / `"RELEASED"`. One brake signal, SPN 597, which either control operates — the name is historical. `brakeFront` was removed 2026-09-05. |
-| `clutch` | string | | `"PULLED"` / `"out"` (SPN 598). **MQTT only since 2026.09.09-3** -- 14 bytes, the most expensive of the unread fields, because `"PULLED"` is a long string for a one-bit fact. It does not weaken cruise: the derivation that needs the clutch runs in the firmware and still does |
-| `cruise` | string | | `"HOLDING"` / `"off"` — **derived, not measured.** SPN 595 is not transmitted on this bus. The vocabulary differs from the fields around it on purpose, so the value itself says what kind of fact it is. |
-| `cruiseEnable` | string | | `"ON"` / `"OFF"` (SPN 596, the rocker) |
-| `cruiseSw` | string | | `"SET/DEC"`, `"RES/ACC"` or `"none"` — the legend printed on the rocker |
-| `hazard` | string | | `"ON"` / `"OFF"` |
-| `security` | string | | `"OK"`, `"SEARCHING"`, `"NOT FOUND"` — the key fob |
-| `ignition` | string | | `"ON"` / `"OFF"`. Derived from whether the bus is alive, not from a signal -- pressing wake is what starts the traffic |
-| `grips` | int | | Heated grips, 0 for off through 10. Ten detents, and the byte moves in exact steps of 25 |
-| `gripTempL`, `gripTempR` | float | °C | What each grip has actually reached. Left is byte 0 -- confirmed by holding a bare hand on it with the heat off, which is the only way to be sure |
-| `lean` | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it. **MQTT only since 2026.09.09-3.** Read `stand` instead, which is derived from this and is what a client actually wants |
-| `stand` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`**, and it answers whether the machine is RESTING on the stand, not where the stand is. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
-| `startButton` | string | | `"PRESSED"` / `"RELEASED"` -- PGN 65381 SA 39 byte 3 bit 2, set for pressed. **MQTT only, never on BLE**: a momentary press is almost never caught in a snapshot, and the radio payload has no byte to spare. SA 39 is the handlebar module, not the ECU, which is why it reports even with the kill switch blocking the crank. Found 2026-09-06 |
-| `killSwitch` | string | | `"RUN"` / `"STOP"` -- the red run/stop switch on the right bar, PGN 65381 SA 0 byte 4 bit 6, set for RUN. Two bytes from `standDown` in the same ECU message: the two interlocks that can refuse to let the engine run, side by side. Absent with the ignition off. Found 2026-09-06 |
-| `standDown` | string | | `"DOWN"` / `"UP"` -- the sidestand **switch**, PGN 65381 SA 0 byte 7 bit 0, clear for extended. The measured fact, as against `stand` above, which is inferred from tilt. Absent with the ignition off, because the ECU is not transmitting 65381 then. Found 2026-09-06 after being ruled off this bus twice; see GARAGE-RUN run 9 |
-| `interlockAge` | int | s | Seconds since the last PGN 65381 frame from SA 0 -- the message carrying `killSwitch` and `standDown`. **MQTT only**, and the same argument as `tyreAge`: an interlock reading with no age cannot be told from a stale one. Absent until a frame has been seen |
-| `wheels` | string | | `"OK"`, `"FRONT LOST"`, `"REAR LOST"`. Continuous comparison of the two wheel speeds |
-| `wheelBlips`, `wheelBlipsRear` | int | | Brief dropouts counted per sensor since the board was last erased. Survives reboots and OTA |
-| `headlight` | string | | `"High"` / `"Low"` / `"Off"` |
-| `indLeft` | string | | `"ON"` / `"OFF"` |
-| `indRight` | string | | `"ON"` / `"OFF"` |
-| `dm1` | string | | Decoded active DTC summary, e.g. `"No active DTC \| MIL:off"` |
-| `dm1Raw` | string | | Raw DM1 hex. **MQTT only, and always was** -- this table failed to say so, and the Android app consequently parsed a field that could never arrive. It was dead from the day it was written and nobody could see it, because a null field looks exactly like a field with nothing to report. Removed from the app 2026-09-09. Use `dm1` |
-| `fw` | string | | Firmware version, e.g. `"2026.09.02-4"`. **Always present** from that build onwards — a client that cannot say which firmware it is talking to makes every report of odd behaviour start with a guess. |
+| MQTT key | BLE key | Type | Unit | Notes |
+|----------|---------|------|------|-------|
+| `rpm` | `r` | int | rpm | |
+| `throttle` | `th` | int | % | |
+| `gear` | `g` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
+| `gearGlitches` | — (MQTT only) | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly. **MQTT only since 2026.09.09-3.** It is the counter behind three gear position sensors replaced under warranty, so it went to the transport that KEEPS it: openHAB holds and persists the history, which is what a service desk has to be shown. The radio bytes went to the engine data still being decoded |
+| `coolant` | `ot` | int | °C | **Cylinder head temperature.** The key is a misnomer kept for continuity: this engine is air-cooled and has no coolant, and no oil temperature sensor either — the manual lists exactly one engine temperature sensor, the CHT on the front cylinder head. |
+| `speed` | `sp` | float | km/h | 1 decimal. From the ABS module, and the figure the dash shows |
+| `speedFront` | `sf` | float | km/h | The front wheel, from the same module. Kept separate on purpose: comparing the two is how a failing wheel-speed sensor is caught before the ABS decides anything is wrong |
+| `fuel` | `fl` | int | % | |
+| `odometer` | `od` | int | km | |
+| `svcKm` | `sk` | int | km | Odometer at the last service. Held in the ESP32's NVS, not on the bike |
+| `trip` | `tp` | float | km | 1 decimal |
+| `fuelEconomy` | `fe` | float | l/100 km | 1 decimal, the bike's own average |
+| `fuelEconInst` | `fi` | float | l/100 km | Instantaneous |
+| `fuelRate` | — (MQTT only) | float | L/h | SPN 183. The discriminator for anything that might be injector duty. **MQTT only since 2026.09.08-2**, and one decimal rather than two: it was traded off the radio so `range` could go on, because "fuelRate" costs 11 bytes and "range" costs 9. It is not gone -- it is what proved the range estimator changes its mind rather than the tank falling |
+| `range` | `rg` | int | km | **Range to empty, exactly as the original dash shows it.** PGN 65382 SA 0 bytes 3-4 (16 bits, byte 3 low; one byte only before 2026.09.14-4), one count per km, no offset, identified 2026-09-08. Deliberately pessimistic -- it runs on a recent-consumption window, so it read 212 on a full tank while `fuelEconomy`, the lifetime average, said 6.6. Not cleared when the bus goes quiet: like `fuel` and `odometer` it is a true statement about a parked machine. Bursts of exactly 29 are filtered on step size; see the decoded-signal entry below |
+| `battery` | `bv` | float | V | 1 decimal. >13.5 V ⇒ engine running/charging |
+| `ambient` | `am` | float | °C | 1 decimal |
+| `tyreFront` | `tf` | float | PSI | 1 decimal |
+| `tyreRear` | `tr` | float | PSI | 1 decimal |
+| `tyreFrontTemp` | `tft` | float | °C | 1 decimal |
+| `tyreRearTemp` | `trt` | float | °C | 1 decimal |
+| `tyreAge` | — (MQTT only) | int | s | Seconds since the last TPMS frame arrived. **MQTT only.** The pressures are retained and republished at 1 Hz, so a value alone cannot say whether it is fresh -- a week-old reading looks identical to one taken a second ago. This is what separates them. Absent until a frame has been seen |
+| `brakeRear` | `br` | string | | `"PRESSED"` / `"RELEASED"`. One brake signal, SPN 597, which either control operates — the name is historical. `brakeFront` was removed 2026-09-05. |
+| `clutch` | — (MQTT only) | string | | `"PULLED"` / `"out"` (SPN 598). **MQTT only since 2026.09.09-3** -- 14 bytes, the most expensive of the unread fields, because `"PULLED"` is a long string for a one-bit fact. It does not weaken cruise: the derivation that needs the clutch runs in the firmware and still does |
+| `cruise` | `cc` | string | | `"HOLDING"` / `"off"` — **derived, not measured.** SPN 595 is not transmitted on this bus. The vocabulary differs from the fields around it on purpose, so the value itself says what kind of fact it is. |
+| `cruiseEnable` | `ce` | string | | `"ON"` / `"OFF"` (SPN 596, the rocker) |
+| `cruiseSw` | `cs` | string | | `"SET/DEC"`, `"RES/ACC"` or `"none"` — the legend printed on the rocker |
+| `hazard` | `hz` | string | | `"ON"` / `"OFF"` |
+| `security` | `se` | string | | `"OK"`, `"SEARCHING"`, `"NOT FOUND"` — the key fob |
+| `ignition` | `ig` | string | | `"ON"` / `"OFF"`. Derived from whether the bus is alive, not from a signal -- pressing wake is what starts the traffic |
+| `grips` | `gr` | int | | Heated grips, 0 for off through 10. Ten detents, and the byte moves in exact steps of 25 |
+| `gripTempL`, `gripTempR` | `gl`, `gR` | float | °C | What each grip has actually reached. Left is byte 0 -- confirmed by holding a bare hand on it with the heat off, which is the only way to be sure |
+| `lean` | — (MQTT only) | int | | Raw tilt, 0-255, with 127 upright. Not an angle: the scaling is unknown, so it is published as the machine sends it. **MQTT only since 2026.09.09-3.** Read `stand` instead, which is derived from this and is what a client actually wants |
+| `stand` | `st` | string | | `"UPRIGHT"`, `"STAND"`, `"DOWN"` -- **derived from `lean`**, and it answers whether the machine is RESTING on the stand, not where the stand is. Omitted above walking pace, because an accelerometer reads upright in a balanced corner and would otherwise claim the bike was standing up straight through every bend |
+| `startButton` | — (MQTT only) | string | | `"PRESSED"` / `"RELEASED"` -- PGN 65381 SA 39 byte 3 bit 2, set for pressed. **MQTT only, never on BLE**: a momentary press is almost never caught in a snapshot, and the radio payload has no byte to spare. SA 39 is the handlebar module, not the ECU, which is why it reports even with the kill switch blocking the crank. Found 2026-09-06 |
+| `killSwitch` | `ks` | string | | `"RUN"` / `"STOP"` -- the red run/stop switch on the right bar, PGN 65381 SA 0 byte 4 bit 6, set for RUN. Two bytes from `standDown` in the same ECU message: the two interlocks that can refuse to let the engine run, side by side. Absent until the ECU has sent the message since the board started; after that it keeps its last reading with the ignition off (since 2026-09-07), so a rider walking up to a machine that will not start can see STOP. Found 2026-09-06 |
+| `standDown` | `sd` | string | | `"DOWN"` / `"UP"` -- the sidestand **switch**, PGN 65381 SA 0 byte 7 bit 0, clear for extended. The measured fact, as against `stand` above, which is inferred from tilt. The ECU does not transmit 65381 with the ignition off, so the key is absent until a frame has arrived since the board started, and after that holds its last reading (since 2026-09-07; MQTT carries its age as `interlockAge`). Found 2026-09-06 after being ruled off this bus twice; see GARAGE-RUN run 9 |
+| `interlockAge` | — (MQTT only) | int | s | Seconds since the last PGN 65381 frame from SA 0 -- the message carrying `killSwitch` and `standDown`. **MQTT only**, and the same argument as `tyreAge`: an interlock reading with no age cannot be told from a stale one. Absent until a frame has been seen |
+| `wheels` | `wh` | string | | `"OK"`, `"FRONT LOST"`, `"REAR LOST"`. Continuous comparison of the two wheel speeds |
+| `wheelBlips`, `wheelBlipsRear` | `wf`, `wr` | int | | Brief dropouts counted per sensor since the board was last erased. Survives reboots and OTA |
+| `headlight` | `hl` | string | | `"High"` / `"Low"` / `"Off"` |
+| `indLeft` | `il` | string | | `"ON"` / `"OFF"` |
+| `indRight` | `ir` | string | | `"ON"` / `"OFF"` |
+| `dm1` | `d1` | string | | Active DTC summary, and the one field whose **value** differs by transport. MQTT (`dm1`), readable: `"No active DTC \| MIL:off Stop:off Warn:off Prot:off"`, or `"SPN 520250 FMI 8 (x2); SPN 904 FMI 12 (x1) \| MIL:ON Stop:off Warn:ON Prot:off"`. BLE (`d1`), compact: `"520250:8:2,904:12:1\|5"` — SPN:FMI:count per fault, comma separated, then a bar and the lamps as one decimal number, MIL 1 + Stop 2 + Warn 4 + Prot 8. No fault and no lamp is `"\|0"`. Absent until a DM1 message has been received. See "Fault codes as numbers on the radio" below |
+| `dm1Raw` | — (MQTT only) | string | | Raw DM1 hex. **MQTT only, and always was** -- this table failed to say so, and the Android app consequently parsed a field that could never arrive. It was dead from the day it was written and nobody could see it, because a null field looks exactly like a field with nothing to report. Removed from the app 2026-09-09. Use `dm1` |
+| `fw` | `fw` | string | | Firmware version, e.g. `"2026.10.04-2"`. In the firmware since `2026.09.02-4` — a client that cannot say which firmware it is talking to makes every report of odd behaviour start with a guess. **Always present on MQTT. On BLE it is sent in the first `state` notification after a phone pairs or reconnects and then once every 30 s**, and it is the first thing left out when the payload would pass 514 bytes; cache the last value seen. See "The firmware version, sent rarely" |
 
 ### Not in `state`: the handlebar buttons
 
@@ -253,8 +305,9 @@ not after it.
 
 ### The DM1 lamps, and which one is the ABS lamp
 
-`dm1` ends with the four lamps J1939 defines, e.g. `MIL:off Stop:off Warn:ON
-Prot:off`. They are the bike's own severity judgement and worth reading
+`dm1` ends with the four lamps J1939 defines: on MQTT as words, e.g. `MIL:off
+Stop:off Warn:ON Prot:off`, on BLE as the number after the bar in `d1` (MIL 1,
+Stop 2, Warn 4, Prot 8, so `|4` is Warn alone). They are the bike's own severity judgement and worth reading
 separately from the fault list: a stored code with every lamp dark is a different
 situation from one with Stop lit, and only the machine knows which it is.
 
@@ -272,15 +325,19 @@ and so can never clear on a parked bike -- and every observation until then had
 been of a parked bike. No amount of analysis on stationary captures was going to
 show it; it needed somebody moving, looking at the instrument.
 
-**There is no `abs` field**, and there does not need to be. The app reads
-`Warn:` out of this string and draws the lamp from it, which costs nothing extra
-over BLE because the summary crosses for the fault list anyway.
+**There is no `abs` field**, and there does not need to be. The app reads the
+Warn bit (4) after the bar in `d1` and draws the lamp from it, which costs
+nothing extra over BLE because the summary crosses for the fault list anyway.
+(An MQTT consumer reads `Warn:` out of the readable string.)
 
 ### TPMS caveat
 
 Tyre pressure and temperature come from wheel sensors that **only wake once the
-wheels turn**. Expect those four keys to be absent on a stationary bike even with
-the ignition on.
+wheels turn**. Expect those four keys to be absent, even with the ignition on,
+until the bike has moved since the board last started. After a ride the last
+readings stay in the payload until the board restarts (deep sleep included), so
+a pressure shown on a parked bike is the one from the end of the ride; MQTT
+carries its age as `tyreAge`, BLE does not.
 
 ## 6. Connection parameters
 
@@ -356,7 +413,7 @@ Implementation order that fails cheapest:
 
 1. Scan filtered on the service UUID, connect, bond.
 2. Subscribe to `fast` only, log the raw 8 bytes, confirm they match the layout
-   above against a known state (ignition off = all-unknown).
+   above against a known state (a board started with the ignition off = all-unknown).
 3. Add `state`, and assert that neither `vin` nor `softwareId` appears.
 4. Only then build the UI.
 
@@ -524,11 +581,13 @@ while moving.
 Byte 4 of the same message was the other candidate and it is no longer open: it
 is the dash's **range to empty**, decoded 2026-09-08. See below.
 
-### Range to empty, PGN 65382 SA 0 byte 3 — decoded
+### Range to empty, PGN 65382 SA 0 bytes 3-4 — decoded
 
 **One count per kilometre, no offset, no scaling.** The number the original
-instrument shows. Byte 4 in the probe's one-based naming, byte 3 counting from
-zero as this document does.
+instrument shows. Sixteen bits: byte 3 is the low byte and byte 4 the high one,
+counting from zero as this document does (bytes 4 and 5 in the probe's one-based
+naming). Until firmware 2026.09.14-4 only byte 3 was read; see the second bullet
+below.
 
 Settled 2026-09-08 by reading the dash against the byte twice on one evening,
 and confirmed the same night by a paired *change*: the dash and the item both
@@ -552,10 +611,12 @@ with the instrument on the machine is the whole value of the field.
   genuinely reaches: the largest real step across 4,704 transitions is 39 km and
   the smallest burst is a drop of 133, so the threshold sits at 60 with a
   three-second hold for anything larger. A refuel still gets through.
-- **The 255 ceiling is reachable and unexplored.** Highest ever seen is 252, and
-  byte 4 is 0 in all 4,721 frames so no 16-bit high byte is confirmed. At the
-  lifetime 6.6 l/100 km a full tank would be 315 km, which does not fit. Nobody
-  has seen what happens up there.
+- **Above 255 it carries into byte 4.** When this was first decoded the highest
+  value ever seen was 252 and byte 4 was 0 in all 4,721 captured frames, so the
+  firmware read one byte — and on the Zealand ride a full tank wrapped at 256
+  and read 85. Since 2026.09.14-4 the value is `byte 3 | byte 4 << 8`, with
+  `0xFF` in byte 4 (J1939 "not available") read as no high byte. Proven at the
+  fill-up on 2026-09-15: 254, 257, … 272 without a wrap.
 
 Full evidence in [UNEXPLORED-BYTES.md](UNEXPLORED-BYTES.md).
 
@@ -618,8 +679,24 @@ of `buildStateJson` in `main.cpp` and supplies only the worst-case width of each
 value, so a field added to the firmware without a width is a hard error rather
 than a silent gap in the estimate.
 
-Worst case — every field populated at its widest, 2026-09-05. All three columns
-use the short keys; only the fault encoding differs:
+Worst case today — every field populated at its widest, tool output of
+2026-10-04 for firmware 2026.10.04-2 (49 fields emitted, 39 of them on BLE; the
+tool counts `fw` separately). All three columns use the short keys; only the
+fault encoding differs:
+
+| active faults | readable (no longer sent) | compact, `fw` always | compact, `fw` rarely |
+|---|---|---|---|
+| 0 | 515 over | 468 | 447 |
+| 1 | 525 over | 479 | 458 |
+| 2 | 548 over | 490 | 469 |
+| 4 | 594 over | 512 | **491** |
+
+The right-hand column is what ships. For reference: long keys with readable
+faults and no fault at all is 740, and the MQTT payload — long keys, VIN, four
+faults — is 1131 and has no limit.
+
+**History: the same table on 2026-09-05**, before `fuelRate` (2026.09.08-2) and
+`clutch`, `lean` and `gearGlitches` (2026.09.09-3) left the radio:
 
 | active faults | readable (was shipping) | compact, `fw` always | compact, `fw` rarely |
 |---|---|---|---|
@@ -628,9 +705,9 @@ use the short keys; only the fault encoding differs:
 | 2 | 566 | 508 | 487 |
 | 4 | 612 | 530 | **509** |
 
-For reference: long keys with readable faults and no fault at all is **762**,
-which is why the radio moved to short keys on 2026-09-04. The MQTT payload —
-long keys, VIN, four faults — is 953 and has no limit.
+Then: long keys with readable faults and no fault at all was **762**,
+which is why the radio moved to short keys on 2026-09-04, and the MQTT payload —
+long keys, VIN, four faults — was 953.
 
 An earlier version of the tool tied key length and fault encoding together, so
 its "readable" column was really "long keys", a combination nothing had run
@@ -665,7 +742,8 @@ are absent only because the bike had been parked eight hours; on a ride they are
 all present and a realistic payload lands near 480. The margin was thinner than
 it looked.
 
-The right-hand column is what ships. Two changes got it there.
+The right-hand column of the tables above is what ships. Two changes got it
+there.
 
 ### Fault codes as numbers on the radio
 
@@ -700,7 +778,9 @@ value it saw.
 
 Two nets, in order, and the order is the point:
 
-1. **Drop `fw`.** At four faults the version and the fault list cannot both fit.
+1. **Drop `fw`.** When this was written the version and four faults could not
+   both fit; today they do, at 512 of 514 with two bytes to spare, and the
+   version is still the first thing given up.
    The version is the one the app already has and which cannot change without a
    reboot; dropping a fault instead would make the fault list lose an entry for
    one tick every half minute and get it back — a flicker on exactly the screen
@@ -716,5 +796,6 @@ earlier version warned to a serial port nobody is watching on a ride and sent it
 anyway; that failed exactly when it mattered, because it is the fault list that
 overflows and a clean bike is far under the limit.
 
-About four ordinary fields of headroom remain at four faults; one costs roughly
-13 characters. Run the tool before adding one.
+At four faults 23 bytes of headroom remain without `fw` (491 of 514), which is
+under two ordinary fields; one costs roughly 13 characters. Run the tool before
+adding one.

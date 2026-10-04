@@ -1,12 +1,24 @@
 # Indian CAN Bus — Firmware OTA Update
 
-The ESP32 firmware updates **over the air via a single button in openHAB**. You
-press **🔄 Update Now** in the sitemap; the device downloads the new firmware
-over plain HTTP from the openHAB web server, flashes itself, reboots, and
-reports the running version back — all wirelessly, from anywhere the device can
-reach the broker + web server.
+The ESP32 firmware updates **over the air from two buttons in openHAB**:
+
+- **🔄 Update Now** (command `update`): the board downloads the image over plain
+  HTTP from the openHAB web server. **Home LAN only** — the URL is the server's
+  LAN address.
+- **📡 Update via MQTT** (command `mqtt`): the board pulls the same image in
+  chunks over the MQTT/TLS link it already has. Works **wherever the board
+  reaches the broker**, a phone hotspot included.
+
+Either way the board flashes itself, reboots and reports the running version
+back, and the new image is **on trial until it has reached the broker**: if it
+does not within five minutes, or the board resets before that, the previous
+image boots again by itself.
 
 No cable. No laptop. No mDNS. No inbound connections to the device.
+
+The bike's board is CANFD-MC rev 1.0 #0001 (base topic `canbus/springfield`,
+items `CanBus_*`); bench board #0002 has its own identity (`canbus/bench`,
+`CanBench_*`) and its own image file. `<base>` below is either one.
 
 ---
 
@@ -16,29 +28,36 @@ No cable. No laptop. No mDNS. No inbound connections to the device.
  openHAB UI  ──"update" cmd──►  CanBus_OTA item
       │
       ▼  (automation/js/canbus-ota.js)
- publishMQTT  ──►  MQTT topic  canbus/indian/ota  = "update"
+ publishMQTT  ──►  MQTT topic  canbus/springfield/ota  = "update"
       │
       ▼  (ESP32 subscribed; since 2026-09-27 the network task in net.cpp)
  httpUpdate.update("http://192.0.2.10:8080/static/indian-canbus-firmware.bin")
-      │            └─ progress ──►  canbus/indian/ota/status  = "Downloading NN%"
+      │            └─ progress ──►  canbus/springfield/ota/status  = "Downloading NN%"
       ▼
- flash + reboot
+ flash + reboot, image "pending"
       │
-      ▼  (on boot, first broker connection, net.cpp)
- publish  canbus/indian/ota/status = "Running <FW_VERSION>"
-          canbus/indian/meta       = {..., "fw":"<FW_VERSION>"}
+      ▼  (on boot, first broker connection, net.cpp + rollback.cpp)
+ publish  canbus/springfield/ota/status = "Running <FW_VERSION>"
+                                    then  "Running <FW_VERSION> - verified"
+          canbus/springfield/meta       = {..., "fw":"<FW_VERSION>", "ota_state":"valid"}
 ```
+
+With `mqtt` instead of `update` the first and last steps are the same and the
+download in the middle goes over the broker: the board asks on `<base>/ota/req`
+and `automation/js/canbus-ota-mqtt.js` answers on `<base>/ota/info` and
+`<base>/ota/chunk` (section "OTA over the MQTT link").
 
 Everything the device reports flows back into openHAB items so the UI shows live
 progress and the confirmed running version.
 
 ### Why HTTP pull, not espota/ArduinoOTA push?
 
-The device usually rides on a phone hotspot / cellular link behind NAT. The old
-**espota** (ArduinoOTA, UDP port 3232) needs the *server* to open an inbound
-connection back to the device — impossible through NAT, so it always timed out
-("No response from device"). **HTTP pull** is the reverse: the *device* opens an
-outbound connection to fetch the image, which sails straight through NAT.
+The old **espota** (ArduinoOTA, UDP port 3232) needs the *server* to open an
+inbound connection back to the device — impossible through NAT, so on a phone
+hotspot it always timed out ("No response from device"). **HTTP pull** is the
+reverse: the *device* opens an outbound connection to fetch the image. It needs
+no inbound connection, but the URL is a LAN address, so it works at home and
+nowhere else; away from home the image comes over the MQTT link (`mqtt`).
 
 > ⚠️ Use the openHAB server's **LAN IP** in the URL, not `openhab.local`. The
 > Arduino `WiFiClient` has **no mDNS resolver**, so a `.local` hostname fails
@@ -46,13 +65,13 @@ outbound connection to fetch the image, which sails straight through NAT.
 
 ---
 
-> ⚠️ **First flash of a build that changes the radio stack goes over USB, not
-> OTA.** OTA is delivered over WiFi, so a change that breaks the WiFi link takes
-> the recovery path with it. This applies to anything touching WiFi/BLE
-> coexistence — notably the first firmware with `ENABLE_BLE 1` (see the "BLE
-> phone link" section in [README.md](../README.md)). Confirm it on the bench with
-> `pio run -e sniffer-t2can -t upload -t monitor`, then go back to OTA for the
-> iterations after that.
+> ⚠️ **A build that changes the radio stack goes to the bench board first.** OTA
+> is delivered over WiFi, so a change that breaks the WiFi link takes the
+> recovery path with it. This applies to anything touching WiFi/BLE coexistence
+> (see the "BLE phone link" section in [README.md](../README.md)). Try it on bench
+> board #0002 (`bench-canfdmc`, "The bench board" in [FLASHING.md](FLASHING.md)),
+> where USB is at hand. On the bike the safety net is the automatic rollback: an
+> image that cannot reach the broker goes back after five minutes.
 
 ---
 
@@ -60,7 +79,7 @@ outbound connection to fetch the image, which sails straight through NAT.
 
 1. **Bump the version** in `src/config.h`:
    ```cpp
-   #define FW_VERSION "2026.08.16-3"
+   #define FW_VERSION "<version>"       // e.g. 2026.10.04-2
    ```
 2. **Build** on the openHAB server (matches the deployed libraries — see the
    library-version note below):
@@ -68,34 +87,55 @@ outbound connection to fetch the image, which sails straight through NAT.
    cd /etc/openhab-firmware/indian-canbus
    ~/.platformio/penv/bin/pio run -e sniffer-t2can
    ```
-   The environment name matters. The board moved to the LilyGO T-2CANFD and
-   `sniffer-t2can` is the only environment that still builds; a bare `pio run`
-   picks up whatever is listed first and writes it to a different path than the
-   one step 3 copies from.
-3. **Deploy** the image to the web root that the device downloads from:
+   The environment name matters. The bike's board (CANFD-MC rev 1.0, same pin map
+   as the LilyGO T-2CANFD it replaced) is built from `sniffer-t2can`, the bench
+   board from `bench-canfdmc`; a bare `pio run` builds every environment in
+   `platformio.ini`.
+3. **Deploy** the image to the web root that the device downloads from, and
+   **archive it** under its version at the same moment:
    ```bash
    cp .pio/build/sniffer-t2can/firmware.bin \
       /etc/openhab/html/indian-canbus-firmware.bin
+   cp .pio/build/sniffer-t2can/firmware.bin \
+      releases/indian-canbus-firmware-<version>.bin
    ```
    Verify it's served:
    ```bash
    curl -s -o /dev/null -w "HTTP %{http_code} size=%{size_download}\n" \
      http://192.0.2.10:8080/static/indian-canbus-firmware.bin
    ```
-4. **Trigger the update** — press **🔄 Update Now** in the sitemap
-   (Indian CAN Bus → Firmware), or from the console:
+   (A bench build goes out with `tools/deploy-bench-ota.sh <env>` instead, which
+   writes the bench file only.)
+4. **Check the list in "Before pressing Update"** — the ignition above all.
+5. **Trigger the update** in the sitemap (SpringCommand → **Board & Firmware**).
+   Which button depends on where the bike is:
+
+   | | **🔄 Update Now** (`update`) | **📡 Update via MQTT** (`mqtt`) |
+   |---|---|---|
+   | image travels over | HTTP from the server's LAN address | the MQTT/TLS link, in 2 kB chunks |
+   | works | on the home LAN only | on any network that reaches the broker |
+   | time for 1.4 MB (2026-10-04) | 10 s | 28–40 s |
+
+   At home either works; `update` is faster. Away from home only `mqtt` works.
+   Over `mqtt` a board declines the image it already runs (`No update
+   available`). Or from the console:
    ```bash
    echo "openhab:send CanBus_OTA update" \
      | /usr/share/openhab/runtime/bin/client -p habopen
    ```
-5. **Watch it happen** in the *Firmware* frame:
+6. **Watch it happen** in the *Board & Firmware* frame:
    - `OTA Status` → `Requested — waiting for device...`
    - → `Starting download...` → `Downloading 10%…100%`
-   - → `Running 2026.08.16-3` after the reboot
+   - → `Running <version>` after the reboot, then `Running <version> - verified`
+     once the new image has reached the broker (within a minute)
    - `Running Version` (CanBus_FW_Version) flips to the new version too.
+   - `Running <old version>` instead means the new image did not reach the
+     broker and went back by itself; read `<base>/debug`.
+7. **Tag the source** `known-good-<version>` once it reads `- verified`.
 
-Download of ~1.38 MB takes ~10 s on LAN, longer on a slow cellular link.
-Measured 2026-09-05: from trigger to `Running <version>` was under 25 seconds.
+The image is about 1.4 MB. Measured 2026-10-04 on the bike: `update` on the home
+LAN took 10 s to download and 30 s from the command to `- verified`; `mqtt` over
+a phone hotspot took 40 s and 55 s.
 
 > If the UI still shows the *old* version after the reboot, it's browser cache.
 > Hard-refresh with **Ctrl+Shift+R**. The item states (and MQTT) are the truth.
@@ -134,10 +174,12 @@ connection of the evening happened to span the only ignition-on window.
 
 | File | Role |
 |------|------|
-| `automation/js/canbus-ota.js` | JSRule: on `CanBus_OTA` command `update`, publishes `update` to `canbus/indian/ota` via `actions.Things.getActions('mqtt', 'mqtt:broker:broker').publishMQTT(...)`. Sets `Requested — waiting for device...`; then the ESP32 drives the status line. |
-| `things/canbus.things` | MQTT channels `otaStatus` (`stateTopic canbus/indian/ota/status`) and `fw` (JSONPATH `$.fw` from `.../meta`). |
+| `automation/js/canbus-ota.js` | JSRule: on `CanBus_OTA` command `update` or `mqtt`, publishes that command to `canbus/springfield/ota` via `actions.Things.getActions('mqtt', 'mqtt:broker:broker').publishMQTT(...)`. Sets `Requested — waiting for device...`; then the ESP32 drives the status line. |
+| `automation/js/canbus-ota-mqtt.js` | JSRule for the `mqtt` path: triggered by the boards' `otaReq` channels, answers `<base>/ota/req` with the image's size and md5 on `<base>/ota/info` and with the chunks on `<base>/ota/chunk`. `BOARDS` in the rule gives each board its own file, so a board cannot be handed another identity's image. |
+| `things/canbus.things` | MQTT channels `otaStatus` (`stateTopic canbus/springfield/ota/status`), `otaReq` (`canbus/springfield/ota/req`, a trigger channel) and `fw` (JSONPATH `$.fw` from `.../meta`). |
 | `items/canbus.items` | `CanBus_OTA` ← `otaStatus` channel (live status). `CanBus_FW_Version` ← `fw` channel (running version). |
-| `sitemaps/myhouse.sitemap` | *Firmware* frame: Running Version, OTA Status, **🔄 Update Now** switch, WiFi IP. |
+| `things/canbus-bench.things`, `items/canbus-bench.items` | The same for the bench board under `canbus/bench`: `CanBench_OTA` (takes `update` / `mqtt`), `CanBench_OTA_Status`, `CanBench_Meta`. |
+| `sitemaps/myhouse.sitemap` | *Board & Firmware* frame under SpringCommand: Running Version, OTA Status, a switch with **🔄 Update Now** and **📡 Update via MQTT**, Deep sleep, WiFi IP. |
 
 **Why a JS rule and not an outbound item binding?** An outbound-only MQTT item
 binding never updates the item's own state, so DSL `changed`/`received command`
@@ -150,12 +192,15 @@ JSRule on the command is deterministic and logs each step.
 
 | Symbol | Where | Role |
 |--------|-------|------|
-| `OTA_FIRMWARE_URL` | `config.h` (fallback in `main.cpp`) | HTTP URL of the image. Must be the server **IP**, e.g. `http://192.0.2.10:8080/static/indian-canbus-firmware.bin`. |
+| `OTA_FIRMWARE_URL` | `config.h` (fallback in `main.cpp`) | HTTP URL of the image for `update`, **one file per identity**: `.../indian-canbus-firmware.bin` for the bike, `.../indian-canbus-bench-firmware.bin` for a bench build. Must be the server **IP**, e.g. `http://192.0.2.10:8080/static/indian-canbus-firmware.bin`. |
 | `FW_VERSION` | `config.h` (fallback `"dev"` in `main.cpp`) | Version string, published in `/meta` and as `Running <ver>`. |
 | `runHttpOta()` | `net.cpp` (was `onMqttMessage()` in `main.cpp` until 2026-09-27) | On `<base>/ota == "update"`: registers `httpUpdate.onProgress`, `rebootOnUpdate(true)`, runs `httpUpdate.update()` **in the network task**, so the bus and the phone keep running during the download; `netBusy()` holds deep sleep off meanwhile. |
+| `motaStart()`, `motaOnInfo()`, `motaOnChunk()`, `motaTick()` | `net.cpp` | On `<base>/ota == "mqtt"`: ask the server for the image on `<base>/ota/req`, write the chunks in order, check the md5 in `Update.end()`, reboot. Gives up after 240 s without data. |
+| `OTA_STALL_MS` guard | `net.cpp` | An `esp_timer` that restarts the chip when an OTA of either kind makes no progress for 300 s. |
 | `publishOtaStatus()` | `net.cpp` | Retained publish to `<base>/ota/status` (also mirrored to `/debug`). |
-| `mqttConnectMaybe()` | `net.cpp` | On connect, subscribes to `.../ota` and publishes `Running <FW_VERSION>` once per boot. |
-| WiFi failover | `main.cpp` `wifiConnect()` | Tries SSID1→2→3. Calls `WiFi.disconnect(true)` + delay **before each** attempt (fixes `sta is connecting, cannot set config` / `ESP_ERR_WIFI_STATE 0x3006` that previously broke fallback). |
+| `mqttConnectMaybe()` | `net.cpp` | On connect, subscribes to `<base>/ota`, `<base>/ota/info` and `<base>/ota/chunk` and publishes `Running <FW_VERSION>` once per boot. |
+| `rollbackBegin()`, `rollbackNoteBrokerUp()`, `rollbackTick()` | `rollback.cpp` | The trial: an OTA image boots `pending`, is marked valid at the first broker connection (`Running <ver> - verified`), and goes back to the previous image after `ROLLBACK_GRACE_MS` (5 min) without one. `rollbackPending()` holds deep sleep off meanwhile. |
+| WiFi | `net.cpp` `wifiConnect()` | Scans and joins the **strongest** known SSID, 20 s per attempt; the remembered order is the fallback when the scan sees none of them. Calls `WiFi.disconnect(true)` + delay **before each** attempt (fixes `sta is connecting, cannot set config` / `ESP_ERR_WIFI_STATE 0x3006` that previously broke fallback). |
 
 The `#ifndef` fallbacks for `OTA_FIRMWARE_URL` / `FW_VERSION` in `main.cpp` mean
 the firmware still builds on a machine whose (git-ignored) `config.h` predates
@@ -165,69 +210,88 @@ the OTA block — the real values still come from `config.h` when present.
 
 ## MQTT topics
 
+`<base>` is `canbus/springfield` for the bike and `canbus/bench` for the bench
+board.
+
 | Topic | Dir | Payload |
 |-------|-----|---------|
-| `canbus/indian/ota` | openHAB → ESP32 | `update` (trigger) |
-| `canbus/indian/ota/status` | ESP32 → openHAB | `Running <ver>` / `Starting download...` / `Downloading NN%` / `OK — rebooting` / `FAILED (n): ...` (retained) |
-| `canbus/indian/meta` | ESP32 → openHAB | JSON incl. `"fw":"<ver>"` + `"ip"` (retained) |
-| `canbus/indian/debug` | ESP32 → openHAB | Free-text log incl. `[ota] ...` lines |
+| `<base>/ota` | openHAB → ESP32 | `update` (HTTP, home LAN) or `mqtt` (over this link) |
+| `<base>/ota/status` | ESP32 → openHAB | `Running <ver>` / `Running <ver> - verified` / `Starting download...` / `Downloading NN%` / `OK - rebooting` / `No update available` / `FAILED ...` / `ROLLBACK: no broker within N s, ...` (retained) |
+| `<base>/ota/req` | ESP32 → openHAB | `mqtt` path only: `info`, then `<md5> <offset> <count> <len>` |
+| `<base>/ota/info` | openHAB → ESP32 | `mqtt` path only: `<size> <md5>`, or `ERR ...` |
+| `<base>/ota/chunk` | openHAB → ESP32 | `mqtt` path only: 4 bytes offset (LE) + data |
+| `<base>/meta` | ESP32 → openHAB | JSON incl. `"fw":"<ver>"`, `"ota_state"`, `"ota_other"`, `"reset"` + `"ip"` (retained) |
+| `<base>/debug` | ESP32 → openHAB | Free-text log incl. `[ota] ...` and `[rollback] ...` lines |
 
 **Watch a live update from the server:**
 ```bash
 /etc/openhab/.venv/bin/python - <<'PY'
 import ssl, time, paho.mqtt.client as mqtt
-c=mqtt.Client(client_id="ota-watch"); c.username_pw_set(MQTT_USER, MQTT_PASS)
+c=mqtt.Client(client_id="ota-watch"); c.username_pw_set("<user>","<pw>")
 c.tls_set(cert_reqs=ssl.CERT_NONE); c.tls_insecure_set(True)
 c.on_message=lambda cl,u,m: print(time.strftime('%H:%M:%S'), m.topic, m.payload.decode())
 c.on_connect=lambda cl,u,f,rc,p=None:[cl.subscribe(t) for t in
-  ("canbus/indian/ota/status","canbus/indian/debug","canbus/indian/status","canbus/indian/meta")]
+  ("canbus/springfield/ota/status","canbus/springfield/debug","canbus/springfield/status","canbus/springfield/meta")]
 c.connect("mqtt.example.com",8883,30); c.loop_forever()
 PY
 ```
 
 ---
 
-## Rolling back (no cable needed)
+## Rolling back by hand (no cable needed)
+
+This is the deliberate way back to an older image. An image that fails to reach
+the broker goes back **by itself**; that is the section "Automatic rollback"
+below.
 
 Every image that has been flashed is kept, exactly as served, in
 `releases/indian-canbus-firmware-<version>.bin` (git-ignored; binaries do not
 belong in history). The source it was built from carries the tag
 `known-good-<version>`. Both were introduced 2026-09-14, before the first change
-made after the Zealand ride, because **USB flashing means taking the fairing
-off** — the board is built into the motorcycle — so OTA has to be able to undo
-itself.
+made after the Zealand ride, because the board is built into the motorcycle and
+OTA has to be able to undo itself. A USB flash today means **taking the seat off
+and soldering a cable to the pads on the back of the board** (the CANFD-MC has
+no USB connector; [FLASHING.md](FLASHING.md) §4b).
 
-To go back to the previous image:
+To go back to the previous image (today that is 2026.10.04-1; its md5 is in the
+version table below):
 
 ```bash
 cd /etc/openhab-firmware/indian-canbus
-cp releases/indian-canbus-firmware-2026.09.14-2.bin /etc/openhab/html/indian-canbus-firmware.bin
-md5sum /etc/openhab/html/indian-canbus-firmware.bin     # 3b340650feb5ade42d0dd647cce4f119
+cp releases/indian-canbus-firmware-<version>.bin /etc/openhab/html/indian-canbus-firmware.bin
+md5sum /etc/openhab/html/indian-canbus-firmware.bin     # compare with the md5 noted for that version
 echo "openhab:send CanBus_OTA update" | /usr/share/openhab/runtime/bin/client -p habopen
 ```
 
-Then watch `OTA Status` until it reads `Running 2026.09.14-2`. To go back in
-*source*: `git checkout known-good-2026.09.14-2 -- src/main.cpp`, rebuild, deploy.
+Then watch `OTA Status` until it reads `Running <version> - verified`. Away from
+home, send `mqtt` instead of `update`. To go back in *source*:
+`git checkout known-good-<version> -- src/ platformio.ini`, rebuild, deploy. Take
+the whole of `src/`, not one file: the firmware is spread over `main.cpp`,
+`net.cpp`, `rollback.cpp`, `sleep.cpp` and more, and one file from an old tag
+does not match the rest.
 
-**What OTA cannot undo:** an image that crashes before the network task has connected,
-or that never joins WiFi, cannot receive the next `update`. Every change since
-2026-09-14 has therefore been reviewed against one question first — *does any
-of it run before the network is up, and can it crash there?* — and the answer
-for each is written into the commit. Keep doing that.
+**What OTA cannot undo by itself:** an image that reaches the broker — and is
+therefore marked valid — but is broken in some other way, for instance one that
+no longer acts on `<base>/ota`. An image that crashes early, never joins WiFi or
+never reaches the broker goes back automatically since 2026.10.04-1. A
+USB-flashed image has no trial state and is never rolled back. So the question
+every change since 2026-09-14 has been reviewed against still stands, one step
+further on: *can any of it break the path from the broker to the next OTA?* The
+answer for each is written into the commit. Keep doing that.
 
-**Automatic rollback: half there (checked 2026-10-03).** The bootloader *is* built
-with `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` (the Arduino core's esp32s3
+**Automatic rollback, how it got here.** Checked 2026-10-03: the bootloader *is*
+built with `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` (the Arduino core's esp32s3
 sdkconfig), so a new image boots as "pending verify" and any reset before it is
-marked valid returns to the previous one. But the core marks it valid itself, in
-`initArduino()`, before `setup()` runs, because our firmware does not override the
-weak `verifyRollbackLater()`. In practice: an image that dies before Arduino starts
-rolls back; one that boots and then never reaches the broker does not. Closing that
-gap is IDEAS D7 step 1: return `true` from `verifyRollbackLater()`, call
-`esp_ota_mark_app_valid_cancel_rollback()` after the first broker connection, and
-reboot (which rolls back) if that has not happened within a few minutes.
+marked valid returns to the previous one. But the core marked it valid itself, in
+`initArduino()`, before `setup()` ran, because the firmware did not override the
+weak `verifyRollbackLater()`. In practice an image that died before Arduino
+started rolled back; one that booted and then never reached the broker did not.
+That gap was closed on 2026-10-04 (IDEAS D7 step 1, `src/rollback.cpp`):
+`verifyRollbackLater()` returns `true`, the image is marked valid after the first
+broker connection, and it goes back if that has not happened within five minutes.
 
 **The archive above had lapsed:** nothing between 2026.09.15-1 and 2026.09.27-3 was
-kept. 2026.09.27-3, the image on the bike, was archived and tagged
+kept. 2026.09.27-3, then the image on the bike, was archived and tagged
 `known-good-2026.09.27-3` (commit `aa0c703`, md5 `8853b295b17b22818b19743e0bdbaf0c`)
 on 2026-10-03. Archive every image you OTA to the bike, at the moment you deploy it.
 
@@ -236,9 +300,11 @@ on 2026-10-03. Archive every image you OTA to the bike, at the moment you deploy
 1. `curl -s -o /dev/null -w "%{http_code} %{size_download}\n" http://192.0.2.10:8080/static/indian-canbus-firmware.bin` — 200, and the size of the image you just copied.
 2. `md5sum` of the served file equals `md5sum` of `.pio/build/sniffer-t2can/firmware.bin`.
 3. The previous image is in `releases/` and its md5 is written next to its tag.
-4. The bike is on home WiFi. If the new image is wrong, the rollback OTA still has to reach it.
+4. For `update` the bike must be on home WiFi; `mqtt` works on any network that
+   reaches the broker. A new image that never reaches the broker goes back by
+   itself after five minutes, so the way home no longer depends on a second OTA.
 5. **The ignition is on, proven by the bus.** `efmsg` in the health JSON
-   (`canbus/<base>/bus/health`, `CanBus_Bus_CleanMsgs` / `CanBench_Health` in openHAB) is the controller's error-free message count, so it only
+   (`<base>/bus/health`, `CanBus_Bus_CleanMsgs` / `CanBench_Health` in openHAB) is the controller's error-free message count, so it only
    climbs while frames arrive. Read it twice, 30 s apart. If it climbed, the
    ignition is on. Nothing else proves it:
    - `status = online` and a fresh `meta` only prove WiFi and MQTT.
@@ -254,20 +320,26 @@ on 2026-10-03. Archive every image you OTA to the bike, at the moment you deploy
    `Update.end()` has verified it, so the board boots the old image again. What it
    does cost is a half-finished OTA that nobody can read: `Downloading 90%` stays on
    the item, and you cannot tell whether the board took the image. Say how long the
-   ignition must stay on before sending: about 35 s of download plus 15 s for the
-   reboot, on home WiFi at RSSI around -87.
-6. **Know which identity the board has, and which image the URL serves.**
-   `bench-canfdmc` and `sniffer-t2can` share this URL. See "Swapping in a new board"
-   in [FLASHING.md](FLASHING.md).
+   ignition must stay on before sending. Measured on the bike 2026-10-04, from
+   the command to `- verified`: 30 s with `update` on home WiFi at RSSI -61 (10 s
+   of it download), 55 s with `mqtt` over a phone hotspot (40 s download). On
+   2026-10-03, at RSSI around -87, it was about 35 s of download plus 15 s for
+   the reboot.
+6. **Know which identity the board has.** Each identity pulls its own file:
+   `indian-canbus-firmware.bin` for the bike (`sniffer-t2can`),
+   `indian-canbus-bench-firmware.bin` for the bench (`bench-canfdmc`). Check that
+   the file for *this* board holds the image you mean to send. See "Swapping in
+   a new board" in [FLASHING.md](FLASHING.md).
 7. **Send `update` once.** If the call that sent it was interrupted, read
    `events.log` for the command and for `Downloading` lines before sending again.
    A second `update` that nobody meant to send cost one extra identity round trip
    on 2026-10-03.
 
-## Automatic rollback (branch `rollback-bench`, on the bench first)
+## Automatic rollback (since 2026.10.04-1; proven on the bench first)
 
-Written 2026-10-04, tested on bench board #0002 before anything of it goes near the
-bike. What it does, in `src/rollback.cpp`:
+Written 2026-10-04 on branch `rollback-bench` and tested on bench board #0002
+before any of it went near the bike; merged to master and on the bike the same
+day. What it does, in `src/rollback.cpp`:
 
 - `verifyRollbackLater()` returns true, so the Arduino core no longer marks every
   image valid before `setup()`.
@@ -340,7 +412,7 @@ metre or so; put it next to an AP.
 
 Reaching a board that is away from home is the next section.
 
-## OTA over the MQTT link (command `mqtt`, branch `rollback-bench`)
+## OTA over the MQTT link (command `mqtt`, since 2026.10.04-1)
 
 `update` pulls the image over HTTP from the server's LAN address, so it works at
 home and nowhere else, and the image is not to be served to the internet: it
@@ -418,18 +490,28 @@ the board was back on the home WiFi at 10:24:44 without a reboot. Tagged `known-
 
 ## First flash / emergency recovery (USB cable)
 
-OTA only works once a *good* image (correct IP URL + WiFi fix) is on the device.
-For the very first flash, or if a bad image bricks OTA, flash over USB with the
-dedicated cable environment (does not touch the espota config):
+OTA only works once a *good* image is on the device. For the very first flash of
+a board, or if automatic rollback has nothing to go back to, flash over USB with
+the board's own environment:
 
 ```bash
-# On the machine with the ESP32 plugged in:
-git pull                                   # get latest src + platformio.ini
+# On the machine with the board's USB attached:
 rm -rf .pio                                # if you copied .pio from another host
-pio run -e sniffer-usb -t upload -t monitor \
-  --upload-port /dev/cu.usbserial-XXXX     # your serial port (pio device list)
+pio run -e sniffer-t2can -t upload -t monitor \
+  --upload-port /dev/ttyACM0               # your serial port (pio device list);
+                                           # /dev/cu.usbmodemXXXX on macOS
 ```
-`[env:sniffer-usb]` extends `[env:sniffer]` with `upload_protocol = esptool`.
+
+- `sniffer-t2can` is the bike identity; a bench board takes `-e bench-canfdmc`.
+- **The CANFD-MC has no USB connector.** USB is on solder pads on the back
+  (GND, USB_D+, USB_D−), the board is powered from 12 V, and on the bike it sits
+  under the seat. See "USB on the CANFD-MC" in [FLASHING.md](FLASHING.md).
+- `-t upload` writes the app only. A blank board needs `firmware.factory.bin` at
+  `0x0`, which wipes NVS; see [FLASHING.md](FLASHING.md) §5 and §5b.
+- A USB-flashed image has no trial state: it is never rolled back.
+
+(`sniffer-usb`, which this section used to name, is the cable environment of the
+first board, the classic-ESP32 T-CAN485. It does not fit an ESP32-S3.)
 
 ---
 
@@ -438,7 +520,7 @@ pio run -e sniffer-usb -t upload -t monitor \
 The deployed OTA image **must be built on the openHAB server**, whose PlatformIO
 has arduino-esp32 **3.3.9** (WiFi/HTTPUpdate/WiFiClientSecure `3.3.9`). A laptop
 with the older **2.0.0** libraries produces a *different, smaller* binary
-(~1.03 MB vs ~1.38 MB). Always build + deploy the OTA `.bin` from the server so
+(~1.03 MB vs ~1.4 MB). Always build + deploy the OTA `.bin` from the server so
 what you serve matches what you tested. USB flashing from a laptop is fine for
 emergency recovery, but treat the **server build as the source of truth** for
 OTA.
@@ -449,16 +531,23 @@ OTA.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Status stuck, device never downloads | Command never reached MQTT | Check `canbus-ota.js` log line `published "update" to canbus/indian/ota`; confirm broker `mqtt:broker:broker` is ONLINE |
-| `HTTP_UPDATE_FAILED (-1): connection refused` | Old firmware still has `openhab.local`, or wrong IP | Reflash a build with `OTA_FIRMWARE_URL` = server IP; verify `curl` serves the `.bin` |
-| Device offline, never reconnects on the bench | SSID1 absent + old WiFi-failover bug | Reflash the WiFi-failover fix, or move device where an SSID from `config.h` exists |
+| Status stuck, device never downloads | Command never reached MQTT | Check `canbus-ota.js` log line `published "update" to canbus/springfield/ota`; confirm broker `mqtt:broker:broker` is ONLINE |
+| `update` fails with `FAILED (-1): ... connection refused`, or never gets past `Starting download...` | The board is not on the home LAN (a hotspot, for instance), so the server's LAN address is out of reach; or `OTA_FIRMWARE_URL` is wrong | Send `mqtt` instead; at home, verify that `curl` serves the `.bin` at the URL in `config.h` |
+| `mqtt` ends in `FAILED: no data from the server for 240 s` | Nothing answered `<base>/ota/req` | Check that `canbus-ota-mqtt.js` is loaded, that the board is listed in its `BOARDS`, and that the thing's `otaReq` trigger channel exists |
+| `mqtt` answers `No update available` | The served file is the image the board already runs (same md5) | Nothing is wrong. To test the path, build under a new `FW_VERSION` |
+| `Running <old version>` after the update | The new image did not reach the broker within five minutes, or the board was reset while the image was pending, and the previous image came back | Read `<base>/debug`; `ota_other` in `meta` reads `invalid` or `aborted` (or `none` after a sagging power cut) |
+| Device offline, never reconnects on the bench | None of the SSIDs in `config.h` is in range (without an antenna the module reaches about a metre) | Move the board next to an AP it knows |
 | UI shows old version after OTA | Browser cache | **Ctrl+Shift+R**; trust the item states / MQTT |
 | First `update` after a wake fails at once (`FAILED (-11): HTTP error: read Timeout`) or crawls and dies | Not understood (seen three times on 2026-09-27, on the old and the new code path); the second `update` a minute later ran in 20-40 s every time | Send `update` again. The guard restarts the chip if a download stalls for 300 s, so a failed first attempt costs at most five minutes. |
-| Downloads then boot-loops | Bad/corrupt image | USB recovery flash (see above) |
+| Downloads, then crashes at boot | Bad image | The first reset while the image is pending makes the bootloader start the previous image; nothing to do but read `meta` (`ota_other: aborted`). USB recovery flash (see above) only if no previous image is left |
 
 ---
 
 ## Version history
+
+Not every version has a row. The versions between `2026.08.17-1` and
+`2026.09.14-3`, and those between `2026.09.15-1` and `2026.09.27-1` other than
+the two listed, are in `git log` only.
 
 | Version | Notes |
 |---------|-------|
@@ -467,6 +556,8 @@ OTA.
 | `2026.09.27-3` | The `asleep` marker is given 250 ms to leave the radio after `netFlush()`; on 27-2 the chip went down with it still in the TCP buffer and openHAB got only the last will. |
 | `2026.09.27-2` | **The network in its own task** (`src/net.cpp`): WiFi, SNTP, MQTT and OTA on core 0 behind two queues; `loop()` never waits for the broker. Measured with the broker blocked: loop gap 5019 → 4 ms, BLE gap 6656 → 3 ms, app uninterrupted. The network is now chosen by scan and signal, not by which SSID worked last. `ENABLE_MQTT 0` compiles again; env `sniffer-t2can-nomqtt` keeps it that way. |
 | `2026.09.27-1` | Two gauges in `meta`: `loop_max_ms` and `ble_gap_max_ms`, worst of the last 30 s, so a stall can be measured from the garage instead of felt on the road. |
+| `2026.09.19-2` | Two BLE centrals at once (`BLE_MAX_CENTRALS` 2): advertising is restarted after the first connect, pairing state is kept per link. |
+| `2026.09.19-1` | The handlebar buttons over BLE: a button characteristic, two bytes per press. |
 | `2026.09.15-1` | **The failover to the hotspot works now.** The association always did; the broker was being looked up in lwIP's DNS cache, which still held the home resolver's answer (`192.0.2.10`, TTL 3600) for an hour after leaving the garage, so every connect went to a LAN address over cellular and timed out. `wifiConnect()` now flushes the cache (`dns_clear_cache()` via `esp_netif_tcpip_exec`, in the lwIP thread) after every association. Also: MQTT retry stamped at the *end* of the attempt and 15 s apart (the 5 s stamp-before-connect of `-3` expired during the 5 s timeout, so loop() was blocked back to back and BLE died whenever the hotspot was up); and `logEvent()` lines written while offline are buffered (24 lines, repeats collapsed) and published with the next connection, so the road finally reports. **Proven on a test ride the same afternoon**: 55 s from link loss to online over the hotspot, broker resolved to the public address, 11 min on cellular with no drop, and back to home WiFi on return. Rollback image: `releases/…-2026.09.14-4.bin`, md5 `72d6c6239db2cc460333e3b66df35b41`. |
 | `2026.09.14-4` | Range to empty decoded as 16 bits (`b[3] | b[4]<<8`); it wrapped at 256 and a full tank read 85. `probe/throttle` prints `b5`. Proven at the 2026-09-15 fill-up: 254 → 257 → … → 272 without a wrap. Rollback image: `releases/…-2026.09.14-3.bin`. |
 | `2026.09.14-3` | State JSON buffer 900 → 1536 with a tripwire (the 900-byte cut froze openHAB items for ~6 h on the Zealand ride, silently); TLS connect/handshake bounded at 5 s / 10 s (were 30 s / 120 s, blocking BLE+CAN 30 s of every 35 with the hotspot up and cellular down); one 5-s MQTT retry cadence for every caller; CAN drained and BLE fed inside the WiFi and NTP waits via `drainCan()` (no more frozen needle during a scan). Rollback image: `releases/…-2026.09.14-2.bin`. |
@@ -479,9 +570,16 @@ OTA.
 
 ## Future enhancements
 
-- [x] MQTT-triggered OTA from openHAB (`canbus/indian/ota`) — **done** (`canbus-ota.js`)
+- [x] MQTT-triggered OTA from openHAB (`<base>/ota`) — **done** (`canbus-ota.js`)
 - [x] Firmware version item in openHAB (`CanBus_FW_Version`) — **done**
-- [x] Live progress in the UI (`canbus/indian/ota/status`) — **done**
-- [ ] Rollback to previous version via MQTT command
-- [ ] Serve a versioned filename (`indian-canbus-<ver>.bin`) + symlink for audit trail
+- [x] Live progress in the UI (`<base>/ota/status`) — **done**
+- [x] Automatic rollback when a new image does not reach the broker — **done**
+      2026.10.04-1 (`rollback.cpp`)
+- [x] OTA over the MQTT link, for a board away from home (`mqtt`) — **done**
+      2026.10.04-1 (`net.cpp`, `canbus-ota-mqtt.js`)
+- [ ] Rollback to a chosen older version by one command (today: copy the image
+      from `releases/` into the served file and send `update` or `mqtt`)
+- [ ] Serve a versioned filename (`indian-canbus-<ver>.bin`) + symlink for audit
+      trail (today the versioned copies are in `releases/`, the served name is fixed)
+- [ ] Test a link that drops in the middle of an `mqtt` download (bench)
 

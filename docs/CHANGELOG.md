@@ -30,7 +30,7 @@ DEVICE / ANOTHER DEVICE** (`Settings.heatOwner`), read by `Keis.start`,
 connects to the controllers, and flipping the button releases or takes them
 immediately (`Keis.ownershipChanged`). The heat page's blocked-reason says so.
 Default THIS DEVICE, so nothing changes for a single install. **Not yet
-built or bench-tested.**
+built or bench-tested.** (built and tested on the road 2026-09-19)
 
 ## 2026-09-19 — on Google Play, internal test (release 4, version 0.3)
 
@@ -71,14 +71,15 @@ reconnect starts the zone in automatic again.
 Older firmware has no button characteristic; the app simply never subscribes.
 Older app on new firmware ignores the unknown UUID. Nothing else in the BLE
 contract moved. **Nothing in this entry has been seen running** — written and
-checked, not yet built.
+checked, not yet built. (built and released 2026-09-19)
 
 ## 2026-09-14 — the cluster stops looking plotted
 
 One session, triggered by the owner looking at the screen on a Hugerock X70 and
 saying what was wrong with it. Everything here is cosmetic or layout; no decode,
 no protocol, no BLE behaviour was touched. **Nothing in this entry has been seen
-running** — it was written, measured and checked, but not yet built.
+running** — it was written, measured and checked, but not yet built. (built and
+released 2026-09-19)
 
 ### Fullscreen, both ways up
 

@@ -38,6 +38,16 @@ the factory dash does not offer at all: tyre pressure corrected for temperature,
 fuel range, a ride trip that survives a coffee stop, and automatic control of
 heated clothing based on how cold it actually feels at road speed.
 
+The interface is the owner's own board, the **CANFD-MC rev 1.0** — an
+ESP32-S3-WROOM-1U with an MCP2518FD CAN controller. It replaced the LilyGO
+T-2CANFD the project started on: a first board went on the bike on 2026-09-28
+and board #0001 on 2026-10-03. The bike runs firmware 2026.10.04-2 and still
+advertises over Bluetooth as "Springfield"; a board on the bench advertises as
+"CANFD-bench". New firmware needs no cable: the interface fetches it over HTTP
+on the home network (`update`), or over its MQTT link from anywhere it can reach
+the broker (`mqtt`) — a phone hotspot is enough — and rolls back by itself if
+the new image does not come up.
+
 Four pages — **RIDE**, **TYRES**, **MACHINE**, **HEAT** — reached by swiping or
 by tapping the tab names along the top.
 
@@ -65,12 +75,14 @@ was wanted.
 | | |
 |---|---|
 | Android | 12 or newer (API 31) |
-| Permissions | Bluetooth scan and connect. No location, no internet |
+| Permissions | Bluetooth scan and connect, and on Android 13 or newer permission to show its ongoing notification. No location, no internet |
 | Hardware | The CAN interface, powered from the motorcycle |
 | Optional | One or two Keis heated-clothing controllers |
 
-On first launch the app asks for the two Bluetooth permissions. Grant them and it
-starts scanning by itself.
+On first launch the app asks for the two Bluetooth permissions and, on Android 13
+or newer, for permission to show the notification that keeps the link alive.
+Grant the Bluetooth ones and it starts scanning by itself; a refused notification
+is survivable, refused Bluetooth is not.
 
 **The motorcycle interface requires pairing.** The first time a phone connects,
 Android shows its own pairing dialog and you type the **six-digit passkey** set
@@ -88,8 +100,10 @@ all; see [8.2](#82-setting-up).
 **It finds the interface by the service UUID in the advertising packet, not by
 device name.** That is deliberate: a name filter breaks the moment the firmware's
 Bluetooth device name is changed, and the UUID does not move. So renaming the
-interface costs nothing, and no device name has to be kept in step between the
-firmware and the phone.
+interface does not break the connection, and the same app finds a bench board
+that advertises as "CANFD-bench". What does not follow a rename is the app's own
+advice: two pairing messages and the Bluetooth row in settings say "Springfield",
+the bike's name, whatever the board in front of it is called.
 
 Set these before the first real ride, all under the gear icon at the end of the
 tab row:
@@ -116,9 +130,12 @@ The status line reports the link honestly, in these states:
 |---|---|
 | `Bluetooth is off — waiting` | Turn Bluetooth on; the app will carry on by itself |
 | `Scanning…` | Looking for the interface |
+| `Searching (low power)…` | No bike for 45 seconds; scanning gently until it turns up |
 | `Found the bike, connecting…` | Seen it, opening the link |
 | `Connected, discovering services…` | Linked, reading the interface's capabilities |
-| `Connected` | Running |
+| `Linked` | Running, data arriving |
+| `Disconnected (status n)` | The link dropped; the app is already looking again |
+| `Pairing refused — forget "Springfield" in Bluetooth settings` | Two failed pairings in a row. The bond is stale — see [troubleshooting](#12-troubleshooting) |
 
 Alongside it sits **signal strength in dBm**, polled every two seconds. It is
 there because a link about to drop looks exactly like a healthy one until the
@@ -127,7 +144,9 @@ moment it goes, and −90 dBm is the only warning available in advance.
 **Battery use.** Scanning costs power; a connection does not. The app scans
 aggressively for the first 45 seconds — the time you are walking up to the bike —
 then drops to a low-power scan retried every 20 seconds. A phone in a pocket a
-mile from the garage is not scanning flat out all day.
+mile from the garage is not scanning flat out all day. Opening the app starts a
+fresh aggressive window, because someone looking at the screen wants the link
+now.
 
 **Stopping it.** The ongoing notification carries a **Stop** action. That is the
 only way to end the service; without it the link would run until Android or a
@@ -216,10 +235,14 @@ what tells them apart without reading anything.
 
 ### Three pulses, and nothing else
 
-Motion is a language on this cluster, so it has exactly three words. They live in
-`Cluster` (`PULSE_CALM`, `PULSE_CAUTION`, `PULSE_URGENT`) and nothing is allowed
-to breathe at a rate that is not one of them — the whole value of a rate is that
+Motion is a language on this cluster, so it has three words. They live in
+`Cluster` (`PULSE_CALM`, `PULSE_CAUTION`, `PULSE_URGENT`) and nothing should
+breathe at a rate that is not one of them — the whole value of a rate is that
 it means the same thing on every page.
+
+Four things do not keep to it yet: the red alert banner and the edge glow that
+accompanies it breathe at 1400 ms, and the rev figure past the redline and the
+glow behind a motorcycle lying on its side pulse at 900 ms.
 
 | | rate | means | where |
 |---|---|---|---|
@@ -267,10 +290,13 @@ The riding page, and the one that holds the main instrument in both orientations
 |---|---|
 | **Speedometer** | The primary face. Carries the **gear window** in its lower half, because the two things a rider glances down for belong together |
 | **Tachometer** | A digital figure with a bar in portrait; its own dial to the right in landscape |
+| **Throttle** | Where your right hand is, on the same track as the engine: a marker on the rev bar in portrait, a thin inner arc on the tachometer in landscape. Open the throttle and it jumps ahead of the revs; shut it and the revs run on past |
 | **Redline** | Set once in settings. The dial marking, the edge glow and the haptic warning all read the same number |
 | **Fuel bar** | Level as a bar, with **range remaining** beside the label — see [9.3](#93-fuel-range) |
+| **Grips** | The motorcycle's own heated grips: the level they are set to, off or 1 to 10, and the temperature of each grip, marked L and R. With the heat off the two figures read the air at the bar |
 | **Ride strip** | This ride's distance and the ignition lamp. Portrait puts both beside the rev figure; landscape gives them their own strip at the foot of the side column |
-| **Tell-tales** | Indicators, high beam, neutral, ABS and the rest, in the three states above |
+| **ABS lamp** | The amber ABS triangle from the bike's own dash, above the ignition lamp beside the rev figure in portrait. It is lit until the wheels have come up to speed and the ABS has tested itself, as on the machine |
+| **Tell-tales** | Six along the foot, in the three states above: beam (blue for main, white for dipped), brake, cruise, hazard, the sidestand switch (red when the stand is out), and a small motorcycle that leans as the bike does — upright, on its stand, or on its side. Turn signals are on the dial face and neutral is in the gear window |
 
 **The dials carry nothing but their own reading.** The ride figure and the
 ignition lamp used to be drawn on the faces in landscape — the figure at 0.29 of
@@ -295,6 +321,10 @@ hide themselves again — so the clock and the back gesture are a gesture away
 rather than gone. Settings, diagnostics and about keep their bars, because those
 are a phone rather than an instrument.
 
+**The screen stays on** for as long as the cluster is showing. On a handlebar
+mount the ordinary screen timeout would blank an instrument panel after half a
+minute.
+
 ### TYRES
 
 Both wheels, and the page is arranged around one idea: **a pressure without its
@@ -304,21 +334,39 @@ For each wheel:
 
 | Field | What it is |
 |---|---|
-| **Cold equivalent** | The large figure in the hub. What this tyre would read once cooled to ambient — the number to compare against a cold spec. Calculated, not measured: see [9.1](#91-cold-equivalent-tyre-pressure) |
-| **Measured PSI** and **tyre temperature** | Side by side, given equal billing. The corrected figure is an inference and you should be able to see what it was inferred from |
-| **Target** | Your cold target for that wheel, from settings |
+| **Measured pressure** | The large figure in the hub: what the sensor reads, and the same number the motorcycle's own display shows |
+| **COLD** and **TEMP** | Side by side beneath it, given equal billing. COLD is the pressure brought to a fixed 20 °C — the number to compare against a cold spec, and the one the ring, its colour and the alerts follow. TEMP is the tyre temperature it was corrected from. COLD is calculated, not measured: see [9.1](#91-cold-equivalent-tyre-pressure) |
+| **TARGET** and **OUT** | Your cold target for that wheel, from settings, and — when the outside temperature is known — what the tyre would read cooled to today's weather. OUT is information only; nothing alerts on it |
+| **The ring** | Where COLD sits within 8 PSI either side of target, with a notch at the target itself. Green and still within 2 PSI, amber and breathing within 4 (WATCH), red and urgent beyond (ACT) |
 | **Age** | "measured 4 days ago". TPMS sensors sleep when the wheels stop, so a parked bike reports nothing — exactly when someone walks up to check the tyres. The last complete reading is kept, and shown with its age, because a stale number labelled as stale is useful where an unlabelled one is misleading |
 | **Weekly trend** | Whether pressure is holding, or how much it is losing per week — see [9.2](#92-weekly-pressure-trend) |
 
-If ambient temperature is unknown, **the cold equivalent is blank.** It is not
-estimated. See [9.1](#91-cold-equivalent-tyre-pressure) for why.
+The cold figure needs no outside temperature; without one, only OUT is missing.
+See [9.1](#91-cold-equivalent-tyre-pressure) for why.
+
+The line at the foot of the page gives the age and the outside temperature
+stored with the reading. Its wording is older than the fixed reference: it says
+"corrected to N°C ambient", or "no ambient, showing raw pressure", and neither
+is what the page now does — COLD is at 20 °C either way. Read the age and the
+temperature, not the verb, until the line is reworded.
 
 ### MACHINE
 
 Everything that is not about the moment you are in.
 
-**Arc gauges:** economy, coolant temperature, battery voltage, ambient
-temperature.
+**Six arc gauges:**
+
+| Gauge | Notes |
+|---|---|
+| **ECONOMY** | The running average. In l/100 km, or US miles per gallon when miles are chosen — and the caution band changes ends with the unit, because thirsty is a high number in one and a low one in the other |
+| **CYL HEAD** | Cylinder head temperature. This engine is air-cooled and has no coolant; the one temperature sensor it has sits in the front cylinder head. Caution from 120 °C |
+| **BATTERY** | Volts. Caution below 12 |
+| **AMBIENT** | Outside temperature, as the bike measures it |
+| **NOW** | Economy at this instant, beside the average: the average says what the tank is doing, this says what your right hand is doing to it |
+| **RANGE** | Range to empty as the motorcycle's own dash computes it — see [9.3](#93-fuel-range). Caution under 60 km |
+
+A needle inside its caution band breathes at the caution rate and takes the
+caution colour, figure included.
 
 **Below them:**
 
@@ -338,28 +386,80 @@ Heated clothing. Covered in full in [section 8](#8-heated-clothing).
 | Element | Notes |
 |---|---|
 | **Felt temperature** | What it feels like at your current road speed, not what the thermometer says — see [9.4](#94-felt-temperature) |
-| **A bar per zone** | Jacket, and trousers-and-socks. Four positions: off, low, medium, high |
-| **Gloves** | A line rather than a bar. They have their own controller with no Bluetooth, so the app can tell you the conditions but cannot act |
+| **Four buttons per zone** | Trousers-and-socks, and jacket. Off, low, medium, high, in the controller's own colours; the one in force is filled, and haloed while heat is flowing |
+| **Gloves** | A line rather than a row of buttons. They have their own controller with no Bluetooth, so the app can tell you the conditions but cannot act |
 
 ---
 
 ## 7. Alerts
 
-Two conditions raise a banner across the top of the cluster, above the pages so
-that changing page cannot dismiss it.
+One banner across the top of the cluster, above the pages so that changing page
+cannot dismiss it. Nine conditions can raise it. Only the worst one shows, and
+this is the order they are ranked in:
 
-**An active fault code.** The interface reports the healthy case as a specific
-string; anything else is a fault.
+| | Banner | Raised when | |
+|---|---|---|---|
+| 1 | TYRE PRESSURE | A wheel is more than 4 PSI from target, on the cold figure | Red |
+| 2 | WHEEL SENSOR | The front or rear wheel speed sensor is reporting nothing | Red |
+| 3 | KEY FOB | The fob is not found, or the bike has been searching for it for more than three seconds | Red |
+| 4 | ACTIVE FAULT | Any active fault code | Red — amber when the bike keeps its own check-engine lamp off for that code and it is not one that ends the ride anyway |
+| 5 | KILL SWITCH | The run/stop switch is at STOP with the ignition on | Amber |
+| 6 | CHARGING | Below 12 V with the engine turning | Red |
+| 7 | FUEL | Under 50 km left at worst | Amber |
+| 8 | TYRE PRESSURE | A wheel is between 2 and 4 PSI from target | Amber |
+| 9 | SERVICE | The service is overdue | Amber |
 
-**A charging fault** — below 12 V with the engine turning. A running engine
-should hold well over 13 V. Below 12 the motorcycle is running off its battery,
-which ends with one that will not restart, and nothing else on the machine will
-tell you.
+**Red breathes and buzzes; amber sits still and stays silent.** A red banner
+breathes rather than flashes — a flash is read once and then tuned out — and
+buzzes twice when it appears, distinct from the single tick a gear change gives,
+so the pattern alone says which just happened. While it stands, the edges of the
+screen glow red with it, dimmer than the redline glow, which wins when both are
+true. An amber banner is information, not an interruption: a buzz for a service
+that has been due for a week would teach you that the buzz means nothing.
 
-The banner **breathes rather than flashes** — a flash is read once and then tuned
-out — and it **cannot be dismissed**, because a warning you can swipe away is one
-you will. It buzzes twice, distinct from the single tick a gear change gives, so
-the pattern alone says which just happened.
+**None of them can be dismissed**, because a warning you can swipe away is one
+you will. Each clears itself when its cause does.
+
+A few of them need a word:
+
+- **Tyres** are judged on the cold figure, never the raw one, and on the value of
+  the last reading, **never on its age**. A low reading from three weeks ago
+  means the tyre was low when last measured and nothing has said otherwise
+  since. It clears the moment the wheel next reports a good pressure.
+- **Key fob.** With the fob in a pocket the search resolves inside a second;
+  left indoors, the bike searches for twenty before giving up. A search still
+  running after three seconds has already given the answer, while you are
+  standing beside the bike rather than sitting on it.
+- **Kill switch.** Not a fault — the answer to why the engine will not start. It
+  carries the power symbol rather than the warning triangle, so it reads as new
+  beside another amber banner.
+- **Charging.** A running engine should hold well over 13 V. Below 12 the
+  motorcycle is running off its battery, which ends with one that will not
+  restart, and nothing else on the machine will tell you.
+- **Fuel** uses the app's own worst-case estimate from the filtered level
+  ([9.5](#95-fuel-level)), and only once that level has been measured on this
+  ride — a level remembered from the last one may predate a fill-up.
+- **Faults.** Which codes stay red whatever the lamp does is set out in
+  DTC-CODES.md.
+
+### Before you ride
+
+Once per connection, while the bike is standing still, a card headed **BEFORE
+YOU RIDE** covers the cluster. Everything on it is somewhere else in the app; the
+point is when it is shown — the only moment all of it can still be acted on.
+
+| Row | Says |
+|---|---|
+| **TYRES** | Front and rear cold figures from the last reading, judged against target |
+| **FUEL** | Worst-case range from the last level measured while moving. Marked "(last ride)" when that was an earlier ride, and then never worse than amber |
+| **BATTERY** | Volts at rest — green from 12.4, red under 12.0 — or volts while charging |
+| **FAULTS** | None stored, or the first active fault |
+| **SERVICE** | Distance to the next one |
+
+Each row carries a green, amber or red dot; a grey one means the bike has not
+said. The card leaves by itself once the bike is moving, a tap dismisses it
+sooner, and it is offered again after the link has been lost and found — after a
+fuel stop, which is exactly when it is wanted.
 
 ---
 
@@ -424,9 +524,9 @@ slowed for a village, because felt temperature moves by several degrees each
 time. When a level surprises you, the question is not what the temperature is —
 it is what the level was a minute ago.
 
-There is also a **rate limit**: changes under 10 % are ignored, and no more than
-one change a minute — except a jump of 30 or more, which is a real change of
-conditions and does not wait out a timer.
+There is also a **rate limit**: a change of one level waits until 45 seconds have
+passed since the last change — except a jump of two levels or more, which is a
+real change of conditions and does not wait out a timer.
 
 ### 8.6 Manual control, and getting back
 
@@ -459,16 +559,23 @@ Choosing high is not choosing a flat battery forty kilometres from anywhere.
 
 It is the one place the app overrules the person using it, which is exactly why
 the zone displays **CAPPED** instead of its mode, and the page says why. An
-override nobody can see reads as a fault. A tightening cap applies at once rather
-than waiting for the next temperature change, which might be minutes away.
+override nobody can see reads as a fault. A capped zone also shows a broken red
+ring round the level you asked for, so both figures are on screen at once.
+
+A supply reading has to hold for six seconds before it counts — starting the
+engine drags the battery through both thresholds in a couple of seconds, and
+acting on each crossing took a jacket to off, low, medium and off again in
+twenty. Once
+it has held, a tightening cap applies at once rather than waiting for the next
+temperature change, which might be minutes away.
 
 ### 8.8 A garment that is not worn costs nothing
 
 The app holds a standing connection request rather than polling. A jacket in a
 wardrobe is not something to fail to reach every eight seconds for a whole ride.
 The link establishes itself whenever the controller is switched on, and until
-then the page says **"will connect when switched on"** rather than reporting a
-fault.
+then the zone reads **WAITING** and says **"not on the bike — connects by itself
+when switched on"** rather than reporting a fault.
 
 ### 8.9 Testing without riding
 
@@ -481,9 +588,9 @@ will be right.
 
 **Move the curve, not the weather.** Changing "off at" in settings walks the zone
 through its levels without waiting for the temperature to change, and exercises
-the same path a ride would. Expect a wait: a single-step change is held for 45
-seconds to stop the level flapping, so the write follows the setting rather than
-accompanying it.
+the same path a ride would. The new level is written at once: a hand on a
+stepper is a deliberate act, so a curve change skips the 45-second hold that
+automatic drift has to wait out.
 
 Wind chill cannot be tested standing still — below 4.8 km/h the felt temperature
 is simply the ambient. Neither can the fuel filter, which only counts readings
@@ -494,11 +601,16 @@ taken above 10 km/h.
 Every level written carries its reason:
 
 ```
-keis: LEGS -> LOW   (auto felt=17 FINE)
+keis: LEGS -> LOW   (auto felt=17 curve=25/10 FINE)
 keis: LEGS -> MED   (resume)
 keis: JACKET -> OFF (manual)
+keis: LEGS -> MED   (handlebar: left double)
 keis: LEGS -> OFF   (cap ENGINE_OFF)
 ```
+
+An automatic write records the felt temperature, the curve in force and the
+supply state, because a level that looks wrong is explained by its inputs and
+nothing else.
 
 `reports` lines are the opposite direction — the controller telling the app what
 a physical button press did. A `reports` immediately followed by a write is the
@@ -536,8 +648,11 @@ phone's Bluetooth is off.
 So each install says whether it owns the clothing: **Settings → Clothing is
 controlled by → THIS DEVICE** on the tablet that rides on the bar, **ANOTHER
 DEVICE** on the phone in the pocket. A device set to ANOTHER DEVICE never
-connects to the controllers, its HEAT page says so, and flipping the button
-releases or takes the controllers immediately, no restart. The bike itself
+connects to the controllers, and flipping the button releases or takes the
+controllers immediately, no restart. Its HEAT page shows both zones as WAITING
+with the same "not on the bike — connects by itself when switched on" line a
+switched-off garment gets; the line that names the real reason, "another device
+controls the clothing", is in the app but is not reached as built. The bike itself
 serves two devices at once since firmware 2026.09.19-2, so both still show
 the ride; only the clothing needs one owner.
 
@@ -550,10 +665,10 @@ motorcycle. Each carries its formula and its assumptions.
 
 ### 9.1 Cold-equivalent tyre pressure
 
-**The problem.** A tyre reading 44.7 PSI at 42 °C on a 17 °C day is not
-over-inflated by 4 PSI against a 41 target. It is warm. Cooled to ambient it sits
-at about 40.0 — which is *under* target. The dash cannot tell you this, and the
-error runs the wrong way, so the correction matters.
+**The problem.** A tyre reading 44.7 PSI at 42 °C is not over-inflated by 4 PSI
+against a 41 target. It is warm. Brought to the 20 °C a cold pressure is
+specified at, it sits at about 40.6 — which is *under* target. The dash cannot
+tell you this, and the error runs the wrong way, so the correction matters.
 
 **The law.** Gay-Lussac, on *absolute* pressure at **constant volume**:
 
@@ -565,21 +680,50 @@ P₁ / T₁ = P₂ / T₂          with temperatures in kelvin
 and dropped back after:
 
 ```
-cold = (measured + 14.696) × (ambientK / tyreK) − 14.696
+cold = (measured + 14.696) × (293.15 / tyreK) − 14.696
 
   where  tyreK    = tyre temperature °C + 273.15
-         ambientK = ambient temperature °C + 273.15
+         293.15   = the 20 °C reference, in kelvin
          14.696   = standard atmospheric pressure, PSI
 ```
+
+**Why a fixed 20 °C and not today's weather.** A target such as 36 front and 41
+rear is a cold pressure, and "cold" on a placard means a tyre at rest at a
+nominal 20 °C. It is a fixed number, so the reading has to be brought to a fixed
+temperature before the two can be compared. The figure was referenced to ambient
+until 2026-09-14, and that answered a different question — what the tyre will
+read once it cools down outside — which moves with the weather while the target
+does not. At 11–12 °C the cold alone took 1.6 PSI of a 2 PSI tolerance, and a
+front tyre that had lost no air raised an alert; the weekly trend, for the same
+reason, reported the arrival of autumn as a leak. A fixed reference cures both.
+
+**OUT is the other question, kept as information.** The same ratio with ambient
+in place of the reference:
+
+```
+out = (measured + 14.696) × (ambientK / tyreK) − 14.696
+
+  where  ambientK = ambient temperature °C + 273.15
+```
+
+On a 17 °C day the tyre above would read about 40.0 once cooled. That is worth
+seeing — on a cold day a correctly filled tyre genuinely does sit below its
+target, and it says whether a seasonal top-up is due — and not worth alarming on,
+because the answer changes with the forecast.
 
 **The assumption.** Constant volume. A tyre is not a rigid vessel — the carcass
 flexes a little with pressure and temperature, and the contact patch deforms
 under load. That error is small fractions of a percent against the 10–15 % a hot
 rear tyre shows, so it is accepted and noted rather than modelled.
 
-**Ambient is mandatory.** With no ambient temperature the result is **blank, not
-estimated.** Guessing it would defeat the purpose: the whole point is to say what
-the tyre would read at the temperature it is actually going to cool to.
+**Ambient is not needed for the cold figure.** With no outside temperature only
+OUT is blank, and it is blank rather than estimated: guessing the weather would
+defeat the purpose of a figure that says what the tyre will read in it.
+
+**The tolerance.** Within 2 PSI of target is fine, within 4 is worth watching,
+beyond that is worth acting on. A reading outside 5–80 PSI or −30–95 °C is
+discarded as a decode error rather than stored, and so is one that carries a
+pressure without its temperature.
 
 **Why not the rule of thumb.** "1 PSI per 10 °F" approximates the same thing and
 is close enough over small spans, because it skips the conversion to absolute
@@ -594,7 +738,9 @@ would fill in ten seconds and describe a moment rather than a season.
 
 **Compared on cold equivalents, never on raw readings.** Two measurements taken
 at different tyre temperatures differ by more than a fortnight's leak, so a trend
-built on raw pressure would mostly describe the weather.
+built on raw pressure would mostly describe the weather. The oldest and the
+newest of the ten are compared, and nothing is said until they are at least
+three days apart.
 
 A slow puncture is the failure a rider cannot see and would most want warning of,
 and it is only visible across weeks.
@@ -616,7 +762,9 @@ a true statement about a parked machine.
 
 **Fallback, when the bike does not report it:** the app computes its own from the
 filtered fuel level ([9.5](#95-fuel-level)), the tank capacity from settings, and
-the economy actually seen over roughly the last three minutes.
+the economy seen recently. The window is 180 samples and was meant to be three
+minutes of them; as built it is fed about ten times a second, and only while the
+RIDE page is in front, so it covers nearer twenty seconds.
 
 **That one is a band, not a figure.** A sender reading in whole percent and a
 rolling average do not between them support "183 km", and printing it would claim
@@ -641,9 +789,10 @@ answer rather than an extrapolation:
 - above **10 °C** — wind chill is not defined there
 - below **4.8 km/h** — there is no meaningful airflow
 
-Both inputs come from the motorcycle. If either is missing, there is no felt
-temperature and automatic control holds its last level rather than computing from
-stale weather.
+Both inputs come from the motorcycle. Without an ambient temperature there is no
+felt temperature, and automatic control holds its last level rather than
+computing from stale weather; the same holds when the link to the bike is lost.
+Without a speed, the ambient is used as it is.
 
 ### 9.5 Fuel level
 
@@ -699,10 +848,14 @@ starts — is wrong: stopping for fuel would wipe the hundred kilometres you jus
 rode. What a rider means by "this ride" survives a coffee, a tank and a
 photograph, and ends when the bike is put away.
 
-So the rule is **length of sleep, not the act of starting.** Ignition off starts
-a clock; if it comes back on within **three hours** the ride continues, and if
-not a new one begins. That puts a long lunch and a ferry crossing safely inside
-the same ride while an overnight stop starts fresh.
+So the rule is **length of sleep, not the act of starting.** If the app has not
+heard from the bike for **three hours**, whatever comes next is a new ride;
+anything shorter continues the old one. Silence is the measure because the phone
+usually loses Bluetooth before the key comes out, so the ignition going off is
+often never seen — when it is seen, three hours of ignition off counts the same
+way. That puts a long lunch and a ferry crossing safely inside the same ride
+while an overnight stop starts fresh. A long press on the ride figure starts a
+new one by hand.
 
 All of it is local. Nothing here needs a network or a server — the number should
 be right on a mountain road with no signal.
@@ -745,18 +898,18 @@ can, and it is the only control here you have a chance of using with gloves on.
 | Redline | Read by the dial, the edge glow **and** the haptic — one number where there were three constants that could drift apart |
 | Tank capacity | Litres. Only used for the app's own range estimate, which is the fallback when the motorcycle does not report its own — see [9.3](#93-fuel-range) |
 | Tyre pressure units | PSI, kPa or bar — independent of the other units |
-| Speed and distance | km/h and kilometres, or mph and miles |
+| Speed and distance | km/h and kilometres, or mph and miles. Economy follows it: l/100 km, or miles per US gallon — US because that is what Indian's own Ride Command shows |
 | Temperature | °C or °F, for coolant, ambient and tyres |
 | Screen brightness | Automatic or maximum. Full brightness beats direct sun behind a visor and dazzles at night, so which is right is the rider's call on the day |
-| Screen orientation | Follow the phone, or locked. A mount holds the phone one way up, and auto-rotate on a motorcycle answers to bumps and lean angle as readily as to intent |
+| Screen orientation | Follow the phone, or locked to portrait or to landscape. A mount holds the phone one way up, and auto-rotate on a motorcycle answers to bumps and lean angle as readily as to intent |
 | Ride distance | Reset. Also clears the ride figures — resetting half of them would leave a top speed from a road you are no longer on beside a distance of zero |
-| Service interval | The manufacturer specifies 8000 km for the Thunder Stroke |
-| Last service | Tap to record one at the odometer showing now |
+| Service interval | The manufacturer specifies 8000 km for the Thunder Stroke. Steps of 500 |
+| Last service | Tap, and type the odometer reading at the last service. The box opens on the reading now, for the day the service has just been done, and shows Trip 1 beside it for reference. A figure above the odometer is refused. It is sent to the motorcycle and kept there; the phone keeps it only until the bike can be told. The row's own caption still reads "Tap to record one at the odometer showing now", from before the figure was typed |
 | Trousers / jacket controller | Scan and assign. Switch on only the one being assigned |
 | Heated clothing | Automatic from felt temperature, or manual only |
 | Clothing is controlled by | **THIS DEVICE** (the default): this install connects to the Keis controllers and runs the automatic and manual control, the handlebar gestures included. **ANOTHER DEVICE**: this install never connects to the controllers and only shows the bike; some other install owns the clothing. A Keis controller talks to one client, so exactly one device per bike says THIS DEVICE — the one on the bar — and the phone in the pocket says ANOTHER DEVICE. Flipping it takes or releases the controllers at once — see [8.12](#812-two-devices-who-controls-the-clothing) |
-| Curve endpoints | Off-at and full-at per zone, in felt degrees |
-| Fault codes | Review, and name a code so it is recognisable next time |
+| Curve endpoints | Off-at and full-at per zone, in felt degrees. Both zones start at 25 and 10, and the two ends are held at least 3 degrees apart. The caption under "Trousers: off at" still says the legs lead the jacket; they did in the first defaults and no longer do |
+| Fault codes | Shows how many are active. Tap to name one of the codes the bike is reporting now, so it is recognisable next time |
 | All-time records | Reset the highest speed and rpm ever seen |
 | Bluetooth pairing | Opens the system screen. The only cure for a stale bond is forgetting the device, so the app points at the door rather than describing where it is |
 | Firmware line | **Long-press** for diagnostics — see [11](#11-about-diagnostics-and-the-ride-log) |
@@ -773,6 +926,12 @@ page. A plain press, and it opens a plain page: the licence, what the machine is
 what the hardware is, why it cannot transmit, the bus and its speed, how the link
 works, and the app and firmware versions side by side.
 
+Two of its lines are behind the machine. The hardware line still names the
+LilyGO T-2CANFD, the board this started on; the interface on the bike is now the
+CANFD-MC ([section 1](#1-what-it-is)). And the link line says MQTT reaches home
+over WiFi, where it now reaches home over any network the interface can join.
+Both wait for the next build of the app.
+
 It is a short press on purpose, where diagnostics below is a long one. Diagnostics
 is for whoever is debugging this; About is for anyone holding the phone and
 wondering what it is wired to.
@@ -783,9 +942,26 @@ disagree about a figure.
 
 ### Diagnostics
 
-**Long-press the firmware line** in settings to open a raw view: firmware
-versions, link state, signal strength, MTU, the last fast packet in hex with its
-decode beside it, the last state message, and the tail of a rolling log.
+**Long-press the firmware line** in settings to open a raw view, in this order:
+
+| Section | Holds |
+|---|---|
+| Header | App version with the time this copy was installed, firmware version, link state, signal strength, MTU, the last status |
+| FAST | The last fast packet in hex with its decode beside it |
+| GRIPS | Level and both grip temperatures |
+| WHEEL SENSORS | The verdict, both wheel speeds, and the dropout counters since the interface booted — a sensor being worn away shows as a rising count long before it sets a fault |
+| STAND | Upright, on the stand, or down |
+| FAULTS | Every active code in full, with SPN, FMI and P-code, and the four lamps |
+| HEAT | Which controller is assigned to which zone, its level, the curves, and the supply state |
+| SERVICE | The figure on the bike beside the figure on the phone, the interval, and what remains |
+| FUEL | The sender's level beside the filtered one, and the tank capacity |
+| TYRES | Age, and per wheel the reading, its temperature, the judged cold figure, the target and the verdict |
+| UNITS | The units in force — the first suspect when a number looks wrong on screen and right on the bus |
+| STATE | The last state message, as it arrived |
+| LOG | The tail of the rolling log |
+
+**Long-press the dump itself to send all of it as text.** A screenshot loses
+whatever did not fit on the screen, and what did not fit is usually the log.
 
 It is a long-press rather than a tab on purpose. A rider has no use for it, and a
 screen nobody needs should not cost a swipe.
@@ -804,15 +980,18 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
 
 | Symptom | Cause |
 |---|---|
-| **A tyre's cold figure is blank** | Ambient temperature is unknown. The app will not estimate it |
+| **A tyre shows no OUT figure** | Ambient temperature was unknown when the reading was taken. The app will not estimate it; COLD and the alerts do not need it |
+| **The tyre page says "corrected to N°C ambient"** | Old wording. COLD is at a fixed 20 °C; the N is the outside temperature stored with the reading — see [9.1](#91-cold-equivalent-tyre-pressure) |
 | **Tyre readings are hours or days old** | Normal. TPMS sensors sleep when the wheels stop. The age is shown for exactly this reason |
 | **A tell-tale is struck through** | The bus has never mentioned that signal. Not a fault in itself |
 | **Heat does nothing in the garage** | The engine must be running — see [8.9](#89-testing-without-riding) |
 | **A zone says CAPPED** | The supply is limiting it. Check battery voltage — see [8.7](#87-the-supply-cap) |
-| **A zone says "will connect when switched on"** | The controller is off or out of range. Not a fault; the link forms by itself |
+| **A zone says WAITING, "not on the bike — connects by itself when switched on"** | The controller is off or out of range. Not a fault; the link forms by itself. On a device set to ANOTHER DEVICE the same line shows permanently, and there it means the setting — see [8.12](#812-two-devices-who-controls-the-clothing) |
+| **A banner will not go away** | It cannot be dismissed; it clears when its cause does. A tyre banner stands until the wheel next reports a good pressure — see [7](#7-alerts) |
+| **KILL SWITCH across the top** | The run/stop switch is at STOP. The engine will not start until it is moved back |
 | **The heat level is not what the curve suggests** | Hysteresis. Ask what the level was a minute ago — see [8.5](#85-why-the-same-temperature-can-give-different-levels) |
 | **Fuel reads low on the side stand** | Expected, and ignored: only moving readings count — see [9.5](#95-fuel-level) |
-| **A level change lags a settings change** | A single-step change is held for 45 seconds to prevent flapping |
+| **An automatic level lags the temperature** | A one-level change waits out 45 seconds since the last change, to prevent flapping. A curve change in settings, and handing a zone back to automatic, do not wait |
 | **Both controllers assigned to one garment** | They look identical over the air. Re-assign with only one switched on |
 | **The tablet cannot reach the bike or the clothing while the phone is in a pocket** | One client per controller, and until firmware 2026.09.19-2 one per bike. Set the phone to *Clothing is controlled by → ANOTHER DEVICE*, and update the bike's firmware — see [8.12](#812-two-devices-who-controls-the-clothing) |
 | **A handlebar gesture does nothing** | The bike must run firmware 2026.09.19-1 or later, and the app must be connected to it (the gestures arrive over BLE). A right double press is reserved for the house on purpose — see [8.11](#811-from-the-handlebar) |
@@ -827,8 +1006,15 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
   even where acting is not possible.
 - **Constant volume is assumed** in the tyre correction. See
   [9.1](#91-cold-equivalent-tyre-pressure).
-- **Fuel range is a band**, and deliberately so. Anyone wanting a single number
-  should read the low end of it.
+- **The app's own fuel range is a band**, and deliberately so. It is only the
+  fallback — the motorcycle's own figure is printed exactly whenever the bike
+  reports one. Anyone wanting a single number from the band should read the low
+  end of it.
+- **The band's economy window is shorter than intended**, and only collects
+  while the RIDE page is in front. See [9.3](#93-fuel-range).
+- **A few captions are behind the behaviour**: the tyre page's foot line, two
+  settings captions, and the hardware line on the About page. Each is noted where
+  it appears in this guide.
 - **Ride figures do not survive an app restart.** All-time records do.
 - **Wind chill is undefined above 10 °C**, where felt temperature is simply the
   ambient. Heated clothing is not wanted at those temperatures in any case.

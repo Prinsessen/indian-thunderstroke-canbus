@@ -23,7 +23,7 @@ struct VehState {
     float fuelRate;      // L/h, PGN 65266 bytes 1-2
     float fuelEconInst;  // l/100km right now, PGN 65266 bytes 3-4
     // Range to empty in km, exactly as the original dash shows it:
-    // PGN 65382 SA 0 byte 3, one count per km, no offset. Identified
+    // PGN 65382 SA 0 bytes 3-4 (16 bits, low byte first), one count per km, no offset. Identified
     // 2026-09-08 by reading the dash against the byte twice; the proof
     // that it is not a rescaled fuel gauge is in UNEXPLORED-BYTES.md.
     // Not cleared when the bus goes quiet: like fuel and the odometer

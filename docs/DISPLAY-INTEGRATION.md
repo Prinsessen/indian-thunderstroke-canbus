@@ -61,24 +61,27 @@ gauge hardware/software information, TPMS sensor registration (dealer).
 | cluster item | in this firmware | source on the bus |
 |---|---|---|
 | speed | `speed` | ABS, SA 11 |
-| rpm, gear, throttle | `rpm`, `gear`, `throttle` | ECM, SA 0 |
+| rpm, throttle | `rpm`, `throttle` | ECM, SA 0 |
+| gear | `gear` | VCM, SA 39 (PGN 61445; corrected 2026-10-04, this row said SA 0) |
 | odometer, trip, ambient | `odometer`, `trip`, `ambient` | **the cluster itself, SA 23** |
 | fuel level, range, economy | `fuel`, `range`, `fuelEconomy` | SA 0 (fuel also from SA 23) |
 | battery voltage | `battery` | SA 0 |
-| turn signals, hazard, high beam | `indLeft/Right`, `hazard`, `headlight` | VCM, SA 39 |
+| turn signals | `indLeft/Right` | ECM, SA 0 (PGN 65089; corrected 2026-10-04, listed under SA 39 before) |
+| hazard, high beam | `hazard`, `headlight` | VCM, SA 39 (PGN 65381) |
 | cruise enabled / set | `cruiseEnable`, `cruise` | SA 39 / derived |
 | security lamp | `security` | SA 39 (65386) |
 | check engine, ABS lamp | DM1 lamps MIL / Warn | SA 0, SA 11 |
 | heated grips | `grips` | SA 39 |
 | TPMS pressures/temps | `tyreFront/Rear` | VCM, SA 39 |
-| neutral | gear = N | SA 0 |
+| neutral | gear = N | SA 39 |
+| trip 2 | none | **not on the bus** — cluster-internal (DECODE-PLAN, "Trip 2") |
 | **low oil pressure lamp** | not broadcast at key-on (2026-09-18) | switch on the VCM side; key-on/start/idle/key-off moved no DM1 lamp bit from SA 39 or SA 0 and no VCM status bit. The manual names it: DM1 **SPN 98 FMI 4** "Pressure Too Low" P1526, MIL on (4.26), lamp lit only with the engine running (10.62). Never observed, by design |
 | **chassis fault lamp** | not decoded | DM1 from SA 39, presumably — to find |
 | MFD/trip buttons (left, right) | `button` events | VCM, SA 39 (65381 byte 0, bits 0 and 2; 2026-09-18) |
 | clock, settings | none | cluster-internal |
 
-Everything a replacement display must show is on the bus except the clock and
-the two lamps. The chassis-fault lamp has not been hunted yet and is a garage
+Everything a replacement display must show is on the bus except the clock,
+Trip 2 and the two lamps. The chassis-fault lamp has not been hunted yet and is a garage
 evening with the DM1 decoder. The oil-pressure lamp was hunted on 2026-09-18
 and is not broadcast at key-on; a replacement display lights it from DM1
 SPN 98 FMI 4, which the manual names and which can only be seen when a real
@@ -208,7 +211,9 @@ own. Nothing Indian owns is touched; only what the rider looks at changes.
 What it needs: housing inner diameter and depth behind the glass (**measure**;
 a 4" panel is 101.5 mm active on a ~105 × 110 mm module, 2.3 mm thick, plus a
 controller board); a MIPI-DSI host, i.e. **ESP32-P4** (FUTURE-HARDWARE.md §1),
-or a smaller RGB/SPI round panel on the S3; and the two undecoded lamps.
+or a smaller RGB/SPI round panel on the S3; and the two lamps of §1 — the
+chassis-fault lamp, still to find, and the oil-pressure lamp, which is known
+(DM1 SPN 98 FMI 4) but has never been observed.
 
 ### C. Retrofit Indian's own 4" Ride Command — no
 
@@ -221,7 +226,10 @@ platform behind a similar-looking gauge. Not a path.
 ## 5. The odometer strategy, whichever path
 
 - While the OEM cluster is on the bus (A, and B done as above): **mirror SA 23.**
-  The display shows the factory figure; trip 1/2 likewise. No local counter.
+  The display shows the factory figure, and Trip 1 likewise. No local counter
+  for those. **Trip 2 is the exception** (corrected 2026-10-04; this line said
+  "trip 1/2 likewise"): PGN 65217 carries the odometer and one trip, and Trip 2
+  never leaves the cluster, so a display that offers it has to count it itself.
 - Keep a **shadow counter in NVS anyway**, seeded from SA 23 and advanced from
   the ABS front-wheel speed, and log the divergence. It costs nothing and it is
   the evidence the day a dealer asks, or the day the OEM cluster fails (they
@@ -264,7 +272,9 @@ never was.
 
 ## 7. What the software has to do
 
-- Reproduce every lamp in §1 from bus data; decode the two missing ones.
+- Reproduce every lamp in §1 from bus data. Two are missing: the chassis-fault
+  lamp has to be found, and the oil-pressure lamp is lit from DM1 SPN 98 FMI 4
+  (§1), which nobody has yet seen on the bus.
 - Speed from the ABS (SA 11), exactly as the OEM does — it is the mandatory
   instrument, it must never come from GPS (10.04.001), and it must be readable
   in daylight.
@@ -276,6 +286,10 @@ never was.
 - Boot in under two seconds: the rider looks at the gauge as the fob resolves.
   The current firmware's WiFi/NTP/MQTT sequence must not sit in front of the
   first frame — the CAN drain and the render come first, the network later.
+  *(Status 2026-10-04: the first half is done. Since 2026-09-27 WiFi, MQTT and
+  OTA run in their own task and `setup()` goes straight on to the bus. What
+  still stands between power-on and the first frame is the bitrate scan, 1.5 s
+  per rate tried, and a half-second start-up delay.)*
 
 ---
 
@@ -288,7 +302,8 @@ never was.
 1. **UI on the bench**: the Waveshare P4 4" round board, fed the firmware's
    state JSON over BLE or MQTT. Gauge themes, lamps, night mode, boot time.
    Indoors, no bike, no risk.
-2. **Decode the two lamps** (oil pressure, chassis fault) with the DM1 decoder.
+2. **Find the chassis-fault lamp** with the DM1 decoder. (The oil-pressure lamp
+   was on this line too; it was hunted on 2026-09-18 and is answered in §1.)
 3. **A1 on the bike**: the console position, reversible, factory hole, factory
    plug. This is the first display anyone sees on the motorcycle, and it must
    already look right.
@@ -309,5 +324,7 @@ never was.
 3. Cluster housing dimensions; console cutout dimensions.
 4. Does the VCM/ECM store a fault with C03 unplugged? (Owner's call whether to
    find out.)
-5. Where the low-oil-pressure and chassis-fault lamps come from on the bus.
+5. Where the chassis-fault lamp comes from on the bus. (The low-oil-pressure
+   lamp, asked here as well, is answered in §1: not broadcast at key-on; the
+   manual names DM1 SPN 98 FMI 4, never observed.)
 6. A ≥ 800-nit round panel in the A1 size.

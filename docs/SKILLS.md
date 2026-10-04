@@ -7,9 +7,12 @@ It deliberately does **not** repeat the reference documents. Those are listed
 below and are the authority on what has been found. This one is about **how the
 work is done, where things live, and what has already cost time.**
 
-Last revised **2026-09-07**: deep sleep is running on the bike, the kill switch
-and start button are decoded, and section 8 records why the bus cannot start
-this machine.
+Last revised **2026-10-04**: checked against the firmware on the bike
+(`2026.10.04-2`, `FIRMWARE_MODE 1`, `PROBE_CHANGES 1`, MCP2518 backend). The
+board, the paths, the list of what is shipped and the list of what is open were
+all behind and are corrected below. The revision before it was 2026-09-07: deep
+sleep running on the bike, the kill switch and start button decoded, and
+section 8 recording why the bus cannot start this machine.
 
 ---
 
@@ -20,16 +23,22 @@ none, because it gets believed. Everything below was true when it was written
 and some of it has a shelf life. **Four commands, thirty seconds:**
 
 ```bash
-cd /etc/openhab && git log --oneline -15          # what has happened since
-grep FW_VERSION indian-canbus/src/config.h        # what this file expects
+cd /etc/openhab-firmware/indian-canbus && git log --oneline -15   # what has happened since
+grep FW_VERSION src/config.h                      # what this file expects
 echo "openhab:status CanBus_FW_Version" | /usr/share/openhab/runtime/bin/client -p habopen
-grep -E "PROBE_CHANGES|FIRMWARE_MODE" indian-canbus/src/config.h
+grep -E "PROBE_CHANGES|FIRMWARE_MODE" src/config.h
 ```
+
+(The firmware has been its own git repository since 2026-09-06. The log of
+`/etc/openhab` no longer shows firmware commits; it covers the openHAB side and
+the app.)
 
 - **Versions disagree?** The bike is behind the source; something was built and
   not flashed, or an OTA failed. `meta` will say.
 - **`PROBE_CHANGES 0`?** The discovery probe has been removed and section 4's
-  hunting instructions need it back.
+  hunting instructions need it back. As the source stands on 2026-10-04 it
+  also stops the derived `cruise`: the call that updates it sits inside the
+  same `#if` in `loop()`. Check that before turning the probe off.
 - **`FIRMWARE_MODE` not 1?** You are looking at the discovery build, not the one
   that runs on the bike.
 - **Commits since this date?** Read them. The commit messages on this project
@@ -48,9 +57,17 @@ does have is the **CHT sensor on the front cylinder head**; there is no oil
 temperature sensor either, only oil level and oil pressure. No traction control,
 no IMU. ABS with two wheel speed sensors.
 
-An ESP32-S3 (LilyGO T-2CANFD) sits on the J1939 bus in **hardware listen-only
-mode**, decodes what it understands, and publishes to MQTT and over BLE. It
-cannot transmit; that is a hardware guarantee, not a software one.
+An ESP32-S3 on the owner's own board, **CANFD-MC rev 1.0** (ESP32-S3-WROOM-1U +
+MCP2518FD + TCAN332G, same pin map as the LilyGO T-2CANFD), sits on the J1939
+bus in **listen-only mode**, decodes what it understands, and publishes to MQTT
+and over BLE. The LilyGO T-2CANFD was retired on 2026-09-28, when a first
+CANFD-MC went on the bike; that board failed, and board #0001 replaced it on
+2026-10-03.
+
+It does not transmit. That rests on two things in the firmware, not on a
+hardware inhibit: the CAN controller is opened in its listen-only mode, in
+which it sends neither frames nor ACKs, and `TX_ENABLED` is 0 at compile time,
+so the request code is not in the image at all.
 
 ### The app's primary display is a head unit, not a phone
 
@@ -146,10 +163,10 @@ filtering on source address, not by being withdrawn; the withdrawals in section
 > Instrument cluster, SA 39 says Management computer — and each of the first two
 > agrees with what it actually sends, which is what makes the third credible.
 
-| **0** | ECU, engine | rpm, cylinder head temp, fuel, throttle (valve), battery, indicators, brake + clutch, grip temperature, DM1, VIN |
+| **0** | ECU, engine | rpm, cylinder head temp, fuel, range to empty, throttle (valve), battery, indicators, brake + clutch, **kill switch, sidestand switch**, grip temperature, DM1, VIN |
 | **11** | ABS | both wheel speeds, brake control, the speed the dash shows, DM1 |
 | **23** | Instrument cluster | odometer, trip, ambient, a second fuel reading |
-| **39** | VCU, body | tilt sensor, gear, clock, TPMS, **key fob / security**, heated grips, hazard, headlight, ignition, cruise switches |
+| **39** | VCU, body | tilt sensor, gear, clock, TPMS, **key fob / security**, heated grips, hazard, headlight, ignition, cruise switches, **start button, the two trip buttons** |
 | **136** | **Instrument cluster** (declared), mfr 146 | Claims an address EIGHT times across four rides — twice as often as anyone — and sends nothing else, ever. Same function code as the dash at SA 23 but a different manufacturer, so: fitted display-class equipment this bike gives no work to. See DECODE-PLAN.md, "the address claims". |
 
 ---
@@ -166,7 +183,7 @@ the reasoning for each. If you read only one other file, read that one.
 | [UNEXPLORED-BYTES.md](UNEXPLORED-BYTES.md) | Every varying byte the firmware still does not read, measured from the captures |
 | [NEXT-RIDE.md](NEXT-RIDE.md) | What is waiting on wheels, and the two things that need the rider to do something |
 | [PROTOCOL.md](PROTOCOL.md) | The BLE contract — UUIDs, byte layout, the payload budget |
-| [TOOLING-GAPS.md](TOOLING-GAPS.md) | Three things missing from how we work, and what each has cost |
+| [TOOLING-GAPS.md](TOOLING-GAPS.md) | Four things missing from how we work, and what each has cost |
 | [OTA.md](OTA.md) · [FLASHING.md](FLASHING.md) | Updating over the air, and recovering a dead board over USB |
 | [README.md](../README.md) | Long-form background |
 | [../source-code/indian-canbus-app/WORKFLOW.md](WORKFLOW.md) | How the app gets from this server to the phone |
@@ -177,7 +194,7 @@ the reasoning for each. If you read only one other file, read that one.
 
 ```
 /etc/openhab-firmware/indian-canbus/          firmware, docs, captures
-/etc/openhab-firmware/indian-canbus/src/      main.cpp is ~2,300 lines
+/etc/openhab-firmware/indian-canbus/src/      main.cpp is ~3,100 lines
 /etc/openhab/source-code/indian-canbus-app/    the Android app
 /etc/openhab/items|things|sitemaps/  the openHAB side
 ```
@@ -185,8 +202,13 @@ the reasoning for each. If you read only one other file, read that one.
 - openHAB server: **192.0.2.10** (`OpenHab5`), user `admin`
 - ESP32 on WiFi: DHCP, currently 192.0.2.20 — read it from `meta`, do not assume
 - MQTT: `mqtt.example.com:8883`, base topic `canbus/springfield`
-- PlatformIO env: **`sniffer-t2can`** — the other two envs are for the older
-  T-CAN485 board and fail to build while `config.h` points at the MCP2518 backend
+- PlatformIO env for the bike: **`sniffer-t2can`** — written for the T-2CANFD
+  and equally right for the CANFD-MC, which has the same pin map.
+  `sniffer-t2can-nomqtt` is the same board with the network compiled out,
+  built to keep that flag honest and never flashed. `bench-canfdmc` and the two
+  `bench-rollback*` envs give a bench board its own identity; never flash those
+  on the bike. `sniffer` and `sniffer-usb` are for the older T-CAN485 board and
+  fail to build while `config.h` points at the MCP2518 backend
 
 ### Build and flash over the air
 
@@ -226,26 +248,32 @@ odometer and the fault counters with it. Read them off the app first.
 
 ### Working from another machine
 
-A clone carries everything this file refers to — the documents, the full history
-with its reasoning, the firmware source, and the four ride captures the whole
-method is built on. About 76 MB, seconds over the LAN.
+The firmware is its own repository (since 2026-09-06), and a clone of it
+carries everything this file refers to — the documents, the full history with
+its reasoning, the firmware source, and the four ride captures the whole method
+is built on.
 
 ```bash
-git clone admin@your-server.example:/etc/openhab openhab
-cd openhab
-scp admin@your-server.example:/etc/openhab-firmware/indian-canbus/src/config.h \
-    indian-canbus/src/
+git clone <user>@<server>:/etc/openhab-firmware/indian-canbus indian-canbus
+cd indian-canbus
+scp <user>@<server>:/etc/openhab-firmware/indian-canbus/src/config.h src/
 ```
+
+The openHAB side (items, things, sitemaps, rules) and the Android app are in
+the separate `/etc/openhab` repository; clone that as well only if you need
+them.
 
 **`config.h` is the one thing a clone cannot give you.** It holds the WiFi and
 MQTT credentials and the firmware version, and it is git-ignored on purpose. Copy
 it separately, or start from `config.example.h`.
 
-**Do not push back.** The server's working tree is live — openHAB reads
-`items/`, `things/` and `sitemaps/` straight from those files — and an
-auto-commit service commits everything there every fifteen minutes as the
-`openhab` user. Git refuses it anyway: `master` is checked out. Edit over VSCode
-Remote-SSH, and clone only to read.
+**Do not push back.** Git refuses a push into a repository whose branch is
+checked out, and both are. The two trees also behave differently: in
+`/etc/openhab` the working tree is live — openHAB reads `items/`, `things/` and
+`sitemaps/` straight from those files — and an auto-commit service commits
+everything there every fifteen minutes. The firmware repository has no
+auto-commit; changes there are committed by hand. Edit over VSCode Remote-SSH,
+and clone only to read.
 
 ### The app
 
@@ -275,10 +303,17 @@ and skipping steps of it is what produced the four that had to be withdrawn.
    bytes actually vary. A byte constant across all of them carries nothing, and
    `0xFF` is J1939 for "not available" — never mask it into a value.
 
-2. **Look up the standard, then distrust it.** Indian does not always follow the
-   byte layout. Ambient temperature is the proof: J1939 puts it in bytes 5-6 of
-   PGN 65269 and this bike puts it in 4-5. The standard generates hypotheses; it
-   never answers.
+2. **Look up the standard, then distrust it — and check which way it counts.**
+   The standard numbers bytes from one; the code and the probe number them from
+   zero. Until 2026-10-04 this step cited ambient temperature as proof that
+   Indian departs from the byte layout ("J1939 puts it in bytes 5-6 of PGN
+   65269 and this bike puts it in 4-5"). That was a numbering mix-up: the
+   standard puts it in bytes 4-5 counting from one, which is `b[3]`-`b[4]`,
+   exactly what the firmware reads, and the cold-pressure check confirmed the
+   reading physically. Where this bike really differs is in meaning, not
+   position: PGN 65262 byte 0 is the standard's coolant temperature, and on
+   this air-cooled engine it carries the cylinder head temperature. The
+   standard generates hypotheses; it never answers.
 
 3. **Correlate against something known** — speed, rpm, throttle. `r` near 1.00
    at zero lag means you have found a copy of an existing signal, not a new one.
@@ -330,8 +365,10 @@ MQTT reconnect, and a reconnect storm was read as a reboot loop for hours. Use
 `uptime` and `reset` from `meta` instead.
 
 **The BLE state JSON has a hard 514-byte ceiling** and cannot fragment. Worst
-case is 509 — five bytes of margin, with fault codes already compacted to numbers
-and the firmware version already sent rarely. Adding a field is not free; run
+case on 2026-10-04 is 491 at four faults, or 512 in a packet that also carries
+the firmware version — with fault codes already compacted to numbers and the
+version already sent rarely. (This line said 509 until then; the figure moves
+with every field, so take it from the tool, not from here.) Adding a field is not free; run
 `python3 tools/ble_budget.py` before you do. [PROTOCOL.md](PROTOCOL.md) has the
 budget and what gets sacrificed when it still does not fit.
 
@@ -386,27 +423,42 @@ observes and never acts.
 
 ## 6. Where things stand
 
-**Decoded and shipped:** speed (both wheels), rpm, throttle, gear, oil
-temperature, fuel level and rate and economy, battery, ambient, tyres, DM1,
-odometer, trip, heated grips and their temperatures, tilt/stand, ignition,
-wheel-sensor cross-check, service odometer.
+Brought up to date 2026-10-04 against `decodeState()` and `buildStateJson()`.
 
-**Understood and deliberately not shipped:** the front/rear speed disagreement
-(the optimistic dash reading is a margin against a speed camera), the clock (12
-hours and 7 minutes out, and not the one on the display), the wake bit (the bus
-going live says it better).
+**Decoded and shipped:** speed (both wheels), rpm, throttle, gear, cylinder
+head temperature (the JSON key is still `coolant`; there is no oil temperature
+sensor), fuel level, rate, economy and range to empty, battery, ambient, tyres,
+DM1, VIN and software ID, odometer, trip, heated grips and their temperatures,
+tilt/stand, the sidestand switch, the kill switch, the start button, brake,
+clutch, indicators, hazard, headlight, cruise enable, the cruise switches and a
+*derived* cruise hold, key fob / security, the two trip buttons as events,
+ignition, wheel-sensor cross-check, service odometer.
+
+**Understood and deliberately not shipped:** correcting the front/rear speed
+disagreement (the optimistic dash reading is a margin against a speed camera;
+both speeds are published), the clock (12 hours and 7 minutes out, and not the
+one on the display), the indicator-switch blips and the main-beam bit that
+duplicate lamps already shipped. The full list is in DECODE-PLAN.md, "What is
+genuinely still open", part C.
 
 **Withdrawn after being shipped on a guess:** cruise control, throttle-from-65382,
 front brake, horn. Each keeps its `case` and a comment saying why. Two of them
 turned out to be something else entirely: the "horn" bit is the security system
-looking for the key fob, and the "front brake" is one brake signal that either
-control operates.
+looking for the key fob — now shipped as `security` — and the "front brake" is
+one brake signal that either control operates. Cruise came back on 2026-09-05
+as measured switches plus a derived state, and the throttle was found in 65266.
 
 **Established as absent, each exercised while watched:** lean angle in corners,
-a sidestand *state*, Trip 2, **cruise engaged (SPN 595)**, cruise set speed,
-**the horn**, **the saddlebag locks**, **the security alarm**, and coast/accel
-(SPN 600/602 — Indian sends only SET and RESUME). The sidestand does appear as
-an *event* — SPN 520267 FMI 31 when it blocks a start.
+Trip 2, cruise set speed, **cruise engaged (SPN 595) from SA 39**, **the
+horn**, **the saddlebag locks**, **the security alarm**, **the fog-lamp
+switch**, a separate front brake, and coast/accel (SPN 600/602 — Indian sends
+only SET and RESUME).
+
+Two corrections to this list as it stood until 2026-10-04. It named "a
+sidestand *state*" as absent; the switch was found on 2026-09-06 (65381 SA 0
+byte 7 bit 0, zero-based) and is shipped, and the stand *also* appears as an
+event — SPN 520267 FMI 31 when it blocks a start. And "cruise engaged" was
+tested on SA 39 only: SA 0's copy of that field is an open lead, below.
 
 **The rule this bus taught us:** it carries state a rider reads and not actuation
 a rider performs. Horn, locks and alarm are all switch into a module driving an
@@ -415,13 +467,26 @@ line a candidate falls on before spending an evening on it — and check the man
 for an FMI 9, "Abnormal Update Rate", which is the manufacturer saying out loud
 that a signal is expected over the network.
 
-**Open and worth doing:** PGN 65382 byte 1 — its byte 4 fell on 2026-09-08 and
-was the dash's range to empty, so this message has now given up two of its four
-live bytes and the last one is the busiest byte on the bus. The sharp test still
-applies, since
-cruise holding with the grip released separates the rider's demand (SPN 91, not
-on the bus) from the valve (SPN 51, decoded); the immobiliser's relation to
-SPN 520330; and the compact DM1 encoding.
+**Open and worth doing** (zero-based byte numbers; the complete list is
+DECODE-PLAN.md, "What is genuinely still open"):
+
+- **PGN 65382 byte 0** — the busiest byte on the bus and the only unexplained
+  one left in that message, now that byte 1 is known as rpm/256 and bytes 3-4
+  as the range to empty. The sharp test still applies: cruise holding with the
+  grip released separates the rider's demand (SPN 91, not on the bus) from the
+  valve (SPN 51, decoded).
+- **PGN 65265 from SA 0, byte 3 bits 0-1** — an open lead from the August
+  captures that this may be the cruise engaged state. Not confirmed on the
+  bike; one ride with those two bits logged beside the derived `cruise`
+  settles it.
+- A handful of two- and three-valued bytes, and four PGNs in which nothing
+  varies.
+- The immobiliser's relation to SPN 520330, which a proprietary PGN cannot
+  prove.
+- Everything behind a request — section 7.
+
+(The compact DM1 encoding stood on this list until 2026-10-04. It is done: the
+radio carries the faults as numbers.)
 
 ---
 
@@ -453,12 +518,23 @@ inside a lot of the curiosity about this project.
 
 The conclusion has two halves, and both are reassuring.
 
-**This board adds no attack surface.** It is hardware listen-only — `TX_ENABLED`
-is 0 and the controller is in ListenOnly / LISTEN_ONLY mode — so it physically
-cannot put a frame on the bus, not even an ACK. Compromise openHAB, the MQTT
+**This board adds no attack surface as built.** It is listen-only —
+`TX_ENABLED` is 0 and the controller is opened in its ListenOnly mode — so the
+firmware on it puts no frame on the bus, not even an ACK. (That is a controller
+mode chosen by the firmware and a compile-time switch, not a separate hardware
+inhibit; an earlier wording here said "physically cannot".) Compromise openHAB, the MQTT
 broker or the phone app and the worst anyone gets is *eavesdropping* on a
 stationary bike. There is no path from the network onto the CAN bus, by design.
 That is what makes it safe to hang this thing on a vehicle at all.
+
+One qualification, true since the first OTA and worth saying plainly: listen-only
+is a property of the firmware, and the firmware is replaceable over the air. So
+whoever controls the server that holds the OTA image, or can publish on the
+board's OTA topics with an account the broker accepts, can hand the board a
+different image. The image is fetched only from a LAN address or over the
+authenticated TLS link to the broker, and it is checked for integrity (md5), not
+for origin: it is not signed. Guard the server and the broker accounts
+accordingly.
 
 **The vehicle is robust independently of us.** Even an attacker with full active
 CAN access cannot crank it, and it is not one lock but five, each sufficient

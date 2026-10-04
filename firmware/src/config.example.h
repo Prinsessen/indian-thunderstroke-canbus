@@ -3,6 +3,11 @@
  *
  * COPY this file to  config.h  and fill in your real credentials.
  * config.h is git-ignored so your secrets are not committed.
+ *
+ * As it stands this builds the image for the CANFD-MC (or a LilyGO T-2CANFD):
+ * PRODUCTION mode, MCP2518FD backend, BLE on. Set at least WiFi, the MQTT user
+ * and password, BLE_PASSKEY, and the server address in OTA_FIRMWARE_URL.
+ *   pio run -e sniffer-t2can
  */
 #pragma once
 
@@ -10,7 +15,9 @@
 #define WIFI_SSID       "YOUR_WIFI_SSID"
 #define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
 
-// WiFi failover: if SSID1 fails after 10 seconds, try SSID2, then SSID3
+// Up to three known networks. The board scans and joins the STRONGEST one it
+// sees (20 s per attempt); the order below is only the fallback when the scan
+// sees none of them. Typical set: home, the phone's hotspot, a router on the bike.
 #define WIFI_SSID2      "YOUR_WIFI_SSID2"      // Leave empty "" to disable
 #define WIFI_PASSWORD2  "YOUR_WIFI_PASSWORD2"  // fallback WiFi #1
 #define WIFI_SSID3      "YOUR_WIFI_SSID3"      // Leave empty "" to disable
@@ -22,7 +29,7 @@
 #define MQTT_USERNAME   "YOUR_MQTT_USER"
 #define MQTT_PASSWORD   "YOUR_MQTT_PASS"
 // PREFIX only — the firmware appends the last 3 bytes of the board MAC
-// (e.g. "indian-canbus-XXXXXX") so two boards flashed from the same config.h
+// (e.g. "indian-canbus-A1B2C3") so two boards flashed from the same config.h
 // don't collide on the broker (duplicate MQTT client IDs make the broker evict
 // one board when the other connects). Publish topics use MQTT_BASE_TOPIC as-is.
 #if BENCH_BOARD
@@ -59,16 +66,52 @@ MrY=
 -----END CERTIFICATE-----
 )EOF";
 
-// Base topic. The sniffer publishes:
-//   <base>/status   -> "online" / "offline" (retained, LWT)
-//   <base>/frame    -> JSON per CAN ID on change (throttled)
-//   <base>/meta     -> JSON scan result (detected bitrate, id count)
+// Base topic. In PRODUCTION mode the board publishes:
+//   <base>/status      -> "online" / "offline" (retained, LWT)
+//   <base>/state       -> the decoded vehicle state, one retained JSON
+//   <base>/meta        -> the board itself: fw, ota_state, reset, heap, rssi, ...
+//   <base>/bus/health  -> the CAN controller's error counters
+//   <base>/sleep/status, <base>/ota/status, <base>/button, <base>/gear, <base>/debug
+// (docs/PROTOCOL.md and the README list them all; openhab/canbus.things binds them.)
 // A bench board (env bench-canfdmc, -D BENCH_BOARD=1) gets its own base topic so
 // its last will cannot mark the live board offline.
 #if BENCH_BOARD
 #define MQTT_BASE_TOPIC "canbus/bench"
 #else
-#define MQTT_BASE_TOPIC "canbus/indian"
+#define MQTT_BASE_TOPIC "canbus/springfield"
+#endif
+
+// ---- Firmware version -------------------------------------------------------
+// Bump this on every build you flash/OTA. It is published in <base>/meta (JSON
+// field "fw") and echoed on <base>/ota/status as "Running <ver>" right after
+// boot, so the openHAB UI confirms exactly which image is live after an OTA.
+// A board declines an OTA of the image it already runs.
+#ifndef FW_VERSION          // a build may set it: -D FW_VERSION=\"...\" (bench-rollback envs)
+#define FW_VERSION      "2026.10.04-2"
+#endif
+
+// ---- CAN bitrate ------------------------------------------------------------
+// This bus is 250 kbit/s, and the board listens at that rate only. Without this
+// line the firmware searches 250/500/125/100/50 in turn, which matters for deep
+// sleep: a controller parked on the wrong rate hears nothing, so wake-on-CAN
+// silently degrades to the hourly backstop.
+// Comment this out to get the search back, for a different machine.
+#define CAN_FIXED_BITRATE 250000
+
+// ---- OTA --------------------------------------------------------------------
+// "update" on <base>/ota: the board downloads this image over plain HTTP and
+// flashes itself. Use your server's LAN IP address, NOT a ".local" name: the
+// Arduino WiFiClient does not resolve mDNS. One file per identity, so an update
+// cannot hand a bench board the bike's image.
+// "mqtt" on <base>/ota needs no URL: the image comes in chunks over the MQTT
+// link the board already has (openhab/rules/canbus-ota-mqtt.js is the server
+// half), so it also works from a phone hotspot. Either way a new image is on
+// trial until it has reached the broker, and the previous one boots again if it
+// does not. See docs/OTA.md.
+#if BENCH_BOARD
+#define OTA_FIRMWARE_URL  "http://192.0.2.10:8080/static/indian-canbus-bench-firmware.bin"
+#else
+#define OTA_FIRMWARE_URL  "http://192.0.2.10:8080/static/indian-canbus-firmware.bin"
 #endif
 
 // ---- Publish behaviour ----
@@ -80,6 +123,12 @@ MrY=
 // the mobile uplink and stalls updates. 1 Hz is plenty for live telemetry and
 // cuts the packet rate ~5x. Lower toward 200-500 only on a solid LAN link.
 #define MQTT_PUBLISH_INTERVAL_MS  1000
+
+// PRODUCTION-only publish interval. Production emits ONE compact JSON on
+// <base>/state per cycle (not the per-ID fan-out DISCOVERY does), so 5 Hz is a
+// few small TLS packets a second, fine even over cellular. This is the
+// live-telemetry smoothness knob; DISCOVERY keeps the safer 1 Hz above.
+#define STATE_PUBLISH_INTERVAL_MS  200
 
 // Set to 1 to also enable MQTT, 0 for USB-only (no WiFi).
 #if NO_MQTT_BUILD
@@ -128,28 +177,36 @@ MrY=
 #define BLE_MTU  517
 
 // ---- Firmware mode ----------------------------------------------------------
-// 0 = DISCOVERY (default): raw firehose (every id/pgn/frame) for reverse-eng.
-// 1 = PRODUCTION: decode confirmed signals in-firmware, publish ONE retained
-//     JSON on canbus/indian/state. Far less MQTT traffic + zero openHAB JS.
-//     Bind with indian-canbus/canbus_production.things.
-#define FIRMWARE_MODE 0
+// 1 = PRODUCTION (what the bike runs): decode the confirmed signals in firmware
+//     and publish ONE retained JSON on <base>/state. BLE needs this mode.
+//     Bind with openhab/canbus.things + canbus.items.
+// 0 = DISCOVERY: raw firehose (every id/pgn/frame) for reverse-engineering a
+//     bus you do not know yet. No decoded state, so ENABLE_BLE must be 0.
+#define FIRMWARE_MODE 1
+
+// ---- Probes (PRODUCTION only) -----------------------------------------------
+// Compiles in the change detector and the readouts used to find new signals.
+// Each probe is switched over MQTT (<base>/probe/en/<name>) and is silent until
+// it is; the setting is kept in NVS. Leave this at 1: the derived cruise-hold
+// state is updated from the same block.
+#define PROBE_CHANGES 1
 
 // ---- CAN hardware backend ---------------------------------------------------
 // Selects which CAN controller this firmware drives. Everything else (J1939
-// decode, MQTT, OTA, WiFi, LED) is identical on both boards — only the thin HAL
-// layer (can_hal_*.cpp) differs. See can_hal.h.
-//   CAN_BACKEND_TWAI    = LilyGO T-CAN485  (ESP32,     native TWAI, onboard xcvr)
-//   CAN_BACKEND_MCP2518 = LilyGO T-2CANFD  (ESP32-S3 + external MCP2518FD on SPI)
-// NOTE: switching to CAN_BACKEND_MCP2518 also needs the matching PlatformIO env
-// (ESP32-S3 board + ACAN2517FD lib — see [env:sniffer-t2can] in platformio.ini)
-// and the MCP oscillator set to the board crystal (40 MHz on T-2CANFD). On the
-// T-2CANFD wire the bus to the "CAN A" terminal: CanH / CanL / GND ONLY — the
-// terminal's 5VDC pin is a power rail, NOT a CAN signal; leave it unconnected.
-#define CAN_BACKEND  CAN_BACKEND_TWAI
+// decode, MQTT, OTA, WiFi) is identical — only the thin HAL layer
+// (can_hal_*.cpp) differs. See can_hal.h.
+//   CAN_BACKEND_MCP2518 = ESP32-S3 + MCP2518FD on SPI, 40 MHz crystal: the
+//                         CANFD-MC (the board on the bike) and the LilyGO
+//                         T-2CANFD it replaced. Same pin map. PlatformIO env
+//                         sniffer-t2can (bench identity: bench-canfdmc).
+//   CAN_BACKEND_TWAI    = LilyGO T-CAN485 (classic ESP32, native TWAI, onboard
+//                         transceiver): the first test rig. Env sniffer /
+//                         sniffer-usb.
+#define CAN_BACKEND  CAN_BACKEND_MCP2518
 // ---- Onboard status LED -----------------------------------------------------
 // ONLY the T-CAN485 has a programmable WS2812 RGB LED (GPIO4). When enabled the
 // firmware colours it by live health: white=boot, blue(blink)=connecting,
 // amber(breathe)=no CAN yet, GREEN(heartbeat)=running, red=fault.
-//   T-CAN485  → set 1
-//   T-2CANFD  → keep 0 (no LED hardware; also compiles out FastLED)
-#define STATUS_LED 1
+//   T-CAN485            → set 1
+//   CANFD-MC, T-2CANFD  → keep 0 (no LED hardware; also compiles out FastLED)
+#define STATUS_LED 0

@@ -17,7 +17,19 @@ Every number below is measured from those files, not
 taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
-Last revised **2026-09-05**, after two days in which the cruise control, the horn, the saddlebag locks, the alarm and the sidestand were all settled -- four of them as nulls.
+Last revised **2026-10-04**, when every status in this file was checked against
+the firmware running on the bike (`2026.10.04-2`, `src/main.cpp`). **What is
+still open is collected in one place:
+[What is genuinely still open](#what-is-genuinely-still-open-2026-10-04).**
+
+The revision before that was 2026-09-05, after two days in which the cruise
+control, the horn, the saddlebag locks and the alarm were settled. The sidestand
+was counted as a fifth null that day and was found on the bus the next (PGN
+65381 SA 0 byte 7 bit 0 -- GARAGE-RUN.md, run 9).
+
+Byte numbers: the dated entries below were written with both conventions, the
+standard's one-based "byte 1..8" and the code's zero-based `b[0]..b[7]`. Text
+added on 2026-10-04 is zero-based and says so.
 
 ---
 
@@ -29,7 +41,7 @@ what we actually use should be decoded"*:
 | | `MODE_DISCOVERY` | `MODE_PRODUCTION` |
 |---|---|---|
 | Decodes | every PGN, raw, to MQTT | only confirmed signals |
-| Output | `canbus/indian/pgn/<PGN>` + tooling | one `state` JSON + BLE `fast` |
+| Output | `<base topic>/pgn/<PGN>` + tooling | one `state` JSON + BLE `fast` |
 | Purpose | finding things | riding with things |
 | Board | the spare | the one on the bike |
 
@@ -50,8 +62,8 @@ dashboard that was quietly lying:
 |---|---|---|
 | throttle, from PGN 65382 | 2026-09-02 | engine speed over 256 — **the real throttle was later found in 65266 and is live** |
 | front brake | 2026-09-03 | the shared brake-light switch; both levers work it |
-| cruise control | 2026-09-03 | the SET/RESUME button, not the engaged state |
-| horn | 2026-09-04 | the bike waking up |
+| cruise control | 2026-09-03 | the SET/RESUME button, not the engaged state — **back since 2026-09-05 as `cruiseSw`, `cruiseEnable` and a derived `cruise`** |
+| horn | 2026-09-04 | first read as "the bike waking up"; it is the key-fob search — **shipped since 2026-09-05 as `security`** |
 
 Note what is *not* on that list. The **headlight** was corrected, not withdrawn:
 it read from both senders, and SA 0 sends nothing but `0xFF` filler, which
@@ -187,6 +199,10 @@ finding. Recorded as an anomaly rather than explained away.
   while pressed. Bit 4 is on whenever the ignition is. Same byte as the rest of
   the left switch housing; nothing is wired into the cluster connector for
   these.
+  *Corrected 2026-10-04: bit 4 is the dipped beam, not the ignition. It is set
+  from key-on because the bike comes up on low beam, and it clears when the
+  switch goes to main beam (`10`→`00`→`40` with the ignition on throughout,
+  GARAGE-RUN run 1). The firmware publishes `headlight` = "Low" from it.*
 - **The low-oil-pressure lamp is not a broadcast bit.** Key on → start → idle
   → key off → key on moved nothing in DM1's lamp byte from SA 39 or SA 0, and
   no VCM status bit followed the pressure. The switch is on the VCM (chassis
@@ -198,9 +214,24 @@ finding. Recorded as an anomaly rather than explained away.
 - **65386 SA 39 byte 2 (heated grips) pulses to 0xFA for 1–3 s right after
   engine start** — the VCM inhibits the grips while cranking. Mask 0xFA in the
   grips decode so the app does not show 250 for a second at every start.
+  *Status 2026-10-04: not handled in the firmware. It cannot be a mask: 0xFA
+  is 250, which is also the legitimate level 10, and the decode accepts every
+  value up to 250. It has to be a hold -- ignore a jump to 250 that lasts
+  under about three seconds. Listed under "still open" below.*
 - **65265 SA 0 byte 3 bit 6 (0x40) sets when the engine starts and clears at
   key-off:** the ECM's engine-running/cranking flag. August rides show 0x4C
   273 times and 0x5C 138 times, so bit 4 carries something else on top.
+  *WITHDRAWN 2026-10-04. Bit 6 is the clutch switch (SPN 598, bits 6-7 of
+  that byte), which the firmware has decoded as `clutch` since 2026-09-05.
+  Why it stayed set from the start to key-off in this run was not written
+  down; a lever held in is the plain reading. The August counts above are right but leave
+  out 0x0C, which is recorded 376 times with the engine running and bit 6
+  clear -- so it cannot be an engine-running flag -- and on those rides the
+  bit pulses for a second or so immediately before nearly every gear change.
+  The chassis schematic agrees: the clutch switch is wired to the ECM. Bit 4
+  is the brake switch (SPN 597, bits 4-5), also long decoded. The lesson is
+  run 2's again: check what the code already reads from a byte before
+  naming one of its bits.*
 - 65388 from SA 23 is sent once at every key-on (seen as NEW on both
   restarts), not periodically; 65387 from SA 0 likewise — it is the answer to
   SA 23's request.
@@ -217,24 +248,112 @@ finding. Recorded as an anomaly rather than explained away.
 > `indian-springfield-cluster/docs/GARAGE-SA23.md` (settled from these
 > captures on 2026-09-18). Do not redo that analysis here.
 
-30 PGNs appear in the captures. They fall into four groups:
+30 PGNs appear in the captures. They fall into four groups (counts brought up
+to date 2026-10-04; until then this paragraph still said 16 shipped and 9
+unknown, which had not been true since early September):
 
-**Shipped (16 PGNs)** — 61444, 61445, 65089, 65217, 65226, 65262, 65265, 65266,
-65268, 65269, 65271, 65276, 65381, 65382, 65386, 65390. Not all of these still
-decode something: 65390 is present as a documented withdrawal, which is
-deliberate — the comment is what stops the same wrong decode being written a
-third time. 65382 carried a withdrawal too until 2026-09-08, when its byte 3
-turned out to be the dash's range to empty; the withdrawn throttle note stays
-beside the working decode, for the same reason.
+**Shipped (20 PGNs)** — 2304, 61444, 61445, 65089, 65215, 65217, 65226, 65242,
+65262, 65265, 65266, 65268, 65269, 65271, 65276, 65381, 65382, 65386, 65394,
+and 65390. Not all of these still decode something: 65390 is present as a
+documented withdrawal, which is deliberate — the comment is what stops the same
+wrong decode being written a third time. 65382 carried a withdrawal too until
+2026-09-08, when its byte 3 turned out to be the dash's range to empty; the
+withdrawn throttle note stays beside the working decode, for the same reason.
+65242, the software ID, arrives by TP/BAM and is published as `vin` and
+`softwareId` (MQTT only).
 
 **Transport, not data (4 PGNs)** — 59904 (request), 60160 (TP.DT), 60416
 (TP.CM), 60928 (address claimed). Already handled by the reassembly layer.
 Nothing to decode; do not treat these as unknowns.
 
-**Understood and deliberately unshipped (1)** — 65242, the software ID, arrives
-by TP/BAM and is already read for the VIN.
+**Understood and deliberately unshipped (1)** — 65254, the clock: twelve hours
+and seven minutes out, and not the one on the display (Tier 3, item 9).
 
-**Genuinely unknown (9 PGNs)** — the list below.
+**Genuinely unknown (5 PGNs)** — 56832, 61441, 65387, 65388, 65393. They are in
+the list in the next section, together with the single bytes still unread
+inside messages that are otherwise shipped.
+
+---
+
+## What is genuinely still open (2026-10-04)
+
+The project state in one sentence is "a few CAN addresses and the transmit part
+are left". This section is what that sentence points at. It was written by
+going through `decodeState()` in `src/main.cpp` and every document in this
+repository and keeping only what is undecoded according to both.
+[UNEXPLORED-BYTES.md](UNEXPLORED-BYTES.md) carries the same list byte by byte,
+with the measured ranges. Byte numbers here are **zero-based**, as in the code.
+
+### A. Bytes and PGNs nobody has decoded
+
+| PGN | SA | byte | what is known | what would settle it |
+|---|---|---|---|---|
+| 65382 | 0 | 0 | 255 distinct values, a live engine quantity. Load, ignition advance and injector duty are the candidates. The busiest unread byte on the bus, and the last thing the probe is hunting. | `probe/throttle` on a ride with cruise holding: hold the throttle and change the load, see which it follows. |
+| 65265 | 0 | 3, bits 0-1 | **Open lead, 2026-10-04.** Takes the values 0 and 1 in the August captures, in the position where the standard puts SPN 595, cruise active. Not confirmed on the bike. See [the cruise section](#cruise-control--what-it-actually-is). | Log `b[3] & 3` from SA 0 beside the derived `cruise` on one ride. |
+| 61444 | 0 | 7 | Standard position of engine demand torque (SPN 2432, offset −125). Range 103–185 in the captures. Read only to print it on the `probe/throttle` line; not published. | It should follow the throttle and go negative when the throttle shuts. |
+| 65215 | 11 | 4 | 39–220, `r = +0.84` against speed. Possibly a relative wheel speed with 125 = zero. | A capture with a known hard acceleration. |
+| 65265 | 11 | 0 | Two values, 63 and 127. Standard: parking brake / two-speed axle / cruise pause, two-bit fields. | One controlled test. |
+| 61441 | 11 | 5 | `0xCC`, `0xCD`, `0xDC` — the same three values as the cruise switch byte. Mirror or coincidence. | Ten minutes with the SET and RESUME buttons, parked. |
+| 65265 | 0 | 6 | 241 in all but six records; 240 for about a second on two occasions, once just after a wake and once at the end of a ride. Was filed as a message counter, which two values cannot be. | Unknown; low value. |
+| 61445 | 39 | 4 | Two values (32, 83). | Unknown; low value. |
+| 65387 | 0 | all | Nothing varies. Sent once at key-on, as the answer to SA 23's request. | A capture that exercises something new. |
+| 65388 | 23 | all | Nothing varies. Sent once at every key-on. | As above. |
+| 65393 | 23, 39 | all | Nothing varies (8 + 4 records). | As above. |
+| 56832 | 23 | all | Nothing varies (5 records). | As above. |
+
+Open questions that are not a byte to find:
+
+- **The chassis-fault lamp.** Never hunted. Presumably a DM1 lamp bit from
+  SA 39; a garage evening with the DM1 decoder.
+- **Low oil pressure.** Not a broadcast bit. The manual names a DM1 fault for it
+  (see the 2026-09-18 entry above); it has never been observed, and cannot be
+  provoked safely.
+- **Tip-over, SPN 520200 FMI 14 on DM1.** Does it fire with the ignition off,
+  and does it clear itself? Tier 2e. Watch for it, never provoke it.
+- **The Chieftain's windshield inputs, VCM B17/B18.** Whether the VCM
+  broadcasts them on a Springfield — WIRING-DIAGRAMS.md, "what is still not on
+  paper".
+- **The lean scale.** PGN 2304 byte 0 has two fixed points (127 upright, 113
+  on the stand) and no degrees. `lean` is published raw.
+- **The throttle's resting value.** Two clusters with the engine stopped —
+  UNEXPLORED-BYTES.md, "the throttle byte has two resting values".
+- **The grips' 0xFA pulse at engine start.** Known since 2026-09-18, not
+  handled: `grips` reads 10 for a second or so at every start.
+- **Names.** Whether PGN 65381 is pOSS1 (SPN 520329) and whether 65386 byte 0
+  is SPN 520330 cannot be shown from a proprietary PGN. What SA 136 is needs a
+  lookup of manufacturer code 146, or a look under the console cover
+  (DISPLAY-INTEGRATION.md §9).
+
+### B. Behind a request — needs the board to transmit
+
+Nothing here can be had by listening. The firmware is listen-only: the CAN
+controller is opened in its listen-only mode and `TX_ENABLED` in `src/main.cpp`
+is 0. [TRANSMIT.md](TRANSMIT.md) is the plan.
+
+- **DM2** — stored (previously active) fault codes.
+- **DM4** — freeze frames: the conditions when a fault was set.
+- **Anything else answered on demand rather than broadcast.**
+
+### C. Identified, and deliberately not shipped
+
+These are understood. They are listed so nobody counts them as unknown or
+decodes them a second time.
+
+| PGN | SA | byte | what it is | why it is not a field |
+|---|---|---|---|---|
+| 65254 | 39 | 1, 2 | Clock: minutes, hours | 12 h 07 min out, and not the clock on the display |
+| 65381 | 39 | 1, bits 2 / 4 / 6 | Indicator switch left / right / cancel, a blip while the stalk moves | The lamps themselves are shipped from 65089 |
+| 65386 | 39 | 1, bit 0 | Main beam active, held for the duration | `headlight` already comes from 65381 |
+| 65276 | 23 | 1 | The cluster's own fuel level reading | SA 0 was chosen for determinism |
+| 65265 | 39 | 6, 7 | Message counter and checksum (SPN 524079) | Not signals |
+| 65382 | 0 | 1 | Engine speed / 256 — the withdrawn throttle | A coarse copy of `rpm` |
+| 65390 | 39 | 0 | `DF`↔`FF` at wake, with eight other PGNs in the same second | The wake burst; the bus going live says it better |
+
+Established as **not on this bus**, each exercised while watched: the horn, the
+saddlebag locks, the security alarm, the fog-lamp switch, a separate front
+brake, Trip 2, EEC2 / accelerator pedal position, coast/accel (SPN 600/602),
+the cruise set speed, and the cruise engaged state *from SA 39*. See "Not on
+the bus — stop looking" further down.
 
 ---
 
@@ -314,21 +433,22 @@ a provenance** — better than guessing, weaker than a capture.
 | 524079 | Cruise Control Input Checksum (+ counter, U1405) | Names CCVS bytes 7-8 and confirms SA 39's CCVS *is* the cruise message |
 | 520296 | Accelerometer | The source behind SPN 5582 and our lean byte |
 
-### Candidates worth knowing about, none yet hunted
+### Candidates from the fault table — status
 
-Named in the tables, plausibly on this bike, never considered until now:
+Named in the tables, plausibly on this bike. When this list was written on
+2026-09-05 none had been hunted; the status column was added 2026-10-04.
 
-| SPN | Signal | Note |
-|---|---|---|
-| 520312 | Power Lock Motor Switch | The side-case locks already on the key-fob list in Tier 2b — now with a part name |
-| 520304 | Key Fob (battery voltage) | The bike monitors fob battery. Relevant: the fob battery was changed 2026-09-04 |
-| 98 | Engine Oil Level Sensor Switch | An air-cooled bike's oil is its cooling system. Worth more than most of Tier 3 |
-| 520320 / 520321 | Brake Light / Tail Light | Lamp *outputs*, distinct from the brake switches |
-| 524046 / 520297 | Start Button / System On Button | 520297 may be the wake bit already seen in PGN 65386 byte 1 |
-| 520250 / 520251 | ABS Pulsar (front / rear) | "Pulsar" is the tone ring. Directly relevant to the wheel-sensor monitor |
-| 520263 | ABS Tire | Tyre-size mismatch detection — implies the ABS module compares the two wheel speeds, which is the same comparison our monitor makes |
-| 1023 | Trip Sudden Decelerations | A stored counter, not a live signal, but an interesting one |
-| 731 / 1071 / 520202 | Knock Sensor / Fan Relay / Canister Purge | Engine internals. Low value to a rider; listed so nobody re-derives them |
+| SPN | Signal | Note | Status 2026-10-04 |
+|---|---|---|---|
+| 520312 | Power Lock Motor Switch | The side-case locks already on the key-fob list in Tier 2b — now with a part name | **Not on the bus** (2026-09-05, GARAGE-RUN run 4) |
+| 520304 | Key Fob (battery voltage) | The bike monitors fob battery. Relevant: the fob battery was changed 2026-09-04 | Seen as a DM1 fault, which is decoded; no live value hunted |
+| 98 | Engine Oil Level Sensor Switch | An air-cooled bike's oil is its cooling system. Worth more than most of Tier 3 | Not hunted. **Naming conflict:** the 2026-09-18 entry above calls SPN 98 FMI 4 "Pressure Too Low" (P1526). The two names disagree and the manual has to decide which is right |
+| 520320 / 520321 | Brake Light / Tail Light | Lamp *outputs*, distinct from the brake switches | Not hunted; would appear as DM1 faults |
+| 524046 / 520297 | Start Button / System On Button | 520297 may be the wake bit already seen in PGN 65386 byte 1 | **Start button found** 2026-09-06: PGN 65381 SA 39 byte 3 bit 2 (zero-based), shipped as `startButton`. The "wake bit" in 65386 turned out to be the key-fob state (`security`) |
+| 520250 / 520251 | ABS Pulsar (front / rear) | "Pulsar" is the tone ring. Directly relevant to the wheel-sensor monitor | Not hunted as live values; they would arrive as DM1 faults, which are decoded. The firmware's own cross-check is `wheels` / `wheelBlips` |
+| 520263 | ABS Tire | Tyre-size mismatch detection — implies the ABS module compares the two wheel speeds, which is the same comparison our monitor makes | Not hunted |
+| 1023 | Trip Sudden Decelerations | A stored counter, not a live signal, but an interesting one | Not hunted; likely behind a request |
+| 731 / 1071 / 520202 | Knock Sensor / Fan Relay / Canister Purge | Engine internals. Low value to a rider; listed so nobody re-derives them | Not hunted |
 
 ---
 
@@ -401,6 +521,12 @@ What the front sensor is still good for is the *comparison*: the ratio between
 the two is the only wheel-slip signal this bus can offer, and a slow drift in
 that ratio over months would be rear tyre wear. Neither justifies a production
 field today.
+
+*That last sentence was overtaken the next day (2026-09-04): the comparison is
+shipped. The firmware publishes `speedFront`, the `wheels` verdict and the two
+dropout counters `wheelBlips` / `wheelBlipsRear` — see "Wheel sensor
+cross-check" under item 2. What has not changed is the decision above: the
+speed shown to the rider stays the rear sensor.*
 
 Remaining work: confirm the byte-4 scaling (values 39–220, `r = +0.84` against
 speed — likely a per-wheel relative speed with offset 125 = zero) against a
@@ -494,8 +620,11 @@ see GARAGE-RUN run 9.
 
 **3. PGN 65394 — SOLVED 2026-09-04. Grip temperature, left and right.**
 
-Bytes 0 and 1, J1939 -40 offset, one per grip. Byte 0 is the faster of the two,
-consistent with the throttle-side grip having a tube to heat through.
+Bytes 0 and 1 (zero-based), J1939 -40 offset, one per grip. **Byte 0 is the
+left grip, byte 1 the right** — settled by the bare-hand test described further
+down. (This paragraph first said byte 0, the faster of the two, was "consistent
+with the throttle-side grip"; that inference was backwards and the test below
+replaced it.)
 
 It took three runs, because the first two were confounded and the rider spotted
 it: the ignition and the grips came on at nearly the same moment, and energised
@@ -526,8 +655,9 @@ detent was chosen — which is worth having beside the Keis clothing control,
 since that control is currently inferring comfort from ambient and road speed
 while a real measurement was on the bus all along.
 
-Shipped: `st.gripTemp1` / `gripTemp2`, `$.gripTemp1` / `$.gripTemp2` in the
-state JSON, two openHAB items, and a strip on the app's cluster page — the
+Shipped: `st.gripTempL` / `st.gripTempR`, `$.gripTempL` / `$.gripTempR` in the
+state JSON (named `gripTemp1` / `gripTemp2` until left and right were told
+apart), two openHAB items, and a strip on the app's cluster page — the
 grips belong to the motorcycle, not to the page that manages the rider's own
 clothing.
 
@@ -554,6 +684,12 @@ check on the bike.
 ### Tier 2 — needs a specific manoeuvre on the bike
 
 **4. Identify PGN 2304 byte 0.** *Next up — decided 2026-09-03.*
+**DONE 2026-09-04 — it is the tilt, see item 2 above; shipped as `lean` and
+`stand`.** The text below is kept because the method it settles on — a generic
+stationary change detector published from the production firmware — became the
+probe that is still in `main.cpp` and found most of what followed. Its remarks
+about the spare board and which build environments compile describe September;
+the board on the bike has since changed (SKILLS.md, section 1).
 
 **Method decided: a temporary publish from the production firmware, not the
 spare board.** The board on the bike runs `FIRMWARE_MODE 1`, and the raw
@@ -613,36 +749,51 @@ PGN is confirmed, dump every byte of it before moving on.
 Shipped: `st.grips` in the firmware, `$.grips` in the state JSON,
 `CanBus_Grips` in openHAB.
 
-**6. Front brake, still withdrawn.** Each control alone, held ~8 s, with real
-pauses between. The brake *light* switch is shared by both levers — that much is
-settled — so this is a hunt for a separate front-only signal, which may simply
-not exist. Time-box it.
+**6. Front brake — CLOSED 2026-09-05. There is no front-only signal.** The
+hunt was run as planned (GARAGE-RUN.md, run 2): each control alone, held ~8 s.
+Lever and pedal produced identical transitions in PGN 65265 SA 0 byte 3 bits
+4-5 (zero-based; SPN 597). The bus carries one combined "brake applied", which
+is shipped as `brakeRear` — the name is historical, either control sets it. The
+manual gives the two switches separate identities (SPN 520322 / 520323), so the
+module knows which is which and does not say. The withdrawn decode keeps its
+`case` under 65390 with the reason.
 
 **7. Throttle position — SOLVED 2026-09-04.** PGN 65266 byte 7, SPN 51, 0.4 % per bit. Verified on the bike with the engine stopped: six sweeps, 5-7 % at rest, 100 % at full, rpm at zero throughout. EEC2 was never the place to look.
 
-**8. Cruise control — see below.** Understood; what is missing is a decision,
-not data.
+**8. Cruise control — see below.** Shipped since 2026-09-05 as `cruiseEnable`,
+`cruiseSw` and a derived `cruise`. One lead is open: a bit from SA 0 that may
+be the engaged state itself. (Until 2026-10-04 this line read "Understood; what
+is missing is a decision, not data" — the decision was made on 2026-09-05.)
 
 ### Tier 2b — the key fob and what it controls (stationary, passive)
 
 Three hunts that need nothing but the change detector already in the firmware,
-and no riding.
+and no riding. **Status 2026-10-04: A and B were run on 2026-09-05 and are
+closed; C is deliberately not hunted.**
 
 **A. Side case locks.** The fob locks and unlocks the panniers, so the VCU must
 act on it and probably says so. Press lock, wait ten seconds, press unlock, wait
 ten. A byte that follows the button is the answer.
+*Result: not on the bus. Three runs with every byte visible and the actuators
+heard working; only the battery voltage sagged (GARAGE-RUN.md, run 4). It is in
+"Not on the bus — stop looking" below.*
 
 **B. Key fob present or absent.** The bike will not start without it, so
 something knows. With the ignition on, walk away with the fob until the dash
 complains, then walk back. Slow, because the range is what it is, but entirely
 passive.
+*Result: found — see "The immobiliser was hunted here and FOUND" below. One
+correction to the plan as written: the search runs only when the bus is woken,
+so walking away with the ignition on changes nothing (GARAGE-RUN.md, run 6).*
 
 **C. The turn-signal unlock code.** Four digits, entered as counted presses of
 the left and right indicator switches in turn, and it opens the bike exactly as
 the fob does.
 
 **Read this before hunting C.** The indicators are broadcast in clear -- PGN
-65089 byte 2, bit 7 left and bit 5 right, which this firmware already decodes.
+65089 byte 1, bit 6 left and bit 4 right (zero-based, as in `main.cpp` and
+GARAGE-RUN.md; this line counted both from one until 2026-10-04 and read
+"byte 2, bit 7 and bit 5"), which this firmware already decodes.
 Every press of the code is therefore on the bus while it is being entered, and
 anything listening can reconstruct the code. That is a property of the bike, not
 of our tooling, and it needs physical access to the bus, so it is not an urgent
@@ -702,6 +853,13 @@ position private, failure public.
 
 Test: switch them on, hold ten seconds, off, hold ten, with the change detector
 running. A byte moving in step is the switch.
+
+**Tested 2026-09-06: the fog-lamp switch is not on the bus.** Six transitions,
+nothing answered; three bytes scored one of six and all three also moved in the
+quiet phase. PGN 65265 was visible this time and had demonstrably reported
+minutes earlier in the same session, so the rig was proved against the one
+message that was blind in the first attempt (GARAGE-RUN.md, run 9). The lamps
+can still report a *failure* through DM1, as the fault table says.
 
 Worth noting that the assumption behind the question is unsafe. "Not on the
 dash" does not mean "not on the bus": the sidestand reaches the bus both as a
@@ -916,7 +1074,16 @@ up, immediately and every time, and the firmware already reports that as
 all along somewhere better -- which is worth remembering the next time a bit
 looks tempting.
 
-**13. PGNs 65387, 65388, 65393, 56832** — 8, 8, 12 and 3 frames respectively,
+*Superseded 2026-09-05, one day after it was written.* "The bike waking up" was
+half an answer. Bit 6 is one of two bits: byte 0 bits 6-7 of PGN 65386 from
+SA 39 are the key-fob state -- `00` authorised, `01` searching, `10` not
+found -- and it lit at wake because that is when the bike looks for the fob
+(Tier 2b above; GARAGE-RUN.md, run 5). It **is** shipped, as `security`. The
+point about bus activity still stands and is shipped too: `ignition` in the
+state JSON is derived from frames arriving, not from any bit.
+
+**13. PGNs 65387, 65388, 65393, 56832** — 8, 8, 12 and 5 records respectively
+(56832 was given as 3 here until a recount on 2026-10-04),
 nothing varying in any of them. There is no signal here to find in this data.
 Revisit only if a capture that exercises something new makes them move.
 
@@ -950,6 +1117,14 @@ entry below for what happens when that distinction is skipped.
   out of this list 2026-09-05.** The bytes read "not available" in every
   captured frame, but cruise was never engaged on any of those rides, so this
   section was never entitled to the entry. Untested, not absent. See below.
+
+  **Tested 2026-09-05, on the road.** From SA 39 the engaged state is not
+  transmitted: byte 4 of its CCVS held `0xF7` with the cruise holding. The set
+  speed byte is `0xFF` in every SA 39 frame captured. So *for SA 39* this entry is back, and now
+  entitled to be here. It is not extended to the whole bus: SA 0 sends the same
+  PGN, nobody watched its copy of that field during the road test, and the
+  August captures show it moving. That is an open lead, not a finding — see the
+  cruise section below.
 - **The horn (SPN 520293).** Admitted 2026-09-05, and it satisfies the
   membership rule properly. Exercised twice on two separate runs — four presses
   each — with the rig proven working in both by the indicator control test, and
@@ -979,6 +1154,18 @@ entry below for what happens when that distinction is skipped.
   FMI 31, "Switch Stuck" (C1229) — an input fault — and no FMI 9, which is what a
   signal expected over the network gets.
 
+- **The security alarm.** Added to this list 2026-10-04; the test is from
+  2026-09-05 (GARAGE-RUN.md, run 6). Arming with a double press of lock made
+  the horn chirp, which is the control — the alarm demonstrably armed — and the
+  bus never woke. Disarming likewise.
+
+- **The fog-lamp switch.** Added 2026-10-04; tested 2026-09-06 (GARAGE-RUN.md,
+  run 9, and Tier 2c above). Six transitions, nothing answered, rig proved in
+  the same session.
+
+- **A separate front brake.** Added 2026-10-04; tested 2026-09-05 (item 6
+  above). One combined brake signal, and it is shipped.
+
 - **A pattern worth using before the next hunt.** Between the horn and the locks,
   this bus has now twice refused to carry something that plainly works:
 
@@ -1004,6 +1191,62 @@ entry below for what happens when that distinction is skipped.
 
 Investigated 2026-09-03 after the tell-tale was reported behaving oddly. It was.
 
+### Where this stands, 2026-10-04
+
+The investigation below is kept as it was written, with corrections marked
+where it was overtaken. Byte numbers in this status block are **zero-based**;
+the dated text below counts from one, so its "byte 4" is `b[3]` and its "byte
+5" is `b[4]`.
+
+**What is certain:**
+
+- **PGN 65265 from SA 39, `b[4]`, is the switch byte.** SET in bits 0-1, RESUME
+  in bits 4-5. Shipped as `cruiseSw` (`SET/DEC`, `RES/ACC`, `none`).
+- **SA 39 `b[3]` bits 2-3 are cruise enable (SPN 596).** `F3`↔`F7` with the
+  rocker, measured in the garage on 2026-09-05. Shipped as `cruiseEnable`.
+- **SA 39 does not transmit the engaged state (SPN 595).** Road test,
+  2026-09-05: `b[3]` held `0xF7` at 94, 87 and 73 km/h with the cruise
+  demonstrably holding and the hand off the grip, while `b[4]` reported every
+  SET and RESUME press in the same frames. The control was inside the
+  measurement.
+- **The firmware therefore derives `cruise`** (`HOLDING` / `off`). A SET or
+  RESUME press with the rocker on and at least 35 km/h arms it; three seconds
+  within 3 km/h confirm it; the brake (SPN 597), the clutch (SPN 598 — both from
+  SA 0 `b[3]`), the rocker going off, or a drift of more than 6 km/h for two
+  seconds end it. Every input is measured; only the rule joining them is
+  inferred, and the value says `HOLDING` rather than `ON` so that it shows.
+
+**Open lead — SA 0 `b[3]` bits 0-1. Not established.**
+
+SA 0 sends PGN 65265 as well, and the same two bits of its frame — the position
+where the standard puts SPN 595 — are not constant. The road test and
+`probe/cruise` watched SA 39 only, so nobody has looked at this field with the
+cruise known to be holding. What the August captures show:
+
+- In the two long rides (`tpms_ride_20260815_133434.log` and
+  `tpms_ride_20260815_150807.log`) SA 0 `b[3]` is recorded as `0x0D` — bits 0-1
+  reading `01` — in **twelve episodes, six per ride**, lasting from ten seconds
+  to two minutes. Every one lies between 64 and 113 km/h; none at a standstill
+  or at town speed.
+- **Three episodes begin within one second of a SET press** recorded from SA 39
+  (13:45:33 → 13:45:34, 15:14:33 → 15:14:34, and 15:16:48 in the same second).
+- **Two episodes end on a record with brake and clutch both set** (`0x5C`, at
+  13:46:14 and 15:22:18). The other ten end on `0x0C`, with neither.
+- In four episodes the speed holds within about 1 km/h for the whole of it
+  (95–96, 78–79, 100–102, 108–109). In one it climbs from 80 to 100 across two
+  RES/ACC presses. In others it moves by 10–20 km/h with no press recorded.
+
+**Why this is a lead and not a decode.** The captures are change-only at about
+one-second resolution, so presses and short states can be missing; nine of the
+twelve episodes have no recorded press at their start; and it has never been
+watched on the bike. A bit that is set while riding steadily on an open road
+has more than one possible meaning.
+
+**The cheapest check:** on the next ride with cruise in use, log `b[3] & 3`
+from SA 0 beside the derived `cruise` — extending `probe/cruise` to SA 0 is
+enough. If the two agree, the engaged state can be read instead of derived. If
+they do not, the lead is closed and the derivation stands as it is.
+
 The decode read PGN 65265 byte 5 bit 0 from SA 39 and published it as cruise
 on/off. **Byte 5 of CCVS is not the cruise state — it is the switch byte**:
 
@@ -1026,6 +1269,9 @@ SA-39 frames**: SPN 595 reads `3`, "not available". Byte 6, the cruise set
 speed (SPN 86), is a constant `0xFF` for the same reason. Byte 4's bits 2–3 do
 read `01`, "enable switch on", but they never change, so they say only that the
 bike has cruise control — which we knew.
+*(Corrected 2026-09-05: they do change. `F3`↔`F7` follows the enable rocker;
+they were constant in August only because the rocker was left on for all four
+rides. Shipped as `cruiseEnable`.)*
 
 **The withdrawal stands: byte 5 is the switch byte, not the state.** That much
 is settled, and the service manual confirms the naming — SPN 599 is the
@@ -1040,6 +1286,13 @@ available" throughout — and that was taken as the answer. It cannot be:
 **the owner never used cruise control on any of those four rides.** The captures
 could not have shown an engaged state, because cruise was never engaged.
 
+*(Corrected 2026-10-04, as far as the captures prove and no further. SET and
+RESUME presses are recorded on three of the four rides — this section says so
+itself, further up — so the buttons were worked. Whether the cruise was
+then holding cannot be read from SA 39's frames, and was not written down at
+the time. "Never used" is therefore not supported; "never engaged" is not
+disproved either. See the open lead in the status block above.)*
+
 That is a null result from a test incapable of a positive one, which is the
 exact failure this document has a rule against. The rule was not applied to its
 own author.
@@ -1050,6 +1303,12 @@ for set**, so the machine plainly knows. Whether it says so on the bus is open.
 **The test, on a ride:** engage cruise, hold it a minute, and watch `65265 SA 39
 byte 4`. Bits 0-1 going from `11` to `01` is SPN 595 populated, and the signal
 is shippable after all.
+
+**The test was run on 2026-09-05, and the answer for SA 39 is no.** Byte 4
+stayed `0xF7` at 94, 87 and 73 km/h with the cruise holding; bits 0-1 never left
+`11`. So the state is not read from SA 39, and of the two options below the
+second was built — in a stricter form than proposed here, with a three-second
+steady-speed confirmation and the clutch as a hard exit.
 
 What could still be built, if it is wanted:
 
@@ -1062,9 +1321,19 @@ What could still be built, if it is wanted:
   SPN 598, is also `0xFF` here), and cruise dropped by the ECU on a steep climb.
   The tell-tale would then read on while cruise was off — the same class of
   quiet lie that has now been removed four times.
+  *(Corrected 2026-09-05: the clutch switch is not `0xFF`. It is in CCVS from
+  SA 0, byte 4 bits 6-7 counted from one — `b[3]` — next to the brake switch,
+  and it is decoded as `clutch`. What read "not available" was SA 39's copy of
+  the field — the `11` in bits 6-7 of its constant `0xF7`. Both objections above were answered in what shipped: the clutch is a
+  hard exit, and a cruise that lets go for any other reason is caught by the
+  speed drifting away from the target.)*
 
 That trade is a decision to make deliberately, not a bug to fix. Until then the
 field stays unpublished.
+
+**Decided and shipped 2026-09-05:** both. The presses are published as
+`cruiseSw`, and the latched state as `cruise`, derived as described in the
+status block at the top of this section.
 
 A footnote for whoever reads the raw frames: bytes 7 and 8 of SA-39's CCVS vary
 constantly (16 and 29 distinct values) but the low nibble of byte 7 is always

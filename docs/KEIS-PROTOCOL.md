@@ -15,12 +15,16 @@ Implemented by [`KeisBleDevice.kt`](../app/app/src/main/java/dk/agesen/springfie
 | | |
 |---|---|
 | Advertised name | `KEIS HEATED CLOTHING` |
-| MAC prefix | `00:1E:C0:5` |
+| MAC prefix | `00:1E:C0:5` in iControl's source; the owner's controllers are `70:B3:D5` |
 
-The controllers do **not** advertise their service UUID, so scanning filters on
-the address prefix — which is what their own app does. A jacket controller and a
-trouser controller are indistinguishable over the air; the rider assigns which
-is which and the app remembers the addresses.
+The controllers do **not** advertise their service UUID, so they cannot be
+filtered on it. Their own app filters on the address prefix, and that prefix is
+wrong for at least one batch of hardware — which is how a scan here once found
+nothing and proved nothing. So when a controller is being assigned, the scan
+accepts either the prefix or an advertised name containing "KEIS"; once the
+addresses are known, a scan looks for exactly those addresses and nothing else.
+A jacket controller and a trouser controller are indistinguishable over the air;
+the rider assigns which is which and the app remembers the addresses.
 
 ## GATT
 
@@ -78,11 +82,17 @@ driver here has no pairing code at all.
 That also means **the controllers were enrolled through iControl**, and this app
 connects to them as a second client rather than replacing that enrolment.
 
+## One central at a time
+
+Settled 2026-09-19: a controller serves one central. With the app on a tablet on
+the bar and on a phone in a pocket, the phone took both controllers and the
+tablet got neither until the phone's Bluetooth was off. So nothing else may be
+holding a controller this app is to drive — iControl included — and of two
+devices running this app exactly one may own the clothing: the "Clothing is
+controlled by" setting.
+
 ## What is still unknown
 
-- Whether a controller accepts two centrals at once, or whether iControl has to
-  be closed. Most BLE peripherals hold one connection; assume it must be closed
-  until proven otherwise.
 - What a controller does when the phone disappears: hold the last level, or fall
   to off. That answer decides whether a dropped link is an inconvenience or a
   cold hour, and only a ride will tell.

@@ -26,8 +26,10 @@ Day-to-day file transfer, flashing and `adb` live in
 
 ### SDK components
 
-`app/build.gradle.kts` asks for `compileSdk 35`, `targetSdk 35`, `minSdk 31`,
-so the SDK needs `platforms;android-35` and build-tools 34.0.0 or newer.
+`app/build.gradle.kts` asks for `compileSdk 36`, `targetSdk 36`, `minSdk 31`
+(36 since 2026-09-19, because Play rejects 35), so the SDK needs
+`platforms;android-36` and build-tools 34.0.0 or newer. AGP 8.7.3 warns about
+compileSdk 36; `gradle.properties` suppresses the warning and the build works.
 
 The Android Gradle Plugin downloads both on first build if the licence is
 accepted and there is network — which is what happened here: the machine had
@@ -35,7 +37,7 @@ only `android-37.0` and build-tools `36.0.0`, and AGP fetched the rest during
 the first `assembleDebug`. To do it by hand instead:
 
 ```powershell
-sdkmanager "platforms;android-35" "build-tools;34.0.0"
+sdkmanager "platforms;android-36" "build-tools;34.0.0"
 sdkmanager --licenses
 ```
 

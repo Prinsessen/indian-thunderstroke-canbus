@@ -1,10 +1,11 @@
 // =============================================================================
 // Indian CAN Bus — Firmware OTA trigger
 // =============================================================================
-// The sitemap Switch (item CanBus_OTA, mapping "update"="🔄 Update Now") sends
-// the command "update" when pressed. This rule catches that command and
-// publishes it straight to the MQTT broker on topic canbus/springfield/ota, which
-// the ESP32 firmware listens for (onMqttMessage -> httpUpdate.update()).
+// The sitemap row (item CanBus_OTA, mappings "update"="🔄 Update Now" and
+// "mqtt"="📡 Update via MQTT") sends one of two commands. This rule catches the
+// command and publishes it straight to the MQTT broker on topic
+// canbus/springfield/ota, which the ESP32 firmware listens for (net.cpp,
+// onMqttMessage).
 //
 // We publish via getActions("mqtt", broker).publishMQTT(...) instead of an
 // outbound item binding because an outbound-only binding never updates the
@@ -12,16 +13,19 @@
 // here. A plain JSRule on the command is deterministic.
 //
 // Items (items/canbus.items):
-//   String CanBus_OTA   <- virtual status line, no binding
+//   String CanBus_OTA   <- state from canbus/springfield/ota/status (channel
+//                          otaStatus); commands are caught here, not bound
 //
-// Flow:
-//   UI press -> command "update" -> publishMQTT canbus/springfield/ota "update"
-//            -> ESP32 downloads http://openhab.local:8080/static/indian-canbus-firmware.bin
-//            -> status shows "Downloading..." then clears after a few seconds
+// Flow, "update":
+//   UI press -> publishMQTT canbus/springfield/ota "update"
+//            -> the ESP32 downloads /static/indian-canbus-firmware.bin over HTTP
+//               from the server's LAN address (home network only)
+//            -> the board writes its progress to ota/status; nothing is cleared
 //
-// The command "mqtt" (firmware 2026.10.04-1 and later) is forwarded the same
-// way: the board then pulls the same image in chunks over the MQTT link, which
-// also works from a hotspot. canbus-ota-mqtt.js answers its requests.
+// Flow, "mqtt" (firmware 2026.10.04-1 and later): forwarded the same way; the
+// board then pulls the same image in chunks over the MQTT link, which also
+// works from a hotspot. canbus-ota-mqtt.js answers its requests.
+// Either way the new image is on trial until it has reached the broker.
 // =============================================================================
 
 const { rules, triggers, actions, items } = require('openhab');
@@ -31,7 +35,7 @@ const OTA_TOPIC  = 'canbus/springfield/ota';
 
 rules.JSRule({
   name: 'Indian CAN Bus - Firmware OTA trigger',
-  description: 'Publishes "update" to canbus/springfield/ota so the ESP32 pulls new firmware over HTTP',
+  description: 'Publishes "update" (HTTP on the LAN) or "mqtt" (over the MQTT link) to canbus/springfield/ota',
   triggers: [
     triggers.ItemCommandTrigger('CanBus_OTA')
   ],

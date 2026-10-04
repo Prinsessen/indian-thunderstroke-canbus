@@ -21,7 +21,7 @@ A dealer and Digital Wrench work in **SPN/FMI**. A generic scanner and most foru
 threads use the **P-code**. They name the same fault, so the app prints both.
 
 The failure mode shown is the manual's own wording for that exact SPN/FMI pair
-where it has one — 235 of them do. The generic FMI meaning is only the fallback,
+where it has one — 238 of them do. The generic FMI meaning is only the fallback,
 and the difference matters: SPN 520304 FMI 12 reads as "component or ECU fault"
 from the FMI table, and as a low battery needing replacement from the manual.
 The key fob wants a coin cell. Only one of those two readings gets you home.

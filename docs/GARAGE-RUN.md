@@ -4,6 +4,28 @@ Everything here is done with the bike **parked, ignition on, engine off**. No
 riding, no movement, nothing transmitted onto the bus. Written 2026-09-05 from
 the service-manual cross-reference in [DECODE-PLAN.md](DECODE-PLAN.md).
 
+> **Status, 2026-10-04.** Every hunt on this sheet was run on 2026-09-05 and
+> 2026-09-06, and the results are below it: the switch layer (runs 1-2), the
+> immobiliser (run 5), the locks (run 4), the sidestand, kill switch and start
+> button (runs 9-11). The sheet is kept as it was written, as the method; where
+> it says something "has never been looked for", read the results. What is
+> still open on this bus is listed in one place, in DECODE-PLAN.md, "What is
+> genuinely still open".
+>
+> Three things about the probe have changed since the sheet was written, and
+> they matter if it is used again:
+>
+> - **Each probe is now a switch.** The change detector, `probe/cruise`,
+>   `probe/throttle`, the address claims and `probe/rates` are turned on and off
+>   over MQTT (`probe/en/<name>`) and the setting survives a reboot. Check that
+>   `scan` is ON before starting; a detector left off reports nothing, and that
+>   looks exactly like a null.
+> - **Only the change detector is stationary-only.** `probe/cruise` and
+>   `probe/throttle` report at any speed.
+> - **A first sighting is announced** (`NEW pgn=… sa=…`) rather than swallowed
+>   in silence — added during run 4. The thirty-second wait is still right: the
+>   first sighting is the baseline, and a change needs something to differ from.
+
 ---
 
 ## Before you start
@@ -104,6 +126,10 @@ floods the log with engine data at the moment you least want it.
 Three of these (1, 8, 12) are already understood. They are in the list on
 purpose: they prove the rig is working, spaced through the run rather than only
 at the start, so a probe that dies halfway is caught.
+
+*(Corrected 2026-10-04: the numbers are wrong. The three known controls in the
+table are 1, 7 and 11 — left indicator, headlight, grip heater. Items 8 and 12
+are the fog lamps and the horn, which were the two open ones.)*
 
 ---
 
@@ -363,6 +389,12 @@ That sharpens the ride test rather than changing it. The question was never
 whether the system was awake; it was whether SPN 595 populates when cruise
 actually engages. Now we know the enable half of the message works exactly as
 the standard says, which makes it far more likely that the active half does too.
+
+> **Outcome, added 2026-10-04.** It does not, from this module. On the road the
+> same day SA 39's byte 4 stayed `F7` with the cruise holding at 94, 87 and
+> 73 km/h, so SA 39 never populates SPN 595 and the firmware derives `cruise`
+> instead. Whether SA 0's copy of the same field carries it is an open lead,
+> not a result — DECODE-PLAN.md, "Cruise control — what it actually is".
 
 ## SPN 599 and 601 — and the answer about accel/decel
 
@@ -670,6 +702,12 @@ error would have moved them:
 - the ambient source, PGN 65269 bytes 4-5 — which is decoded at a byte offset
   that disagrees with the J1939 standard, and has always been justified as
   "empirically right and structurally wrong"
+  *(Corrected 2026-10-04: it does not disagree. J1939-71 puts ambient air
+  temperature, SPN 171, in bytes 4-5 of PGN 65269 counting from one, which is
+  `b[3]`-`b[4]` counting from zero — exactly what the firmware reads. The
+  "deviation" came from comparing the standard's one-based byte numbers with
+  zero-based indexes. The decode is standard, and this measurement is still
+  what confirmed it physically.)*
 - the gas-law correction, on absolute rather than gauge pressure
 - and the assumption that TPMS temperature is the air, not the sensor housing
 
@@ -936,3 +974,10 @@ snapshot anyway. It earns a place in openHAB and none on a glanceable dial.
 
 With this, every switch in REVERSE_ENGINEERING.md is found or ruled out. What
 remains all needs wheels.
+
+> **Since then (added 2026-10-04).** One more stationary find came on
+> 2026-09-18: the two MFD/trip buttons, 65381 SA 39 byte 0 bits 0 and 2, noted
+> in the table above and written up in DECODE-PLAN.md under "Garage run 3,
+> 2026-09-18". The current list of what is left — a handful of bytes, most of
+> which need a ride, and everything that needs the board to transmit — is in
+> DECODE-PLAN.md, "What is genuinely still open".

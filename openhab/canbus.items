@@ -1,22 +1,21 @@
 // =============================================================================
-// Indian Springfield 2017 — CAN bus  ·  PRODUCTION-MODE items
+// Indian Springfield 2017 — CAN bus items (the live file)
 // =============================================================================
-// DROP-IN REPLACEMENT for items/canbus.items, paired with
-// indian-canbus/canbus_production.things, for when the ESP32 runs
-// FIRMWARE_MODE = 1 (PRODUCTION).
+// Paired with things/canbus.things (thing mqtt:topic:broker:canbus, base topic
+// canbus/springfield). The firmware runs FIRMWARE_MODE 1 (PRODUCTION): it
+// decodes the bus itself and publishes one JSON, so every item here is a
+// JSONPATH pick or a plain topic. The item names are the ones the discovery-era
+// file used, so the sitemap never had to change.
 //
-// Same item NAMES as the discovery file, so sitemaps/myhouse.sitemap works
-// UNCHANGED. This trimmed set drops the discovery-only diagnostics (alt RPM /
-// throttle, raw-hex Polaris dumps, shared-tyre topic, VIN/SW-ID, DM1, live
-// frame) because production streams only the confirmed, display-ready values.
-//
-// The two openHAB helper rules keep working in this mode because their trigger
-// items exist here:
-//   canbus-trip-this-ride.js  <- CanBus_RPM + CanBus_Trip
-//   canbus-cruise-latch.js    <- CanBus_CruiseSwitch
-//
-// Activate: use EITHER this file OR items/canbus.items — never both (duplicate
-// item names). Copy this to items/ when you flash the production firmware.
+// Rules that key on these names (automation/js):
+//   canbus-trip-this-ride.js             <- CanBus_RPM + CanBus_Trip
+//   canbus-cruise-latch.js               <- CanBus_CruiseSwitch
+//   canbus-clear-live-values.js          <- CanBus_Ignition, CanBus_Status
+//   canbus-probe-queue.js                <- CanBus_Probe_*, CanBus_Status
+//   canbus-ota.js                        <- CanBus_OTA (commands)
+//   canbus-ota-mqtt.js                   <- trigger channel otaReq (no item)
+//   vehicle-motorcycle-button-garage.js  <- CanBus_Button
+// A bench board has its own file: items/canbus-bench.items (CanBench_*).
 //
 // -----------------------------------------------------------------------------
 // STRUCTURE, restructured 2026-09-07
@@ -54,9 +53,9 @@ Group  gCanBus_Probe           "Discovery probes"                <zoom>        (
 // First on the page because when it is wrong, every reading below it is stale
 // and you need to know that before you trust any of them.
 // MQTT last will. "online" means the board holds a broker connection -- it is
-// the transport, not a setting. Displayed as Enabled/Disabled via
-// transform/springcommand.map because SpringCommand as a whole is up or down
-// with it, but do not confuse it with CanBus_Sleep, which is the real switch.
+// the transport, not a setting. Displayed as "Connected" / "Asleep or off" via
+// transform/springcommand.map (Enabled/Disabled until 2026-09-27, which read
+// like a setting). Do not confuse it with CanBus_Sleep, which is the real switch.
 String CanBus_Status           "Bus Status [%s]"                 <network>     (gCanBus_System) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:status" }
 String CanBus_Debug            "Firmware log [%s]"               <text>        (gCanBus_System) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:debug" }
 // Ignition. Not decoded from anything -- the bus is silent with the ignition off
@@ -93,10 +92,14 @@ String CanBus_Bitrate          "Detected Bitrate [%s]"           <chart-blue>   
 // became a plain answer to "did the bus reply at 250 kbit?". Zero after a boot
 // with the ignition on means the wiring, not the rate.
 Number CanBus_ScanFrames       "Scan Frames [%d]"                <chart>       (gCanBus_System) ["Measurement"] { channel="mqtt:topic:broker:canbus:scanFrames" }
-// OTA status line — driven live by the ESP32 (canbus/indian/ota/status):
-// "Running <ver>" on boot, "Starting download...", "Downloading NN%",
-// "OK — rebooting" or "FAILED (...)". The Switch command is caught by
-// automation/js/canbus-ota.js, which publishes "update" to canbus/indian/ota.
+// OTA status line — driven live by the ESP32 (canbus/springfield/ota/status):
+// "Running <ver>" on boot, "Running <ver> - verified" once a new image has
+// reached the broker (until then it is on trial and can roll back), "Starting
+// download...", "Downloading NN%", "OK - rebooting", "No update available" or
+// "FAILED (...)". Commands to this item are caught by automation/js/canbus-ota.js,
+// which publishes them to canbus/springfield/ota: "update" = HTTP from the
+// server's LAN address (home only), "mqtt" = the image in chunks over the MQTT
+// link (canbus-ota-mqtt.js answers; works from a hotspot too).
 String CanBus_OTA              "Firmware OTA Status [%s]"        <canbus-ota-blue>        (gCanBus_System) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:otaStatus" }
 String CanBus_FW_Version       "Firmware Version [%s]"           <text>        (gCanBus_System) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:fw" }
 // =============================================================================
@@ -148,10 +151,13 @@ String CanBus_KillSwitch       "Kill switch [%s]"                <switch>      (
 // The switch itself, PGN 65381 SA 0 byte 7 bit 0. DOWN = extended, which is the
 // state SPN 520267 faults on when it blocks a start.
 String CanBus_StandSwitch      "Sidestand [%s]"                  <switch>      (gCanBus_Interlock) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:standDown" }
-// Start button, PGN 65381 SA 39 byte 3 bit 2. Set = pressed. SA 39 is the
-// handlebar switch module -- the same one carrying the indicators and hazard --
-// which is why it still reports with the kill switch blocking the crank: the
-// button never goes through the ECU at all. Expect PRESSED only while held.
+// The two MFD/trip buttons on the left switch housing, as events: "left short",
+// "right double", "both long" (firmware buttons.cpp, 2026-09-18). Consumed by
+// vehicle-motorcycle-button-garage.js, which writes what it did to _Result.
+// (The comment for the start button, PGN 65381 SA 39 byte 3 bit 2, set = pressed,
+// belongs to CanBus_StartButton two lines down: SA 39 is the handlebar switch
+// module, which is why it still reports with the kill switch blocking the crank.
+// Expect PRESSED only while held.)
 String CanBus_Button           "Handlebar button [%s]"           <switch>      (gCanBus_Interlock) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:button" }
 String CanBus_Button_Result    "Handlebar [%s]"                  <switch>      (gCanBus_Interlock)   // what the last press did, written by vehicle-motorcycle-button-garage.js  ["Status", "Info"]
 String CanBus_StartButton      "Start button [%s]"               <switch>      (gCanBus_Interlock) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:startButton" }
@@ -260,11 +266,6 @@ String CanBus_Gear             "Gear [%s]"                       <chart-blue>   
 // with a service desk about, not something to act on at the roadside.
 Number CanBus_GearGlitches     "Gear glitches [%d]"              <error>       (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:gearGlitches" }
 String CanBus_GearEvent        "Last gear event [%s]"            <chart-blue>        (gCanBus_Engine) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:gearEvent" }
-// NOT coolant. The Thunder Stroke 111 is air-cooled; there is no coolant on this
-// motorcycle. Indian reuses the J1939 coolant slot (PGN 65262 byte 1, SPN 110)
-// for engine temperature, which the captures identify as OIL: it starts near
-// ambient, climbs over eight to ten minutes and settles at 100-115 C. A
-// cylinder head on an air-cooled twin runs 150-200 C, so this is not the head.
 // PGN 65262 byte 1. J1939 calls this Engine Coolant Temperature; this engine
 // has no coolant and no oil temperature sensor either. The service manual lists
 // exactly one engine temperature sensor -- "CHT (Cylinder Head Temperature)
@@ -293,8 +294,9 @@ String CanBus_Clutch           "Clutch [%s]"                     <switch>      (
 // Cruise, decoded in the garage 2026-09-05. The item that was withdrawn on
 // 09-03 is back with the right meaning: it was reading the SET button and
 // calling it the engaged state.
-//   Engaged  SPN 595 -- stays absent until proven on a ride; "not available"
-//            is never published as OFF, which is what caused the false tell-tale
+//   Engaged  SPN 595 -- SA 39 does not transmit it (road test 2026-09-05), so
+//            CanBus_Cruise below is derived. "Not available" is never published
+//            as OFF, which is what caused the false tell-tale.
 //   Enabled  SPN 596 -- the rocker. Was ON for all four August rides.
 //   Switch   SPN 599/601 -- momentary; see canbus-cruise-latch.js
 String CanBus_CruiseEnable     "Cruise Enabled [%s]"             <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruiseEnable" }
@@ -349,6 +351,8 @@ String CanBus_SoftwareId       "Software ID [%s]"                <text>        (
 //   throttle  65382 SA0 bytes 1+4, any speed, TWICE A SECOND -- about 7,200
 //             messages an hour of riding. Turn it on to hunt, off afterwards.
 //   claims    address claims. Rate-limited, negligible.
+//   rates     transmit period per (PGN, SA), one JSON per 10 s window. Off by
+//             default.
 //
 // The flags are stored in the ESP32's NVS and survive a reboot and an OTA.
 // -----------------------------------------------------------------------------

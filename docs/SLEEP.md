@@ -9,6 +9,12 @@ come back when the bus comes back.
 It is **off by default** and stays off until switched on, for reasons set out
 under [Recoverability](#recoverability-the-three-guarantees).
 
+The board on the bike is the CANFD-MC rev 1.0 (board #0001, since 2026-10-03;
+the LilyGO T-2CANFD was retired on 2026-09-28). The sleep code is the same for
+both, because the pin map is. The currents are not: 4.62 mA asleep on the
+CANFD-MC against 17 mA on the LilyGO. Where a section below is about the LilyGO
+only, its heading says so.
+
 ---
 
 ## Quick reference
@@ -20,7 +26,8 @@ under [Recoverability](#recoverability-the-three-guarantees).
 | State | `CanBus_SleepState` — `awake` / `asleep` |
 | Why it woke | `CanBus_SleepWake` — `power-on` / `can` / `timer` / `other` |
 | Retained topic | `canbus/springfield/sleep/status` |
-| Command topic | `canbus/springfield/sleep/en` |
+| Command topic | `canbus/springfield/sleep/en` (`ON` / `OFF`; the switch publishes it not retained) |
+| Bench board | the same under `canbus/bench`, item `CanBench_SleepEnable` |
 
 The status payload:
 
@@ -50,29 +57,54 @@ Four conditions, all of them:
 1. **Enabled** — the NVS flag is set
 2. **Awake for at least 90 s** — `SLEEP_MIN_AWAKE_MS`
 3. **No CAN frame for 5 minutes** — `SLEEP_QUIET_MS`
-4. **Nothing in flight** — the `busy` argument
+4. **Nothing in flight** — the `busy` argument, which is
+   `netBusy() || rollbackPending()`: an OTA is running (HTTP or over MQTT), or an
+   OTA image is still on trial (see [Deep sleep and OTA](#deep-sleep-and-ota))
 
 Five minutes is generous on purpose. A queue at a level crossing is not the
 ignition going off, and waking costs more than staying up for another minute.
 
-Before the chip stops, it publishes `"state":"asleep"` retained, pins the
-controller to 250 kbit/s, drives CS high and holds it, and holds the pull-up on
-the interrupt line.
+Before the chip stops, it pins the controller to 250 kbit/s, publishes
+`"state":"asleep"` retained, drives CS high and holds it, and holds the pull-up
+on the interrupt line.
 
 ## How it wakes
 
-**On CAN.** The MCP2518FD is *not* put to sleep — it stays in Normal mode,
-receiving. Its INT line is level-triggered and wired to GPIO 8, which is
-RTC-capable on the ESP32-S3, so the first frame after the ignition comes on
-pulls INT low and `ext0` wakes the chip.
+**On CAN.** The MCP2518FD is *not* put into its own Sleep mode — it keeps
+receiving, listen-only at 250 kbit/s. Its INT line is level-triggered and wired
+to GPIO 8, which is RTC-capable on the ESP32-S3, so the first frame after the
+ignition comes on pulls INT low and `ext0` wakes the chip.
 
 That is a deliberate trade. ACAN2517FD can enter and leave the controller's own
 Sleep mode but does not expose the wake-on-CAN interrupt configuration, so the
-lower-power design means raw SPI writes to registers the library never touches —
-with no way to test them off the bike. Leaving the controller and transceiver
-powered does not reach the lowest current the board can theoretically do. It
-does switch off the two parts that actually cost, the radio and the CPU, without
-writing registers nobody can verify from here.
+lower-power design means raw SPI writes to registers the library never touches.
+When this was decided there was no way to test them off the bike; a bench board
+with a USB-CAN adapter for the wake frame now can (IDEAS.md D6, not done yet).
+Leaving the controller and transceiver powered does not reach the lowest current
+the board can theoretically do. It does switch off the two parts that actually
+cost, the radio and the CPU, without writing registers nobody has verified.
+
+## Deep sleep and OTA
+
+Since firmware 2026.10.04-1 two things hold sleep off, both through the `busy`
+argument (`src/main.cpp`, both `sleepTick()` calls):
+
+- **An OTA in progress** (`netBusy()`), whether the image comes by HTTP
+  (`update`) or over the MQTT link (`mqtt`).
+- **An OTA image on trial** (`rollbackPending()`). A new image boots "pending"
+  and is kept only once it has reached the broker. A deep-sleep wake is a reset,
+  and a reset while pending makes the bootloader start the previous image — so
+  the board does not sleep until the trial is over. That is at the first broker
+  connection, or after five minutes (`ROLLBACK_GRACE_MS`) when the image gives
+  up and goes back by itself. At most five minutes of extra time awake, once per
+  OTA.
+
+A USB-flashed image has no trial and changes nothing here. The whole mechanism
+is in [OTA.md](OTA.md), "Automatic rollback".
+
+This does not make an OTA to a sleeping board possible: a sleeping board hears
+nothing. The ignition rule in [OTA.md](OTA.md), "Before pressing Update", still
+holds.
 
 **On the timer.** A one-hour backstop, armed *every single time*, never
 conditionally.
@@ -94,8 +126,10 @@ that unnecessary, and none of them is optional:
    in which it is reachable is shorter than the time it takes to send it a
    command.
 
-Turning the switch **off takes effect at the next wake, not immediately** — a
-sleeping board is not listening. Worst case you wait out the backstop.
+Turning sleep **off is only possible while the board is awake** — a sleeping
+board is not listening, and the switch's command is not retained, so a press
+while it sleeps is lost (see [Operating it](#operating-it)). Worst case you wait
+out the backstop and use the awake window that follows.
 
 ---
 
@@ -112,9 +146,42 @@ of that was WiFi failing over between networks. From 2026-09-15 the winning SSID
 was remembered in NVS and tried first; since 2026-09-27 the network task scans
 and takes the strongest known network instead (`net.cpp`), which is both faster
 and right -- the remembered one had kept the bike on a -82 dBm house network with
-the phone's hotspot standing next to it.
+the phone's hotspot standing next to it. On 2026-10-04 the board woke on CAN at
+10:21:44 and took an OTA command over the broker at 10:22:18, so MQTT was up in
+under 35 seconds.
 
-### Measured, 2026-09-07
+### Measured on the CANFD-MC rev 1.0 — the board on the bike today
+
+Measured 2026-09-27 on a CANFD-MC rev 1.0 on the bench, in series with the 12 V
+input, with no bus connected:
+
+| | current | power |
+|---|---|---|
+| **Asleep** | **4.62 mA, steady** | **0.055 W** |
+| Awake (WiFi + BLE + MQTT, no bus) | 25–31 mA | 0.3–0.4 W |
+
+That is a factor of 3.7 below the 17 mA the LilyGO T-2CANFD drew asleep (next
+section). The difference is the power path: an LM5164 buck straight from 12 V,
+and no isolated transceiver module with a DC-DC of its own. What is left in
+those 4.62 mA is the MCP2518FD, still receiving, and the TCAN332G transceiver
+(IDEAS.md D6).
+
+**Calculated from those two figures, not measured:**
+
+| | average | 18 Ah AGM to half charge, board alone |
+|---|---|---|
+| asleep the whole time | 4.62 mA | about 81 days |
+| asleep, with the hourly backstop wake of 90 s at ~28 mA | about 5.2 mA | about 72 days |
+
+**Still open: board #0001 has not been measured in place on the bike**, with the
+bus connected and supply and bus sharing the service connector's ground. The
+bench figure is the one to beat or confirm; the measurement takes a minute with
+a meter in series with the 12 V pad.
+
+### Measured on the LilyGO T-2CANFD, 2026-09-07 (history)
+
+The LilyGO was on the bike until 2026-09-28. Everything from here to "The side
+benefit" is that board, kept because the method and the reasoning still hold.
 
 On a Fluke 175 True RMS, in series with the **12 V** input — not the 5 V USB
 rail, so these figures include the board's own regulator losses.
@@ -140,12 +207,8 @@ further down shows how much room there is.
 
 | | current | power |
 |---|---|---|
-| Awake | 50–73 mA, wandering | 0.6–0.9 W |
-| **Asleep** | **17 mA, steady** | **0.20 W** |
-| **Asleep, CANFD-MC rev 1.0** (2026-09-27, bench, no bus) | **4.62 mA, steady** | **0.055 W** |
-| Awake, CANFD-MC rev 1.0 (WiFi + BLE + MQTT, no bus) | 25–31 mA | 0.3–0.4 W |
-
-**A factor of four** — and on the CANFD-MC board, with the LM5164 buck in place of the LilyGO's linear regulator, another factor of 3.7 on top: against the same 18 Ah AGM the bench board reaches half charge in **about eighty days**. What is left in those 4.62 mA is the MCP2518FD in Normal mode and the transceiver (IDEAS.md D6).
+| Awake, LilyGO T-2CANFD | 50–73 mA, wandering | 0.6–0.9 W |
+| **Asleep, LilyGO T-2CANFD** | **17 mA, steady** | **0.20 W** |
 
 **On the LilyGO: a factor of four.** Against an 18 Ah AGM that is the difference between
 reaching half charge in **five and a half days** and reaching it in **twenty-two**
@@ -174,8 +237,9 @@ the same uncertainty swings it between 3.8 and 7.5 days — a factor of two on t
 number that decides everything.
 
 So the measurement that cannot be trusted is the one that stopped mattering, and
-the one that governs is 17 mA of steady DC, which is exactly what a handheld
-meter measures well. No better instrumentation is needed to settle this.
+the one that governs is the steady DC asleep — 17 mA on the LilyGO, 4.62 mA on
+the CANFD-MC — which is exactly what a handheld meter measures well. No better
+instrumentation is needed to settle this.
 
 ### The side benefit
 
@@ -212,14 +276,29 @@ update — and **leave the ignition on for the duration**. An OTA attempted with
 the bus quiet stalls at "Downloading 0%"; the same update with the ignition on
 took eleven seconds.
 
-**If it will not wake:** switch `CanBus_Sleep` off and wait out the backstop. The
-command is retained, so it is applied the moment the board next connects.
+**Switching sleep off, and what to do if it will not wake on CAN.** The
+`CanBus_Sleep` switch publishes `ON` / `OFF` to `<base>/sleep/en` **not
+retained**, and no rule re-sends it (`canbus-probe-queue.js` does that for the
+probe switches only). So:
+
+- With the board **awake**, the switch works at once; confirm it on
+  `"enabled"` in `sleep/status`, which the board republishes in reply.
+- With the board **asleep**, a press is lost. Wait for the next wake — the
+  first CAN frame, or the hourly backstop — and press it in the awake window
+  that follows (at least 90 s after every wake, by design).
+- To have it applied without being there at the right moment, publish `OFF`
+  **retained** to `<base>/sleep/en` with any MQTT client that may write to it.
+  The board subscribes on every connect, so it is applied at the next wake —
+  **and at every wake after that**, overriding the switch, until the retained
+  value is cleared with an empty retained payload on the same topic.
+
+The bench board is the same under `canbus/bench` with `CanBench_SleepEnable`.
 
 ---
 
 ## What the bike found
 
-Four faults, none of which showed up on the bench. Recorded because each one
+Five faults, none of which showed up on the bench. Recorded because each one
 looked like success from the desk.
 
 **0. The `asleep` marker was lost (2026-09-27, the day the network moved into
@@ -265,21 +344,92 @@ high with `gpio_hold_en()`.
 ### The backstop stays. Question closed.
 
 This was written as an open question on the estimate that awake cost twenty
-times asleep, which would have made the hourly wake around 40 % of the total. The
-real ratio is four, and the arithmetic comes out completely differently:
+times asleep, which would have made the hourly wake around 40 % of the total. On
+the LilyGO the real ratio was four, and the arithmetic came out completely
+differently:
 
-| awake per hour | average | cost over pure sleep |
+| awake per hour (LilyGO, measured figures) | average | cost over pure sleep |
 |---|---|---|
 | 30 s | 17.4 mA | +0.4 mA (2 %) |
 | 90 s | 18.3 mA | +1.3 mA (7 %) |
 
-**Under 1.5 mA for the one guarantee standing between a sleep bug and a ride out
-to pull a fuse.** It stays, and not as a compromise — it was never expensive, and
-the estimate that said it was is the thing that was wrong.
+On the CANFD-MC the ratio is about six (4.62 mA asleep, 25–31 mA awake), and the
+same arithmetic, **calculated** with 28 mA awake, gives:
+
+| awake per hour (CANFD-MC, calculated) | average | cost over pure sleep |
+|---|---|---|
+| 30 s | 4.8 mA | +0.2 mA (4 %) |
+| 90 s | 5.2 mA | +0.6 mA (13 %) |
+
+**Well under 1.5 mA on either board for the one guarantee standing between a
+sleep bug and a ride out to pull a fuse.** It stays, and not as a compromise — it
+was never expensive, and the estimate that said it was is the thing that was
+wrong.
 
 ---
 
 ## Still open
+
+### The floor on the CANFD-MC is 4.62 mA, and there is a way lower
+
+What is left asleep is the MCP2518FD, receiving, and the TCAN332G. Lower means
+putting the controller into its own Sleep mode with a wake-on-CAN filter — raw
+SPI writes ACAN2517FD does not expose — which would take the board to about
+1 mA. It is IDEAS.md D6, status "measure": to be tried on a bench board with a
+USB-CAN adapter sending the wake frame, never first on the bike.
+
+### The on-bike measurement of board #0001
+
+4.62 mA is a bench figure with no bus connected. Board #0001 has not been
+measured in place. One reading with a meter in series with the 12 V pad,
+ignition off and the board asleep, closes it.
+
+### How long it can stand (CANFD-MC, calculated)
+
+**Calculated, not measured**, from the bench figure of 4.62 mA and the same
+assumptions as the LilyGO table in the history below — 18 Ah AGM, self-discharge
+about 1 mA equivalent, 50 % state of charge as marginal cranking and 35 % as
+doubtful on a big twin:
+
+| machine's own quiescent | total | 50 % | 35 % |
+|---|---|---|---|
+| 5 mA | 10.6 mA | 35 days | 46 days |
+| **10 mA** | **15.6 mA** | **24 days** | **31 days** |
+| 20 mA | 25.6 mA | 14.6 days | 19 days |
+
+If the machine draws 10 mA of its own, adding the board takes 11 mA to about 16
+and roughly 34 days to 24. Winter shortens all of it, as the history section
+says. On the 10 mA assumption, anything standing longer than about three weeks
+still wants a maintenance charger.
+
+**The missing measurement is still the machine's own quiescent draw** — meter in
+series with the battery negative, ignition off, board disconnected. Thirty
+seconds, and the table above stops being parametric.
+
+### Wiring
+
+The CANFD-MC has four soldered pads, CANL · CANH · GND · VBAT, on DIAG pins
+G, H, D and A of the service connector. There is no isolation barrier and no
+terminator on the board, so nothing to bridge and nothing to open; the
+protection is the board's own fuse and the machine's fuse in the 12 V feed. The
+check before wiring is unchanged: **CAN H ↔ CAN L** at the service connector
+with the ignition off reads **60 Ω**. See [FLASHING.md](FLASHING.md) §4.
+
+### The backstop has never actually fired on the bike
+
+Armed on every sleep, but wake-on-CAN has always got there first, so the recovery
+path it exists to provide is still untested in the field. On the bench it has
+been seen: on 2026-10-04 a CANFD-MC with no bus and the backstop shortened to
+120 s for the test woke with `wake: timer` ([OTA.md](OTA.md), rollback test
+step 5).
+
+---
+
+## History: the LilyGO T-2CANFD (on the bike until 2026-09-28)
+
+Everything in this section is about the LilyGO board: its isolated transceiver
+module, its 17 mA floor, its headers and its terminal. None of it describes the
+CANFD-MC, which was designed from these findings. Kept as written.
 
 ### The hunt for more mA is over — the floor is hardware
 
@@ -372,7 +522,7 @@ top.** Had the module been the type that draws its bus-side power from the bus,
 the arithmetic would have been different; "Integrated Power" is what rules that
 out.
 
-### How long it can stand
+### How long it can stand (LilyGO, 17 mA)
 
 With a stated set of assumptions — 18 Ah AGM, self-discharge about 1 mA
 equivalent, 50 % state of charge as marginal cranking and 35 % as doubtful on a
@@ -426,16 +576,12 @@ current: measure **CAN H ↔ CAN L** at the service connector with the ignition
 off. **60 Ω** is correct. **40 Ω** means the board's own 120 Ω terminator is in
 circuit on an already-terminated bus and must be opened.
 
-### The backstop has never actually fired
+### `busy` was hardcoded `false`
 
-Armed on every sleep, but wake-on-CAN has always got there first, so the recovery
-path it exists to provide is still untested in the field.
-
-### Other
-
-**`busy` is hardcoded `false`** at both call sites. An OTA cannot currently hold
-sleep off; in practice the bus is live during an OTA anyway, which is why this
-has not bitten.
+Until 2026.10.04-1 both `sleepTick()` call sites passed `false`, so an OTA could
+not hold sleep off; in practice the bus was live during an OTA anyway, which is
+why it never bit. Both now pass `netBusy() || rollbackPending()` — see
+[Deep sleep and OTA](#deep-sleep-and-ota).
 
 ---
 
@@ -446,8 +592,11 @@ has not bitten.
 | `src/sleep.h` | the contract, and the reasoning behind the shape |
 | `src/sleep.cpp` | the decision and the sleep itself |
 | `src/main.cpp` | `sleepBegin()`, `sleepNoteFrame()`, two `sleepTick()` calls, `sleepPublishAsleep()`, the `sleep/en` handler |
+| `src/net.cpp` | `netBusy()` — an OTA is running; one half of `busy` |
+| `src/rollback.cpp` | `rollbackPending()` — an OTA image is on trial; the other half |
 | `things/canbus.things` | the three MQTT channels (openHAB) |
 | `items/canbus.items` | `CanBus_Sleep`, `CanBus_SleepState`, `CanBus_SleepWake` |
+| `things/canbus-bench.things`, `items/canbus-bench.items` | the same for the bench board: `CanBench_SleepEnable`, `CanBench_Sleep` |
 
 ### Constants
 

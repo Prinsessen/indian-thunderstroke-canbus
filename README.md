@@ -58,8 +58,8 @@ you whether *you* are the problem.
 | | |
 |---|---|
 | **Tyre pressure with its temperature** | Both, per wheel, from the TPMS sensors |
-| **Cold-equivalent pressure** | What each tyre would read at ambient, by the gas law. A tyre at 27 °C reading 35.4 PSI is 33.7 cold — against a 36 PSI cold spec, that is 2.3 low, and the dash cannot tell you so |
-| **Named fault codes** | 179 SPNs transcribed from the service manual. Not "check engine" but *"Injector 1, Driver Circuit Open/Grounded"* |
+| **Cold-equivalent pressure** | What each tyre would read at 20 °C, the temperature a placard pressure is specified at, by the gas law. A tyre at 27 °C reading 35.4 PSI is 34.2 cold — against a 36 PSI cold spec, that is 1.8 low, and the dash cannot tell you so |
+| **Named fault codes** | The service manual's fault table transcribed: 238 SPN/FMI combinations in Polaris's own words. Not "check engine" but *"Injector 1, Driver Circuit Open/Grounded"* |
 | **Wheel-speed sensor monitoring** | Both sensors compared continuously; brief dropouts counted and kept across reboots |
 | **Gear-change logging** | Every change with its context, and a tally of the implausible ones |
 | **Lean angle** | Upright, resting on the stand, or lying down |
@@ -79,7 +79,7 @@ Worth as much as the list above, because it saves somebody a week:
 | **The saddlebag locks** | Console switch and both fob buttons, actuators confirmed running by the voltage sag they cause. The bus stayed silent |
 | **The security alarm** | Arming chirps the horn and wakes nothing |
 | **The fog lamps** | On and off six times with the change detector running. Nothing answered. Indian's fault table knows the lamps — SPN 520291 and 520292 — so failures are reported; the switch position is not |
-| **Cruise control engaged (SPN 595)** | Held at 94 km/h with the rider's hand off the grip. Byte 4 never moved, while the button presses in the *same frames* came through perfectly |
+| **Cruise control engaged (SPN 595), from the switch module** | Held at 94 km/h with the rider's hand off the grip. Byte 4 of the switch module's frame never moved, while the button presses in the *same frames* came through perfectly. Whether the ECM reports it in its own copy of that message is an open lead from older captures, not yet tested on the road; see [DECODE-PLAN.md](docs/DECODE-PLAN.md) |
 | **Coast and accelerate (SPN 600 / 602)** | Not sent. Indian transmits SET and RESUME only; the decel/accel meaning is applied by the ECU once engaged |
 | **The low-oil-pressure lamp, at key-on** | Key on, start, idle, key off, key on again with every DM1 lamp byte and every VCM status byte watched: nothing followed the pressure. The switch sits on the VCM; it evidently reports low pressure only as a fault with the engine running, which nobody is going to provoke on purpose. The service manual then named it: SPN 98 FMI 4 "Pressure Too Low", P1526, MIL on, and the lamp is specified to light only with the engine running. So it is a DM1 fault, not a status bit, and nobody is going to run the engine dry to watch it arrive |
 
@@ -155,8 +155,8 @@ is how it was found.
 
 ## Cruise control, derived
 
-SPN 595 is not transmitted, so the engaged state is worked out instead — from
-measured inputs only. The rocker (SPN 596), the SET and RESUME presses (599/601),
+The switch module does not transmit SPN 595, so the engaged state is worked out
+instead — from measured inputs only. The rocker (SPN 596), the SET and RESUME presses (599/601),
 the brake (597), the clutch (598) and road speed.
 
 A press only *arms* the state. It becomes `HOLDING` once the speed has sat still
@@ -176,7 +176,7 @@ Only the rule is inferred. Every input is measured, and the published value says
 > field by field, every control, and the formula behind each figure the app
 > calculates rather than reads from the motorcycle.
 
-An instrument cluster rather than a data readout. Around 10,000 lines of Kotlin,
+An instrument cluster rather than a data readout. Around 13,000 lines of Kotlin,
 plain Views and Canvas — no Compose — because everything on screen is a drawn
 instrument and a layout engine has nothing to contribute to a needle.
 
@@ -191,9 +191,10 @@ instrument and a layout engine has nothing to contribute to a needle.
 
 **A fault banner across the top of every page.** The diagnostics were decoded and
 then buried on a page nobody visits while a fault is developing, which is the one
-time they matter. Six conditions in the order a rider wants them: what could put
-you down, then what will strand you, then what needs planning. It is deliberately
-not dismissible — a warning you can swipe away is one you will swipe away.
+time they matter. Nine conditions in the order a rider wants them: what could put
+you down, then what will strand you, then what needs planning; only the worst one
+shows. Red ones breathe, amber ones sit still. It is deliberately not dismissible —
+a warning you can swipe away is one you will swipe away.
 
 **Three lamp states, not two.** Every switch is lit, dark, or *struck through*
 when the bus has never mentioned it. A dark lamp reads as "not active", which is
@@ -234,10 +235,20 @@ heat is coming out of the battery.
 
 ---
 
+## Hardware
+
+The firmware runs on an ESP32-S3 with an MCP2518FD CAN controller. On the author's
+bike that is **CANFD-MC**, a 55 × 32 mm board made for this job: permanent 12 V
+from the service connector, four soldered wires, no connectors, and about 5 mA
+asleep (measured on the bench). Its design files are in
+[Prinsessen/canfd-mc-hardware](https://github.com/Prinsessen/canfd-mc-hardware).
+It has the pin map of the LilyGO T-2CANFD, which the project ran on before and
+which the same build still fits.
+
 ## Layout
 
 ```
-firmware/     ESP32-S3 (LilyGO T-2CANFD, MCP2518FD). PlatformIO.
+firmware/     ESP32-S3 + MCP2518FD (CANFD-MC, or a LilyGO T-2CANFD). PlatformIO.
 app/          Android cluster. Kotlin, plain Views and Canvas, no Compose.
 docs/         The protocol, the decode plan, and the method.
 openhab/      The openHAB side: canbus.items, canbus.things and the rules that
@@ -248,15 +259,15 @@ openhab/      The openHAB side: canbus.items, canbus.things and the rules that
 |---|---|
 | [`PROTOCOL.md`](docs/PROTOCOL.md) | Every field, over MQTT and over BLE, and what each one means |
 | [`DECODE-PLAN.md`](docs/DECODE-PLAN.md) | What is known, what is not, what has been ruled out and why |
-| [`GARAGE-RUN.md`](docs/GARAGE-RUN.md) | Eight test sessions written up as they happened, including the ones that failed and why |
+| [`GARAGE-RUN.md`](docs/GARAGE-RUN.md) | Eleven test sessions written up as they happened, including the ones that failed and why |
 | [`UNEXPLORED-BYTES.md`](docs/UNEXPLORED-BYTES.md) | Every byte that varies and is not yet read |
 | [`KEIS-PROTOCOL.md`](docs/KEIS-PROTOCOL.md) | The heated clothing BLE protocol |
 | [`DTC-CODES.md`](docs/DTC-CODES.md) | The fault code tables |
-| [`FLASHING.md`](docs/FLASHING.md) · [`OTA.md`](docs/OTA.md) | Getting firmware onto the board, by cable and over the air |
+| [`FLASHING.md`](docs/FLASHING.md) · [`OTA.md`](docs/OTA.md) | Getting firmware onto the board, by cable and over the air: over HTTP at home, or over the MQTT link from anywhere, with an automatic roll-back when a new image does not come up |
 | [`SLEEP.md`](docs/SLEEP.md) | Deep sleep on a permanently powered board: how it wakes, and the four faults only the bike found |
 | [`TRANSMIT.md`](docs/TRANSMIT.md) | What leaving hardware listen-only would unlock, what it would cost, and what must stay impossible |
 | [`BUILD-SETUP.md`](docs/BUILD-SETUP.md) · [`WORKFLOW.md`](docs/WORKFLOW.md) | Building the app, and the traps that cost an afternoon each |
-| [`openhab/`](openhab/) | The items and things that bind the MQTT topics (70 channels, JSONPATH picks, no transforms), the OTA trigger, the probe queue, the cruise latch, "this ride" and what survives key-off — and an example that opens a garage door from the handlebar |
+| [`openhab/`](openhab/) | The items and things that bind the MQTT topics (JSONPATH picks, no transforms), the OTA trigger and the rule that serves the image over MQTT, the probe queue, the cruise latch, "this ride" and what survives key-off — and an example that opens a garage door from the handlebar |
 | [`IDEAS.md`](docs/IDEAS.md) | The backlog: every input, output and feature the bike could still give, with what decides each |
 | [`WIRING-DIAGRAMS.md`](docs/WIRING-DIAGRAMS.md) | The service manual's schematics read connector by connector: one chassis harness for all six models, the two connectors a Springfield leaves empty, the VCM's three plugs, the switch cubes, the round cluster's seven wires — with the diagram excerpts |
 | [`SKILLS.md`](docs/SKILLS.md) | A handover note: the machine, the bus, the method, and eight ways to be wrong |
@@ -273,14 +284,25 @@ doing the same work on their own machine.
 ## Building it
 
 **Firmware.** Copy `firmware/src/config.example.h` to `config.h` and fill in your
-WiFi, your MQTT broker and **your own BLE passkey**. Then:
+WiFi, your MQTT broker, the address of the server that will hold the OTA image and
+**your own BLE passkey**. As it stands the example builds the production image for
+the CANFD-MC or a T-2CANFD. Then:
 
 ```
 cd firmware && pio run -e sniffer-t2can -t upload
 ```
 
-Over-the-air updates are supported after the first flash; see
-[`docs/OTA.md`](docs/OTA.md).
+Always name the environment: `sniffer-t2can` is the bike, `bench-canfdmc` the same
+board under a bench identity, and a bare `pio run` builds every environment in the
+file. The CANFD-MC has no USB connector; the first flash goes through the pads on
+its back ([`docs/FLASHING.md`](docs/FLASHING.md)).
+
+After the first flash, updates go over the air ([`docs/OTA.md`](docs/OTA.md)): the
+command `update` makes the board fetch the image over HTTP from a server on the
+home network, and `mqtt` brings the same image in chunks over the MQTT link the
+board already has, so it also works from a phone's hotspot. Either way the new image
+is on trial until it has reached the broker; if it does not, the previous image
+boots again by itself.
 
 The network -- WiFi, SNTP, MQTT, OTA -- runs in its own task on core 0
 (`firmware/src/net.cpp`, since 2026-09-27); the loop that reads the bus and feeds
@@ -303,11 +325,14 @@ Pairing an old app with new firmware will show one signal as another.
 
 Most of what is here was found the same way, and the documents say so at each step:
 
-1. **Look up what the standard says, then treat it as a guess.** Indian does not
-   always follow J1939's byte layout. Ambient temperature is the proof: the
-   standard puts it in bytes 5–6 and this bike puts it in 4–5. The decode is
-   empirically right and structurally wrong, and it works — it was later
-   confirmed by a physical measurement it had predicted.
+1. **Look up what the standard says, then treat it as a guess.** Most of this bus
+   turned out to follow J1939 byte for byte, and where it differs it differs in
+   meaning rather than layout: the slot the standard gives to coolant temperature
+   carries cylinder head temperature here, because an air-cooled engine has no
+   coolant. This README used to offer ambient temperature as proof that Indian
+   moves bytes around. It does not: the standard counts bytes from one, the
+   firmware from zero, and the "deviation" was the difference. Check which
+   numbering a source uses before calling anything a deviation.
 2. **Correlate against something already known**, and check the lag. A correlation
    of 1.00 at zero lag means you have found a copy of a signal, not a new one.
 3. **Design one manoeuvre that separates the survivors**, and hold each state for

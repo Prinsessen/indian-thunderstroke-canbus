@@ -2,7 +2,7 @@
 // Indian Springfield 2017 — CAN bus over MQTT
 // =============================================================================
 // WHAT THIS IS
-// One MQTT thing with 70 channels, fed by an ESP32 wired into the motorcycle's
+// One MQTT thing, fed by an ESP32 wired into the motorcycle's
 // CAN bus. The firmware decodes the bus itself and publishes ONE compact
 // retained JSON roughly once a second:
 //
@@ -15,10 +15,10 @@
 // ABSENT FIELDS ARE NOT ZERO
 // A field the bike is not currently sending is simply missing from the JSON,
 // and JSONPATH then leaves the item at its last value rather than zeroing it.
-// Several signals only appear once the bike is moving — cruise engagement
-// (SPN 595) is the clearest example. automation/js/canbus-clear-live-values.js
+// Several signals only appear once the bike is moving — the derived cruise hold
+// and the tyre readings are the clearest examples. automation/js/canbus-clear-live-values.js
 // exists for exactly this: it clears the momentary readings to UNDEF when the
-// bus goes offline, so a parked bike does not show the last value it had at
+// ignition goes off or the board goes offline, so a parked bike does not show the last value it had at
 // 90 km/h. Expect those items to repopulate from the retained message whenever
 // the thing re-initialises, and to be cleared again on the next disconnect.
 //
@@ -33,7 +33,7 @@
 // /etc/openhab-firmware/indian-canbus/ — its own git repository, outside
 // /etc/openhab and NOT covered by the auto-commit service. See CLAUDE.md.
 //
-// Used by:  items/canbus.items (70 items, groups gCanBus_*)
+// Used by:  items/canbus.items (groups gCanBus_*)
 //           automation/js/canbus-*.js
 //           sitemaps/myhouse.sitemap
 // =============================================================================
@@ -85,8 +85,8 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// not published the field for days, so the item never updated.
 	Type string : brakeRear "Brake"          [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.brakeRear" ]
 	// Cruise, decoded in the garage 2026-09-05 (PGN 65265 SA 39 byte 4/5).
-	//   cruise       SPN 595 engaged   -- absent until the bike is moving;
-	//                "not available" is deliberately not published as OFF
+	//   cruise       the DERIVED hold state (SA 39 does not transmit SPN 595);
+	//                absent until a press has armed it
 	//   cruiseEnable SPN 596 rocker on
 	//   cruiseSw     SPN 599/601, the SET and RESUME presses
 	// DERIVED, not measured -- SPN 595 is not transmitted on this bus.
@@ -116,8 +116,9 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// ESP32's NVS, so they survive a reboot and an OTA -- a setting that
 	// resets on every flash is not a setting.
 	//
-	// The state topic is one retained JSON for all four; the command topics
-	// are separate so a Switch item binds straight to one with no rule.
+	// The state topic is one retained JSON for all five; the command topics
+	// are separate so a Switch item binds straight to one (canbus-probe-queue.js
+	// resends a command that was given while the board was asleep).
 	// Bus health -- the CAN controller's own error registers, on their own
 	// topic because they describe OUR installation and not the motorcycle.
 	Type string : busState    "Bus: state"       [ stateTopic="canbus/springfield/bus/health", transformationPattern="JSONPATH:$.state" ]

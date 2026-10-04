@@ -1,22 +1,26 @@
 /*
- * Indian Springfield 2017 — CAN bus LISTEN-ONLY sniffer  (USB + MQTT)
+ * Indian Springfield 2017 — CAN bus LISTEN-ONLY decoder  (MQTT + BLE)
  *
- * ONE firmware, TWO boards — the CAN controller is abstracted behind a HAL
- * (can_hal.h) selected by CAN_BACKEND in config.h:
- *   • LilyGO TTGO T-CAN485  — ESP32, BUILT-IN transceiver on the native TWAI
- *                             controller (default, currently deployed).
- *   • LilyGO T-2CAN         — ESP32-S3 + external MCP2518FD on SPI.
- * Everything below the wire (J1939 decode, TP/BAM, MQTT, OTA, WiFi, LED) is
- * identical on both; only the ~50-line HAL backend differs.
+ * ONE firmware, the CAN controller abstracted behind a HAL (can_hal.h) selected
+ * by CAN_BACKEND in config.h:
+ *   • ESP32-S3 + MCP2518FD on SPI — the CANFD-MC (own board, on the bike) and
+ *                                   the LilyGO T-2CANFD it replaced.
+ *   • LilyGO TTGO T-CAN485        — classic ESP32, built-in transceiver on the
+ *                                   native TWAI controller. The first test rig.
+ * Everything below the wire (J1939 decode, TP/BAM, MQTT, BLE, OTA) is identical
+ * on both; only the thin HAL backend differs.
  *
  * SAFETY: This firmware NEVER transmits on the CAN bus. The controller is put
- * in hardware LISTEN-ONLY mode (TWAI listen-only / MCP ListenOnly), so it emits
- * no ACKs and no frames. Only safe way to probe a live vehicle CAN bus until
- * IDs/rates are known.
+ * in LISTEN-ONLY mode (MCP ListenOnly / TWAI listen-only), so it emits no ACKs
+ * and no frames, and TX_ENABLED 0 keeps every transmit path compiled out.
  *
- * Outputs in parallel:
- *   1. USB serial  — every raw frame (full detail)
- *   2. MQTT        — per-CAN-ID JSON on change, throttled (no flooding)
+ * Two modes (FIRMWARE_MODE in config.h):
+ *   PRODUCTION — what the bike runs: decodes the bus here and publishes one
+ *                `state` JSON over MQTT and the same state over BLE.
+ *   DISCOVERY  — per-CAN-ID JSON on change and raw frames on USB, for a bus
+ *                that is not understood yet.
+ * The network (WiFi, MQTT, OTA) is in net.cpp, deep sleep in sleep.cpp, the OTA
+ * trial and roll-back in rollback.cpp, the phone link in ble.cpp.
  *
  * Copy src/config.example.h -> src/config.h and fill in WiFi/MQTT first.
  */
@@ -1281,8 +1285,9 @@ static const char *standState();   // defined below; used by gearChanged()
 // job and stops the engine -- correctly, on a lie.
 //
 // What the bus CANNOT tell us is whether a change was real. The clutch switch
-// would settle it (SPN 598) and Indian sends it as "not available", so a false
-// gear and a real one look identical here. This therefore records events for a
+// would help settle it (SPN 598). When this was written it was believed to be
+// sent as "not available"; it is in fact on the bus from SA 0 (decoded further
+// down as `clutch`), but this log does not use it. So this records events for a
 // human to judge, and classifies nothing: the rider knows whether she touched
 // the lever, and the log knows the time and the circumstances.
 //
@@ -1393,10 +1398,9 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
                 // J1939 "not available" and is treated as no high byte rather
                 // than as 255 * 256.
                 //
-                // Unproven above 255 until the next fill-up: the tank was at
-                // 20 % when this was written. If the dash then shows ~340 and
-                // this reads ~85, b[4] is not it either and the probe line
-                // below will say what is.
+                // Proven at the fill-up of 2026-09-15: 254, 257, ... 272 with
+                // no wrap, so b[4] is the high byte. (Before 2026.09.14-4 one
+                // byte was read, and a dash showing 341 read 85 here.)
                 const int hi = (b[4] == 0xFF) ? 0 : b[4];
                 const int km = b[3] | (hi << 8);
                 if (!isnan(st.range) && abs(km - (int)st.range) <= RANGE_STEP_KM) {
@@ -1438,7 +1442,8 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             if (nn >= 1 && b[0] != 0xFF) SETI16(lean, b[0]);
             break;
         case 65262:  // ET1 byte 1. NOT coolant -- this bike is air-cooled. Indian reuses
-                     // the slot for engine OIL temperature: ambient at rest, 100-115 C warm.
+                     // the slot for CYLINDER HEAD temperature, the engine's only temperature
+                     // sensor (service manual; "oil" was a guess, corrected 2026-09-05).
             if (nn >= 1 && b[0] != 0xFF) SETF(coolant, (float)b[0] - 40.0f);
             break;
         case 65215:

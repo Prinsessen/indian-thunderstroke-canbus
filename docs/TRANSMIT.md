@@ -19,7 +19,9 @@ documented, the app is current, and a real test ride has happened.
 
 The gear position sensor is the reason to consider this at all. Three sensors
 have been replaced under warranty without anyone cleaning the mechanism, and
-`CanBus_GearGlitches` counts what *we* observe live since the last boot. DM2 is
+`CanBus_GearGlitches` counts what *we* have observed ourselves — a tally kept in
+NVS, so it survives reboots, deep sleep and OTA and starts again only after a
+factory flash. DM2 is
 what **the ECU itself has stored** — including faults from before this project
 existed.
 
@@ -91,7 +93,10 @@ In this order, and only this:
 
 1. In the garage, on the sidestand
 2. Ignition **on**, engine **off**
-3. USB cable attached — a serial console that does not depend on WiFi or MQTT
+3. A serial console that does not depend on WiFi or MQTT. The CANFD-MC on the
+   bike has no USB connector, so that means a USB cable soldered to the pads on
+   the back (GND, USB_D+, USB_D−; [FLASHING.md](FLASHING.md) §4b) before the
+   session, with the seat off
 4. **One** request, to **one** address: DM2 from SA 0
 5. Rate-limited to a single request; listen for the answer
 6. Never on a moving machine

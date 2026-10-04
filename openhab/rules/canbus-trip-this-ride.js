@@ -10,9 +10,9 @@
 //
 // A ride starts when the engine starts (RPM goes 0/NULL -> >0). At that moment
 // we snapshot Trip 1 into CanBus_TripStart. From then on CanBus_TripThis shows
-// how far this ride has covered. CanBus_TripStart is a normal item so the
-// inmemory persistence (everyChange, restoreOnStartup) survives an openHAB
-// restart mid-ride.
+// how far this ride has covered. CanBus_TripStart is a normal item, so
+// restoreOnStartup (mapdb on this server; an in-memory store alone would not
+// survive it) brings it back after an openHAB restart mid-ride.
 //
 // Items (items/canbus.items):
 //   Number CanBus_Trip       <- Trip 1, MQTT bound (source of truth)

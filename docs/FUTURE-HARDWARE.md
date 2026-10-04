@@ -1,10 +1,17 @@
 # Future hardware — what was considered, and what was decided (2026-09-16)
 
 Notes from a conversation the day after the DNS-cache fix and the CANFD-MC
-rev 1.0 review, kept so the reasoning does not have to be redone. Nothing here
-is scheduled. The order of work is unchanged: **bring up CANFD-MC rev 1.0
-first**, with a proven bus front end, a measured power profile and a verified
-net list. Everything below builds on that, not instead of it.
+rev 1.0 review, kept so the reasoning does not have to be redone. On that day
+nothing here was scheduled and the order of work was: **bring up CANFD-MC
+rev 1.0 first**, with a proven bus front end, a measured power profile and a
+verified net list. Everything below builds on that, not instead of it.
+
+**Status 2026-10-04.** That first step is done: CANFD-MC rev 1.0 is on the bike
+(a first board from 2026-09-28, which failed; board #0001 since 2026-10-03),
+board #0002 is the bench board, and the sleep current is measured (4.62 mA,
+SLEEP.md). Of what follows, one thing has started: the cellular trial of §2, as
+a Cat-1 HAT for the bench board (IDEAS.md B14, HAT ordered 2026-09-28). The
+rest is still not scheduled. The text below is as written on 2026-09-16.
 
 ---
 
@@ -131,6 +138,13 @@ power profile is known, the module moves onto the board in rev 2 with a proper
 3.8 V rail.
 
 ### Recommendation, in order
+
+*What happened since (2026-10-04):* the RUTM50 router is on the bike, and the
+module of point 2 is being tried as a HAT on bench board #0002 before any board
+change (IDEAS.md B14). OTA
+no longer depends on the uplink being WiFi at home: since firmware 2026.10.04-1
+the image can come over the MQTT link (OTA.md). The recommendation itself is
+left as it was written.
 
 1. **4G WiFi stick now** (Huawei E8372h-320 or ZTE MF79U on an ignition-switched
    5 V USB outlet) — as a trial, to give the bike its own uplink and a data

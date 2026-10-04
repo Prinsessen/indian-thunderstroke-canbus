@@ -33,9 +33,9 @@
 #include <SPI.h>
 #include <ACAN2517FD.h>
 
-// ==================== PIN CONFIG (LilyGO T-2CANFD, CAN A) ====================
+// ============ PIN CONFIG (CANFD-MC, and LilyGO T-2CANFD CAN A) ===============
 // ESP32-S3 SPI wiring to the MCP2518FD, from LilyGO's official pin_config.h
-// (T_2Can_Fd). Overridable from config.h.
+// (T_2Can_Fd). The CANFD-MC was laid out to the same map. Overridable from config.h.
 #ifndef MCP_SCK
 #define MCP_SCK   12   // SPI_SCLK
 #endif

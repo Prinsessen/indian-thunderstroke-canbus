@@ -1,7 +1,8 @@
-# Three things missing from how we work
+# Four things missing from how we work
 
 Not bugs. Tools that are not there, each of which cost real time on 2026-09-04 —
-a day of 32 firmware builds, 54 commits and six signals found.
+a day of 32 firmware builds, 54 commits and six signals found. (Three at first;
+the fourth was added the next evening.)
 
 Written down because they were named out loud and then left in the conversation,
 which is where good observations go to die. The owner asked whether they had been
@@ -46,9 +47,12 @@ The second one was caught here only because an audit script had been written
 after the first. That is the wrong order: the script found what a compiler would
 have found for free.
 
-**The fix.** Install the Android command-line tools on the server and run
-`./gradlew assembleDebug` before handing anything over. Nothing then reaches the
-Windows machine that does not compile.
+**The fix proposed then** was to install the Android command-line tools on the
+server and run `./gradlew assembleDebug` before handing anything over, so that
+nothing reaches the Windows machine that does not compile. **That was not done,
+and is not the plan:** the app is built on the owner's Windows machine only
+(SKILLS.md, "The app"), and this server still has no Android SDK. What runs here
+before a hand-over is `kt-audit.py` (above) and a careful read.
 
 ---
 
@@ -76,6 +80,11 @@ return values, with no hardware in them, and test those. The app already does
 exactly this: `HeatCurve` and `Dtc` were split apart for the same reason after a
 heat-curve bug proved untestable, and they have 34 tests between them. The
 firmware has none.
+
+Still open on 2026-10-04: there is no test of the decode arithmetic. Two checks
+around it exist and run on the server — `tools/sync_check.py` (do the firmware
+and the app agree on the keys of the state payload) and `tools/ble_budget.py`
+(does the payload fit the BLE budget) — and neither looks at a decoded value.
 
 ---
 
