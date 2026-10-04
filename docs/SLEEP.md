@@ -173,10 +173,11 @@ those 4.62 mA is the MCP2518FD, still receiving, and the TCAN332G transceiver
 | asleep the whole time | 4.62 mA | about 81 days |
 | asleep, with the hourly backstop wake of 90 s at ~28 mA | about 5.2 mA | about 72 days |
 
-**Still open: board #0001 has not been measured in place on the bike**, with the
-bus connected and supply and bus sharing the service connector's ground. The
-bench figure is the one to beat or confirm; the measurement takes a minute with
-a meter in series with the 12 V pad.
+**Confirmed on the bike.** The board has also been measured in place, with the
+bus connected and supply and bus sharing the service connector's ground, and it
+reads the same as on the bench (the owner's measurement, reported 2026-10-04). The question of current
+through the CAN lines on a ground difference is thereby answered: none that a
+meter shows.
 
 ### Measured on the LilyGO T-2CANFD, 2026-09-07 (history)
 
@@ -378,15 +379,14 @@ SPI writes ACAN2517FD does not expose — which would take the board to about
 1 mA. It is IDEAS.md D6, status "measure": to be tried on a bench board with a
 USB-CAN adapter sending the wake frame, never first on the bike.
 
-### The on-bike measurement of board #0001
+### The on-bike measurement — closed
 
-4.62 mA is a bench figure with no bus connected. Board #0001 has not been
-measured in place. One reading with a meter in series with the 12 V pad,
-ignition off and the board asleep, closes it.
+The board has been measured in place on the bike and reads the same as on the
+bench (the owner's measurement, reported 2026-10-04). Nothing is open here.
 
 ### How long it can stand (CANFD-MC, calculated)
 
-**Calculated, not measured**, from the bench figure of 4.62 mA and the same
+**Calculated, not measured**, from the measured 4.62 mA (bench and bike) and the same
 assumptions as the LilyGO table in the history below — 18 Ah AGM, self-discharge
 about 1 mA equivalent, 50 % state of charge as marginal cranking and 35 % as
 doubtful on a big twin:
