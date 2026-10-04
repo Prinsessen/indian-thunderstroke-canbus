@@ -368,6 +368,9 @@ board's thing):
 - The image is the file `update` serves (`tools/deploy-bench-ota.sh` for the bench).
   Each board is listed in `BOARDS` in the rule with its own file, so a board cannot
   be handed another identity's image. `CanBus_OTA` / `CanBench_OTA` take the command.
+- In the sitemap the bike's OTA row has two buttons: `Update Now` sends `update` (HTTP, home
+  LAN only), `Update via MQTT` sends `mqtt` (works wherever the board reaches the broker).
+  The ignition rule in "Before pressing Update" holds for both.
 
 **Results, 2026-10-04, board #0002, 1 405 584 bytes:**
 
