@@ -307,11 +307,10 @@ Logging frames (USB) + publishing changes (MQTT):
 
 Three things in it are not what they seem:
 
-- **Images up to 2026.10.04-2 print an older banner**, the one on the bike
-  included: `USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A)` and a fixed
+- **Images up to 2026.10.04-2 print an older banner**: `USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A)` and a fixed
   `canbus/indian/state` on the `MODE` line, whatever the board and its base topic.
-  The source was corrected on 2026-10-04; the lines above are what the next image
-  prints (the topic is the build's own base topic).
+  From 2026.10.04-3, which is on the bike, the lines above are what is printed
+  (the topic is the build's own base topic).
 - **There is no bitrate scan.** `CAN_FIXED_BITRATE` is 250000 in `config.h`, so
   the firmware listens at 250 kbit/s only ([SLEEP.md](SLEEP.md) has the reason).
 - **`[rollback]`** reads `state none` after a USB flash and `state pending` on
@@ -320,7 +319,7 @@ Three things in it are not what they seem:
 
 If **no frames arrive** with the ignition ON: check the four pads (CANH/CANL not
 swapped, GND, 12 V on VBAT) and the 60 Ω reading in §4. The firmware's own hint
-at this point says the same from the next image on; images up to 2026.10.04-2
+at this point says the same from 2026.10.04-3 on; images up to 2026.10.04-2
 still list `PIN_5V_EN`, `CAN_SE` and the 120 Ω jumper, which are T-CAN485 parts
 and do not exist on the CANFD-MC.
 

@@ -160,7 +160,7 @@ it was not run. Writing the instruction down was not enough.
 ---
 
 Everything waiting on wheels, in one list, so it takes one outing instead of
-three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.04-2`.
+three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.04-3`.
 
 Most of it is passive: ride normally and the data arrives. Only two things ask
 anything of the rider, and both take four minutes.
@@ -326,7 +326,17 @@ Just ride, and these answer themselves from the log afterwards:
 
 ---
 
-## Cruise control — SETTLED 2026-09-05, no ride needed
+## Cruise control — one thing to do on the next ride (added 2026-10-04)
+
+Use the cruise control for a minute or two at a steady speed, let it go with the
+brake once and with the clutch once, and SET it again. Nothing to watch while
+riding: firmware 2026.10.04-3 writes a line on `probe/cruise` each time the ECM's
+own cruise bits change (`SA0 ... 595=N ... hold=N`), and openHAB keeps them in
+`CanBus_Probe_CruiseLine`. Afterwards the lines say whether SPN 595 is on the bus
+from SA 0 after all (DECODE-PLAN.md, the cruise section). The cruise probe switch
+must be ON.
+
+## Cruise control from SA 39 — SETTLED 2026-09-05, no ride needed
 
 Everything that was open here has been answered, and this section is kept only so
 the next person does not repeat the ride.

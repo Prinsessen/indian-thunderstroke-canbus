@@ -21,7 +21,7 @@ android {
         // the app's About shows versionName, and two different numbers there
         // confused everyone (2026-09-20). So the name is derived: bump the
         // code before every Play upload and the name follows as 0.<code>.
-        val playVersionCode = 5
+        val playVersionCode = 6
         versionCode = playVersionCode
         versionName = "0.$playVersionCode"
     }

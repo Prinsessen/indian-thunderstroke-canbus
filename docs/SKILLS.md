@@ -8,7 +8,7 @@ below and are the authority on what has been found. This one is about **how the
 work is done, where things live, and what has already cost time.**
 
 Last revised **2026-10-04**: checked against the firmware on the bike
-(`2026.10.04-2`, `FIRMWARE_MODE 1`, `PROBE_CHANGES 1`, MCP2518 backend). The
+(`2026.10.04-3`, `FIRMWARE_MODE 1`, `PROBE_CHANGES 1`, MCP2518 backend). The
 board, the paths, the list of what is shipped and the list of what is open were
 all behind and are corrected below. The revision before it was 2026-09-07: deep
 sleep running on the bike, the kill switch and start button decoded, and

@@ -41,7 +41,7 @@ heated clothing based on how cold it actually feels at road speed.
 The interface is the owner's own board, the **CANFD-MC rev 1.0** — an
 ESP32-S3-WROOM-1U with an MCP2518FD CAN controller. It replaced the LilyGO
 T-2CANFD the project started on: a first board went on the bike on 2026-09-28
-and board #0001 on 2026-10-03. The bike runs firmware 2026.10.04-2 and still
+and board #0001 on 2026-10-03. The bike runs firmware 2026.10.04-3 and still
 advertises over Bluetooth as "Springfield"; a board on the bench advertises as
 "CANFD-bench". New firmware needs no cable: the interface fetches it over HTTP
 on the home network (`update`), or over its MQTT link from anywhere it can reach
@@ -344,11 +344,10 @@ For each wheel:
 The cold figure needs no outside temperature; without one, only OUT is missing.
 See [9.1](#91-cold-equivalent-tyre-pressure) for why.
 
-The line at the foot of the page gives the age and the outside temperature
-stored with the reading. Its wording is older than the fixed reference: it says
-"corrected to N°C ambient", or "no ambient, showing raw pressure", and neither
-is what the page now does — COLD is at 20 °C either way. Read the age and the
-temperature, not the verb, until the line is reworded.
+The line at the foot of the page gives the age of the reading and says what COLD
+is: "measured 4 days ago · COLD is corrected to 20°C". (Up to 0.5 it said
+"corrected to N°C ambient" or "no ambient, showing raw pressure", wording from
+before the fixed reference.)
 
 ### MACHINE
 
@@ -650,9 +649,9 @@ controlled by → THIS DEVICE** on the tablet that rides on the bar, **ANOTHER
 DEVICE** on the phone in the pocket. A device set to ANOTHER DEVICE never
 connects to the controllers, and flipping the button releases or takes the
 controllers immediately, no restart. Its HEAT page shows both zones as WAITING
-with the same "not on the bike — connects by itself when switched on" line a
-switched-off garment gets; the line that names the real reason, "another device
-controls the clothing", is in the app but is not reached as built. The bike itself
+and says why: "another device controls the clothing — change it in settings"
+(from release 6; up to 0.5 it showed the "not on the bike" line a switched-off
+garment gets). The bike itself
 serves two devices at once since firmware 2026.09.19-2, so both still show
 the ride; only the clothing needs one owner.
 
@@ -762,9 +761,10 @@ a true statement about a parked machine.
 
 **Fallback, when the bike does not report it:** the app computes its own from the
 filtered fuel level ([9.5](#95-fuel-level)), the tank capacity from settings, and
-the economy seen recently. The window is 180 samples and was meant to be three
-minutes of them; as built it is fed about ten times a second, and only while the
-RIDE page is in front, so it covers nearer twenty seconds.
+the economy seen over the last three minutes: 180 samples, one per state message
+from the bike, collected whether or not the RIDE page is in front. (Up to 0.5
+the window was fed ten times a second from the RIDE page only and covered nearer
+twenty seconds.)
 
 **That one is a band, not a figure.** A sender reading in whole percent and a
 rolling average do not between them support "183 km", and printing it would claim
@@ -904,11 +904,11 @@ can, and it is the only control here you have a chance of using with gloves on.
 | Screen orientation | Follow the phone, or locked to portrait or to landscape. A mount holds the phone one way up, and auto-rotate on a motorcycle answers to bumps and lean angle as readily as to intent |
 | Ride distance | Reset. Also clears the ride figures — resetting half of them would leave a top speed from a road you are no longer on beside a distance of zero |
 | Service interval | The manufacturer specifies 8000 km for the Thunder Stroke. Steps of 500 |
-| Last service | Tap, and type the odometer reading at the last service. The box opens on the reading now, for the day the service has just been done, and shows Trip 1 beside it for reference. A figure above the odometer is refused. It is sent to the motorcycle and kept there; the phone keeps it only until the bike can be told. The row's own caption still reads "Tap to record one at the odometer showing now", from before the figure was typed |
+| Last service | Tap, and type the odometer reading at the last service. The box opens on the reading now, for the day the service has just been done, and shows Trip 1 beside it for reference. A figure above the odometer is refused. It is sent to the motorcycle and kept there; the phone keeps it only until the bike can be told. |
 | Trousers / jacket controller | Scan and assign. Switch on only the one being assigned |
 | Heated clothing | Automatic from felt temperature, or manual only |
 | Clothing is controlled by | **THIS DEVICE** (the default): this install connects to the Keis controllers and runs the automatic and manual control, the handlebar gestures included. **ANOTHER DEVICE**: this install never connects to the controllers and only shows the bike; some other install owns the clothing. A Keis controller talks to one client, so exactly one device per bike says THIS DEVICE — the one on the bar — and the phone in the pocket says ANOTHER DEVICE. Flipping it takes or releases the controllers at once — see [8.12](#812-two-devices-who-controls-the-clothing) |
-| Curve endpoints | Off-at and full-at per zone, in felt degrees. Both zones start at 25 and 10, and the two ends are held at least 3 degrees apart. The caption under "Trousers: off at" still says the legs lead the jacket; they did in the first defaults and no longer do |
+| Curve endpoints | Off-at and full-at per zone, in felt degrees. Both zones start at 25 and 10, and the two ends are held at least 3 degrees apart. |
 | Fault codes | Shows how many are active. Tap to name one of the codes the bike is reporting now, so it is recognisable next time |
 | All-time records | Reset the highest speed and rpm ever seen |
 | Bluetooth pairing | Opens the system screen. The only cure for a stale bond is forgetting the device, so the app points at the door rather than describing where it is |
@@ -926,11 +926,9 @@ page. A plain press, and it opens a plain page: the licence, what the machine is
 what the hardware is, why it cannot transmit, the bus and its speed, how the link
 works, and the app and firmware versions side by side.
 
-Two of its lines are behind the machine. The hardware line still names the
-LilyGO T-2CANFD, the board this started on; the interface on the bike is now the
-CANFD-MC ([section 1](#1-what-it-is)). And the link line says MQTT reaches home
-over WiFi, where it now reaches home over any network the interface can join.
-Both wait for the next build of the app.
+From release 6 the hardware line names the CANFD-MC ([section 1](#1-what-it-is))
+and the link line says MQTT reaches home over WiFi or a phone hotspot. Up to 0.5
+it named the LilyGO T-2CANFD, the board this started on.
 
 It is a short press on purpose, where diagnostics below is a long one. Diagnostics
 is for whoever is debugging this; About is for anyone holding the phone and
@@ -981,7 +979,7 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
 | Symptom | Cause |
 |---|---|
 | **A tyre shows no OUT figure** | Ambient temperature was unknown when the reading was taken. The app will not estimate it; COLD and the alerts do not need it |
-| **The tyre page says "corrected to N°C ambient"** | Old wording. COLD is at a fixed 20 °C; the N is the outside temperature stored with the reading — see [9.1](#91-cold-equivalent-tyre-pressure) |
+| **The tyre page says "corrected to N°C ambient"** | The wording of 0.5 and earlier; update the app. COLD is at a fixed 20 °C — see [9.1](#91-cold-equivalent-tyre-pressure) |
 | **Tyre readings are hours or days old** | Normal. TPMS sensors sleep when the wheels stop. The age is shown for exactly this reason |
 | **A tell-tale is struck through** | The bus has never mentioned that signal. Not a fault in itself |
 | **Heat does nothing in the garage** | The engine must be running — see [8.9](#89-testing-without-riding) |
@@ -1010,11 +1008,6 @@ adb shell run-as dk.agesen.springfield cat files/ridelog.txt
   fallback — the motorcycle's own figure is printed exactly whenever the bike
   reports one. Anyone wanting a single number from the band should read the low
   end of it.
-- **The band's economy window is shorter than intended**, and only collects
-  while the RIDE page is in front. See [9.3](#93-fuel-range).
-- **A few captions are behind the behaviour**: the tyre page's foot line, two
-  settings captions, and the hardware line on the About page. Each is noted where
-  it appears in this guide.
 - **Ride figures do not survive an app restart.** All-time records do.
 - **Wind chill is undefined above 10 °C**, where felt temperature is simply the
   ambient. Heated clothing is not wanted at those temperatures in any case.

@@ -347,7 +347,8 @@ String CanBus_SoftwareId       "Software ID [%s]"                <text>        (
 //
 //   scan      byte-level change detector + PGN 2304. STATIONARY ONLY, so it
 //             costs nothing on a ride. Leave it on.
-//   cruise    65265 SA39 bytes 4-5, any speed, publishes only on change. Cheap.
+//   cruise    65265 SA39 bytes 4-5, and since 2026.10.04-3 SA0 byte 4 bits 0-1
+//             (the open SPN 595 lead), any speed, publishes only on change. Cheap.
 //   throttle  65382 SA0 bytes 1+4, any speed, TWICE A SECOND -- about 7,200
 //             messages an hour of riding. Turn it on to hunt, off afterwards.
 //   claims    address claims. Rate-limited, negligible.

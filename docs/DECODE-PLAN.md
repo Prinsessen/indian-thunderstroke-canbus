@@ -18,7 +18,7 @@ taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
 Last revised **2026-10-04**, when every status in this file was checked against
-the firmware running on the bike (`2026.10.04-2`, `src/main.cpp`). **What is
+the firmware running on the bike (`2026.10.04-3`, `src/main.cpp`). **What is
 still open is collected in one place:
 [What is genuinely still open](#what-is-genuinely-still-open-2026-10-04).**
 
@@ -1242,10 +1242,15 @@ twelve episodes have no recorded press at their start; and it has never been
 watched on the bike. A bit that is set while riding steadily on an open road
 has more than one possible meaning.
 
-**The cheapest check:** on the next ride with cruise in use, log `b[3] & 3`
-from SA 0 beside the derived `cruise` — extending `probe/cruise` to SA 0 is
-enough. If the two agree, the engaged state can be read instead of derived. If
-they do not, the lead is closed and the derivation stands as it is.
+**The check, in the firmware since 2026.10.04-3:** `probe/cruise` now also
+reports SA 0. One line per change of `b[3] & 3`, with the brake and clutch bits
+from the same byte and the derived hold beside it:
+`SA0 b4=0C 595=0  brake=0 clutch=0  hold=0  0 km/h` (the first one, parked,
+2026-10-04 12:54). On the next ride with the cruise in use, read those lines
+against `hold`. If `595` goes to 1 when the cruise holds and back to 0 when it
+lets go, the engaged state can be read instead of derived. If it does not, the
+lead is closed and the derivation stands as it is. The cruise probe must be ON
+(`CanBus_Probe_Cruise`; it is).
 
 The decode read PGN 65265 byte 5 bit 0 from SA 39 and published it as cruise
 on/off. **Byte 5 of CCVS is not the cruise state — it is the switch byte**:

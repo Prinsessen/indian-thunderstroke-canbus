@@ -358,7 +358,7 @@ for each. Details and measured runs: `OTA.md` in the firmware repo.
 **The board on the bike** is the owner's own CANFD-MC rev 1.0 (ESP32-S3-WROOM-1U
 with an MCP2518FD) since 2026-09-28, board #0001 since 2026-10-03; the LilyGO
 T-2CANFD is retired. It is the same pin map and the same build — the environment
-is still called `sniffer-t2can` — and the bike runs 2026.10.04-2 and advertises
+is still called `sniffer-t2can` — and the bike runs 2026.10.04-3 and advertises
 as "Springfield". A bench board is built from `bench-canfdmc` and advertises as
 "CANFD-bench"; the app finds either, because it scans for the service UUID.
 
@@ -366,8 +366,11 @@ as "Springfield". A bench board is built from `bench-canfdmc` and advertises as
 
 ## Building for Google Play
 
-The app is on Play's internal test track since 2026-09-19 (release 4,
-version 0.3). The source on the server is the truth; Windows builds it.
+**The app is distributed through Google Play, and only through Google Play.** It
+has been on Play since 2026-09-19 (first as release 4, version 0.3, on the
+internal test track), and since autumn 2026 no device runs a sideloaded build any
+more (owner, 2026-10-04). So this section is how every change reaches a device.
+The source on the server is the truth; Windows builds it.
 
 1. **Bump `playVersionCode` in `app/build.gradle.kts` before the `scp`.** Play
    refuses a code it has already seen. `versionName` is derived from it as
@@ -393,16 +396,21 @@ version 0.3). The source on the server is the truth; Windows builds it.
 
 ## Debugging on the phone
 
-**Two tracks since 2026-09-19.** The X70 on the bar runs the Google Play
-build (internal test track); the phone runs debug sideloads. They are signed
-with different keys, so **a Play device cannot take a sideload over the top,
-nor the other way round** — `adb install -r` fails with
-`INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Switching a device between tracks means
-uninstalling first, which also wipes its settings, pairings and ride log. New
-settings reach the X70 with the next Play release (bump `playVersionCode`, upload);
-they reach the phone immediately.
+**One track: Google Play.** Every device in use runs the Play build. From
+2026-09-19 there were two tracks for a while, Play on the X70 and debug sideloads
+on the phone; that ended, and nothing is sideloaded any more.
 
-**Install straight from the build machine. Over the top, never uninstall first.**
+**A sideloaded build and the Play version cannot coexist.** They are signed with
+different keys, so a debug APK cannot be installed over the Play version, nor the
+other way round: `adb install -r` fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+Getting a debug build onto such a device means uninstalling the Play version
+first, which wipes its settings, pairings and ride log. Do not do that to a
+device that is in use. Every change therefore goes out as a Play release: bump
+`playVersionCode`, build the bundle, upload (the section above).
+
+**The `adb` path below is only for a device that does not have the Play version**
+(a spare phone, an emulator). There, install straight from the build machine,
+over the top of the previous debug build:
 
 ```powershell
 $env:PATH = "$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:PATH"

@@ -5,7 +5,7 @@ firmware, written so it can be implemented **without reading the firmware
 source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
 lives in the "BLE phone link" section of [README.md](../README.md).
 
-Describes firmware `2026.10.04-2`, the image on the bike. The first BLE build
+Describes firmware `2026.10.04-3`, the image on the bike. The first BLE build
 was `2026.09.02-2` (verified on the bike 2026-09-02); where an older build
 differs, the section says from which version.
 

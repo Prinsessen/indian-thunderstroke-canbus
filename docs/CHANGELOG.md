@@ -6,7 +6,7 @@ commits carry the detail.
 
 ---
 
-## 2026-10-04 — in the source, not built yet
+## 2026-10-04 — release 6 (0.6)
 
 Nine small fixes found by checking every document against the source (the list,
 with file and reason, is kept with the app's working notes). Two change
@@ -14,8 +14,9 @@ behaviour: the HEAT page of a device set to ANOTHER DEVICE now says so instead o
 "not on the bike", and the fuel economy window is fed once per state from the
 service rather than ten times a second from the RIDE page, so it covers the
 three minutes it was meant to. The rest are words: About names the CANFD-MC, two
-settings captions, the tyre foot line, the pairing advice. No build was made and
-`playVersionCode` is untouched; release 5 (0.5) is still what is installed.
+settings captions, the tyre foot line, the pairing advice. `playVersionCode` is 6.
+Written on the server and checked with `tools/kt-audit.py` only; the build and
+the upload to Play happen on the Windows machine.
 
 ## 2026-09-20 — one version number
 

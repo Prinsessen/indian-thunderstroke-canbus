@@ -87,7 +87,7 @@ MrY=
 // boot, so the openHAB UI confirms exactly which image is live after an OTA.
 // A board declines an OTA of the image it already runs.
 #ifndef FW_VERSION          // a build may set it: -D FW_VERSION=\"...\" (bench-rollback envs)
-#define FW_VERSION      "2026.10.04-2"
+#define FW_VERSION      "2026.10.04-3"
 #endif
 
 // ---- CAN bitrate ------------------------------------------------------------

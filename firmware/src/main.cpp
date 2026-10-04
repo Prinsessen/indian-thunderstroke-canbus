@@ -1120,6 +1120,27 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
         // parked, which is the one byte of this PGN the mask lets through.
     }
 
+    // The same question, asked of the other sender. The road test of 2026-09-05
+    // settled that SA 39 never reports SPN 595 -- and looked nowhere else. In
+    // the August captures the ECM's own copy of this PGN (SA 0) carries 0 and 1
+    // in byte 4 bits 0-1, the standard position of SPN 595, at speeds and
+    // moments that fit a cruise holding: an open lead since 2026-10-04
+    // (DECODE-PLAN.md). One line per change of those two bits, with the brake
+    // and clutch from the same byte and the derived hold beside it, so a ride
+    // with the cruise used answers it either way.
+    if (probeEnabled(PROBE_CRUISE) && j.pgn == 65265 && j.sa == 0 && nn >= 4) {
+        static uint8_t ecm595 = 0xFF;
+        const uint8_t now595 = b[3] & 0x03;
+        if (now595 != ecm595) {
+            ecm595 = now595;
+            char msg[72];
+            snprintf(msg, sizeof(msg), "SA0 b4=%02X 595=%u  brake=%u clutch=%u  hold=%d  %d km/h",
+                     b[3], (unsigned)now595, (unsigned)((b[3] >> 4) & 3), (unsigned)((b[3] >> 6) & 3),
+                     (int)st.cruiseHold, isnan(st.speed) ? 0 : (int)st.speed);
+            netPublish("probe/cruise", msg, strlen(msg), false);
+        }
+    }
+
     // --- PGN 65382 SA 0: the two unexplained engine bytes, at ANY speed ------
     // Also above the stationary gate, and for the same reason probe/cruise is:
     // the question can only be asked while moving.
@@ -3008,6 +3029,11 @@ void loop() {
 #if FIRMWARE_MODE == MODE_PRODUCTION && PROBE_CHANGES
     // Once per pass, so probeFrame never reaches into the network stack.
     probeOnline = netMqttConnected();
+#endif
+#if FIRMWARE_MODE == MODE_PRODUCTION
+    // Outside the probe block on purpose: until 2026.10.04-3 this call sat
+    // inside it, so a build with the probes compiled out would have frozen the
+    // derived cruise state without a word.
     cruiseUpdate();          // derived cruise hold; see the cruise section above
 #endif
 #if FIRMWARE_MODE == MODE_PRODUCTION
