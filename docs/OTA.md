@@ -319,7 +319,10 @@ probably switched off instead, by accident; its output sags slowly): `update` 08
 Open after step 4: the boot following the otadata read-out reported `reset: panic` (08:48:45,
 rb2, stable since). The same esptool reset gave `unknown` at 08:22 and at 08:53, so this was a
 real panic handler run. The coredump partition (`0x7f0000`, `0x10000`), read at 08:53, is
-blank: nothing to decode. Seen once, not explained; watch `reset` in meta.
+blank: nothing to decode. Seen once. The owner's explanation, given the same day: the supply
+was switched off and on to get out of the serial monitor on the Windows PC. A brief dip that
+never takes the chip all the way down fits a `panic` with no coredump; not reproduced, and
+not seen again in the eight OTAs that followed (six on the bench, two on the bike).
 
 Found on the way: the meta JSON was cut at 260 bytes (08:55, `...,"ble_gap_max_ms":53` and no
 closing brace). The two `ota_*` fields had used up the slack in `char buf[260]`. Buffer 400 and
