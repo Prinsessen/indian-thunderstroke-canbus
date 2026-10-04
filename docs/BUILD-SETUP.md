@@ -1,7 +1,7 @@
 # Build setup — Windows
 
 What has to be in place to build this project from scratch on a new Windows
-machine, and the three traps that cost an afternoon the first time.
+machine, and the four traps that cost an afternoon the first time.
 
 Day-to-day file transfer, flashing and `adb` live in
 **[WORKFLOW.md](WORKFLOW.md)**. This is the one-time part.
@@ -118,6 +118,35 @@ Get-FileHash gradle\wrapper\gradle-wrapper.jar -Algorithm SHA256
 
 ---
 
+## Trap 4 — "Unable to establish loopback connection"
+
+Seen 2026-10-04, right after a reboot of a machine that had built fine the day
+before. Gradle stops before starting any task:
+
+```
+* What went wrong:
+java.io.IOException: Unable to establish loopback connection
+```
+
+The stack trace points at `DefaultDaemonConnector.connectToDaemon`, so it reads
+like a firewall or network fault. It is neither. Since JDK 16, Java on Windows
+wakes its socket selector through a Unix-domain socket file created in `%TEMP%`,
+and here that file could not be created. The temp path is the 8.3 short form
+(`C:\Users\YOURNA~1\...`), which is the likely culprit. The Gradle client cannot
+reach its own daemon, and the build dies at the first connection.
+
+The fix is to give Java a short, plain folder for that socket file:
+
+```powershell
+$env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=C:/SpringfieldAndroid/.jtmp"
+```
+
+The folder must exist; it is created once and left alone. Every Java process then
+prints `Picked up JAVA_TOOL_OPTIONS: ...` as its first line, which is harmless.
+It is in the build commands below so it is never forgotten.
+
+---
+
 ## Building
 
 **PowerShell:**
@@ -125,6 +154,7 @@ Get-FileHash gradle\wrapper\gradle-wrapper.jar -Algorithm SHA256
 ```powershell
 $env:JAVA_HOME = "C:\Users\YourName\AppData\Local\claude-jdks\jdk-21.0.12.1+1"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+$env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=C:/SpringfieldAndroid/.jtmp"   # Trap 4
 cd C:\SpringfieldAndroid\indian-canbus-app
 .\gradlew.bat assembleDebug
 ```
@@ -134,6 +164,7 @@ cd C:\SpringfieldAndroid\indian-canbus-app
 ```bash
 export JAVA_HOME="/c/Users/YourName/AppData/Local/claude-jdks/jdk-21.0.12.1+1"
 export PATH="$JAVA_HOME/bin:$PATH"
+export JAVA_TOOL_OPTIONS="-Djdk.net.unixdomain.tmpdir=C:/SpringfieldAndroid/.jtmp"   # Trap 4
 cd "C:/SpringfieldAndroid/indian-canbus-app"
 ./gradlew assembleDebug
 ```

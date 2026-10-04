@@ -15,8 +15,12 @@ behaviour: the HEAT page of a device set to ANOTHER DEVICE now says so instead o
 service rather than ten times a second from the RIDE page, so it covers the
 three minutes it was meant to. The rest are words: About names the CANFD-MC, two
 settings captions, the tyre foot line, the pairing advice. `playVersionCode` is 6.
-Written on the server and checked with `tools/kt-audit.py` only; the build and
-the upload to Play happen on the Windows machine.
+Written on the server, where it can only be checked with `tools/kt-audit.py`;
+built on the Windows machine and released to Play's internal testers on
+2026-10-04 at 13:29. The build met a new trap on the way (Gradle's "Unable to
+establish loopback connection" after a reboot), now Trap 4 in BUILD-SETUP.md, and
+the Play recipe in WORKFLOW.md takes the keystore password at a prompt instead of
+on the command line.
 
 ## 2026-09-20 — one version number
 

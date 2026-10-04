@@ -383,10 +383,17 @@ The source on the server is the truth; Windows builds it.
    has the path anonymised, and one day the Windows copy may come from there:
 
    ```powershell
+   cd C:\SpringfieldAndroid\indian-canbus-app
+   $env:JAVA_HOME = "C:\Users\YourName\AppData\Local\claude-jdks\jdk-21.0.12.1+1"; $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+   $env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=C:/SpringfieldAndroid/.jtmp"   # BUILD-SETUP.md, Trap 4
    $env:SPRINGFIELD_KEYSTORE = "C:\Users\YourName\Documents\CANFD-MC\play-store\upload-key.jks"
-   $env:SPRINGFIELD_KEYSTORE_PW = "<the password, from the password manager>"
+   $env:SPRINGFIELD_KEYSTORE_PW = [Net.NetworkCredential]::new('', (Read-Host "Keystore password" -AsSecureString)).Password
    .\gradlew bundleRelease
    ```
+
+   The password is typed at the prompt, shown as `****`, and never lands in
+   PowerShell's history file. Close the window after the build so it leaves
+   memory too. (Release 6 was built exactly like this, 2026-10-04.)
 
    Output: `app\build\outputs\bundle\release\app-release.aab`. Without the
    password the release build is unsigned, which is fine for anything but Play.
