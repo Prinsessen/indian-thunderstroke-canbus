@@ -794,6 +794,12 @@ felt temperature, and automatic control holds its last level rather than
 computing from stale weather; the same holds when the link to the bike is lost.
 Without a speed, the ambient is used as it is.
 
+And if it is the phone that drops out of reach of the clothing, the garment
+carries on at the level it was last given: a Keis controller is its own device,
+with its own button, and does not switch off because its remote has gone (the
+owner's experience over a season of riding). What is lost until the link returns
+is the automatic adjustment, not the heat.
+
 ### 9.5 Fuel level
 
 **The problem.** A float sender measures the fuel surface where it happens to be,

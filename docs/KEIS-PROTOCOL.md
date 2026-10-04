@@ -91,11 +91,16 @@ holding a controller this app is to drive — iControl included — and of two
 devices running this app exactly one may own the clothing: the "Clothing is
 controlled by" setting.
 
-## What is still unknown
+## When the phone disappears
 
-- What a controller does when the phone disappears: hold the last level, or fall
-  to off. That answer decides whether a dropped link is an inconvenience or a
-  cold hour, and only a ride will tell.
+The controller holds the level it was last given. It is a standalone device with
+its own button, and the phone is a remote for it: when the link drops the heat
+carries on as it was, and nothing falls to off. So a dropped link costs the
+automatic adjustment until it is back, not the heat.
+
+This is the owner's experience from a season of riding with the clothing
+(reported 2026-10-04), not a controlled test: nobody has cut the link on purpose
+with a meter on the garment. It was listed here as unknown until then.
 
 
 ## The controller has to be switched on by hand
