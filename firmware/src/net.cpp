@@ -22,6 +22,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <HTTPUpdate.h>
+#include <Update.h>
 #endif
 
 // ---- queues and flags -------------------------------------------------------
@@ -50,7 +51,7 @@ static NetInboundFn  sOnMessage = nullptr;
 
 static volatile bool     sWifiUp  = false;
 static volatile bool     sMqttUp  = false;
-static volatile bool     sBusy    = false;    // HTTP OTA running
+static volatile bool     sBusy    = false;    // an OTA is running, HTTP or MQTT
 static volatile bool     sSending = false;    // task is inside mqtt.publish()
 static volatile uint32_t sDropped = 0;
 
@@ -95,6 +96,10 @@ static PubSubClient     sMqtt(sWifiClient);
 static uint32_t         sMqttLastTry = 0;
 static const uint32_t   MQTT_RETRY_MS = 15000;
 static volatile bool    sOtaRequested = false;
+static volatile bool    sMotaRequested = false;   // "mqtt" on <base>/ota: the image comes over this link
+static void motaOnInfo(const String &v);
+static void motaOnChunk(const uint8_t *p, unsigned int length);
+static void motaResume();
 
 static void debugPublish(const char *msg) {
     sMqtt.publish(baseTopic("debug").c_str(), (const uint8_t *)msg, strlen(msg), false);
@@ -437,14 +442,18 @@ static void onMqttMessage(char *inTopic, byte *payload, unsigned int length) {
     const String prefix = String(MQTT_BASE_TOPIC) + "/";
     if (!t.startsWith(prefix)) return;
     const String leaf = t.substring(prefix.length());
+    if (leaf == "ota/chunk") { motaOnChunk(payload, length); return; }   // binary, 2 kB: no String
     String v; v.reserve(length);
     for (unsigned int i = 0; i < length; i++) v += (char)payload[i];
 
     if (leaf == "ota") {
         v.toLowerCase();
-        if (v == "update") sOtaRequested = true;
+        if (sBusy) return;                 // one OTA at a time, whichever kind
+        if (v == "update")    sOtaRequested = true;    // HTTP from the LAN address
+        else if (v == "mqtt") sMotaRequested = true;   // over this link, from anywhere
         return;
     }
+    if (leaf == "ota/info") { motaOnInfo(v); return; }
     InMsg m;
     strncpy(m.leaf, leaf.c_str(), sizeof(m.leaf) - 1);       m.leaf[sizeof(m.leaf) - 1] = '\0';
     strncpy(m.payload, v.c_str(), sizeof(m.payload) - 1);    m.payload[sizeof(m.payload) - 1] = '\0';
@@ -469,6 +478,8 @@ static void mqttConnectMaybe() {
     if (sMqtt.connect(clientId(), MQTT_USERNAME, MQTT_PASSWORD, willTopic.c_str(), 0, true, "offline")) {
         sMqtt.publish(willTopic.c_str(), "online", true);
         sMqtt.subscribe(baseTopic("ota").c_str());
+        sMqtt.subscribe(baseTopic("ota/info").c_str());
+        sMqtt.subscribe(baseTopic("ota/chunk").c_str());
         sMqtt.subscribe(baseTopic("probe/en/+").c_str());
         sMqtt.subscribe(baseTopic("sleep/en").c_str());
         // Announce the running firmware ONCE PER BOOT, not once per reconnect:
@@ -485,6 +496,7 @@ static void mqttConnectMaybe() {
         ringFlush();                       // what happened while we were away
         tlog("[mqtt] connected");
         queueSynthetic("$connected");      // the loop republishes what it owns
+        motaResume();                      // a download cut off by the link goes on where it was
     } else {
         tlogf("[mqtt] connect failed: state=%d (%s)", sMqtt.state(), mqttStateText(sMqtt.state()));
     }
@@ -556,6 +568,160 @@ static void runHttpOta() {
     sBusy = false;
 }
 
+// ---- OTA over the MQTT link, in the task --------------------------------------
+//
+// The HTTP download above needs the server's LAN address, so it works in the
+// garage and nowhere else, and the image is not to be served to the internet:
+// it carries the compiled credentials. The broker, though, is reached from
+// anywhere the board has a network -- the phone's hotspot included -- over TLS.
+// So the image comes the same way. The board asks on <base>/ota/req, openHAB
+// (automation/js/canbus-ota-mqtt.js) answers on <base>/ota/info and /ota/chunk:
+//
+//   board:  "info"                           server: "<size> <md5>"
+//   board:  "<md5> <offset> <count> <len>"   server: <count> chunks, each
+//                                                    4 bytes offset (LE) + data
+//
+// The board pulls. It asks for a window, writes what arrives in order, asks for
+// the next. A chunk with any offset but the next one is dropped, so a request
+// repeated after a timeout or a reconnect cannot damage the image; and
+// Update.end() checks the md5 of the whole image before the boot partition is
+// switched. A link that comes back within MOTA_GIVEUP_MS continues where it
+// was. After the reboot the roll-back rule applies, as for any OTA.
+#define MOTA_CHUNK      2048       // with topic and header, inside the 3072-byte client buffer
+#define MOTA_WINDOW     8
+#define MOTA_RETRY_MS   10000UL
+#define MOTA_GIVEUP_MS  240000UL   // below OTA_STALL_MS: this says why before the guard restarts
+
+enum MotaState : uint8_t { MOTA_IDLE = 0, MOTA_WAIT_INFO, MOTA_RECV };
+static MotaState sMota = MOTA_IDLE;
+static uint32_t  sMotaSize = 0, sMotaOff = 0, sMotaWinEnd = 0;
+static uint32_t  sMotaLastRx = 0, sMotaLastAsk = 0, sMotaT0 = 0;
+static char      sMotaMd5[33] = "";
+static int       sMotaPct = -1;
+
+static void motaAsk() {
+    char m[72];
+    if (sMota == MOTA_WAIT_INFO) {
+        snprintf(m, sizeof(m), "info");
+    } else {
+        snprintf(m, sizeof(m), "%s %lu %u %u", sMotaMd5, (unsigned long)sMotaOff,
+                 (unsigned)MOTA_WINDOW, (unsigned)MOTA_CHUNK);
+        const uint32_t end = sMotaOff + (uint32_t)MOTA_WINDOW * MOTA_CHUNK;
+        sMotaWinEnd = end < sMotaSize ? end : sMotaSize;
+    }
+    sMqtt.publish(baseTopic("ota/req").c_str(), m, false);
+    sMotaLastAsk = millis();
+}
+
+static void motaStop(const char *status, bool abortUpdate) {
+    if (abortUpdate) Update.abort();
+    sMota = MOTA_IDLE;
+    otaGuardStop();
+    publishOtaStatus(status);
+    sBusy = false;
+}
+
+static void motaStart() {
+    if (sBusy) return;
+    sBusy = true;
+    sMota = MOTA_WAIT_INFO;
+    sMotaLastRx = sMotaT0 = millis();
+    tlog("[ota] update over MQTT requested, asking the server for the image");
+    publishOtaStatus("Starting download...");
+    otaGuardArm();
+    motaAsk();
+}
+
+static void motaResume() { if (sMota != MOTA_IDLE) motaAsk(); }
+
+static void motaOnInfo(const String &v) {
+    if (sMota == MOTA_IDLE) return;
+    if (v.startsWith("ERR")) {
+        const String m = "FAILED: server: " + v.substring(3);
+        motaStop(m.c_str(), sMota == MOTA_RECV);
+        return;
+    }
+    if (sMota != MOTA_WAIT_INFO) return;
+    const int sp = v.indexOf(' ');
+    const uint32_t size = sp > 0 ? (uint32_t)v.substring(0, sp).toInt() : 0;
+    String md5 = sp > 0 ? v.substring(sp + 1) : String();
+    md5.trim();
+    md5.toLowerCase();
+    if (size == 0 || md5.length() != 32) { motaStop("FAILED: bad image info from the server", false); return; }
+    // The image this board already runs: nothing to do, and no megabyte over cellular.
+    if (md5 == ESP.getSketchMD5()) { motaStop("No update available", false); return; }
+    if (!Update.begin(size, U_FLASH)) {
+        char m[96];
+        snprintf(m, sizeof(m), "FAILED: %s", Update.errorString());
+        motaStop(m, false);
+        return;
+    }
+    Update.setMD5(md5.c_str());
+    strncpy(sMotaMd5, md5.c_str(), sizeof(sMotaMd5) - 1);
+    sMotaMd5[sizeof(sMotaMd5) - 1] = '\0';
+    sMotaSize = size;
+    sMotaOff  = 0;
+    sMotaPct  = -1;
+    sMota     = MOTA_RECV;
+    sMotaLastRx = millis();
+    tlogf("[ota] image is %lu bytes, md5 %s", (unsigned long)size, sMotaMd5);
+    motaAsk();
+}
+
+// p points into the MQTT client's buffer, and publish() reuses that buffer:
+// the data is written to flash first, and nothing after that reads p.
+static void motaOnChunk(const uint8_t *p, unsigned int length) {
+    if (sMota != MOTA_RECV || length < 5) return;
+    const uint32_t off = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+    const uint32_t n   = length - 4;
+    if (off != sMotaOff) return;           // a repeat, or one from an abandoned window
+    if (off + n > sMotaSize) { motaStop("FAILED: a chunk runs past the end of the image", true); return; }
+    if (Update.write((uint8_t *)(p + 4), n) != n) {
+        char m[96];
+        snprintf(m, sizeof(m), "FAILED: flash write: %s", Update.errorString());
+        motaStop(m, true);
+        return;
+    }
+    sMotaOff   += n;
+    sMotaLastRx = millis();
+    otaGuardArm();                         // progress means it is still alive
+
+    const int step = (int)((uint64_t)sMotaOff * 100 / sMotaSize) / 10 * 10;
+    if (step != sMotaPct) {
+        sMotaPct = step;
+        char m[40];
+        snprintf(m, sizeof(m), "Downloading %d%%", step);
+        publishOtaStatus(m);
+    }
+
+    if (sMotaOff >= sMotaSize) {
+        if (!Update.end()) {               // md5 over the whole image, then the boot partition
+            char m[96];
+            snprintf(m, sizeof(m), "FAILED: %s", Update.errorString());
+            motaStop(m, false);
+            return;
+        }
+        otaGuardStop();
+        tlogf("[ota] image complete and verified in %lu s over MQTT", (unsigned long)((millis() - sMotaT0) / 1000UL));
+        publishOtaStatus("OK - rebooting");
+        vTaskDelay(pdMS_TO_TICKS(800));    // let the last lines leave the socket
+        ESP.restart();
+    } else if (sMotaOff >= sMotaWinEnd) {
+        motaAsk();
+    }
+}
+
+static void motaTick() {
+    if (sMotaRequested) { sMotaRequested = false; motaStart(); }
+    if (sMota == MOTA_IDLE) return;
+    const uint32_t now = millis();
+    if (now - sMotaLastRx > MOTA_GIVEUP_MS) {
+        motaStop("FAILED: no data from the server for 240 s", sMota == MOTA_RECV);
+        return;
+    }
+    if (sMqtt.connected() && now - sMotaLastAsk > MOTA_RETRY_MS && now - sMotaLastRx > MOTA_RETRY_MS) motaAsk();
+}
+
 // Write the out-queue to the broker; with no broker, publishes are dropped and
 // log lines go to the ring.
 static void drainOut() {
@@ -596,6 +762,7 @@ static void netTask(void *) {
             }
             if (sOtaRequested) { sOtaRequested = false; runHttpOta(); }
         }
+        motaTick();                        // outside the WiFi test: it must be able to give up
 #endif
         drainOut();
         if (sWifiUp && sOtaReady) ArduinoOTA.handle();

@@ -46,6 +46,7 @@
 #include "counters.h"
 #include "probeflags.h"
 #include "sleep.h"         // deep sleep while the bus is quiet
+#include "rollback.h"      // an OTA image is kept only once it has reached the broker
 #include "ble.h"           // local phone link; compiles to nothing when ENABLE_BLE 0
 
 // BLE serves the DECODED state, which only exists in PRODUCTION. In DISCOVERY
@@ -59,8 +60,12 @@
 // machine whose (git-ignored) config.h predates these defines — e.g. a laptop
 // that hasn't had the OTA block added. The real values live in config.h; these
 // only apply when it doesn't define them. Not secrets, so hard-coding is fine.
-#ifndef OTA_FIRMWARE_URL
+#ifndef OTA_FIRMWARE_URL              // config.h normally sets it; the fallback follows the identity too
+#if BENCH_BOARD
+#define OTA_FIRMWARE_URL "http://192.0.2.10:8080/static/indian-canbus-bench-firmware.bin"
+#else
 #define OTA_FIRMWARE_URL "http://192.0.2.10:8080/static/indian-canbus-firmware.bin"
+#endif
 #endif
 #ifndef FW_VERSION
 #define FW_VERSION "dev"
@@ -369,6 +374,7 @@ static void onNetMessage(const char *leaf, const char *payloadIn) {
     String payload(payloadIn); payload.toUpperCase();
     const bool on = (payload == "ON" || payload == "1" || payload == "TRUE");
     if (strcmp(leaf, "$connected") == 0) {
+        rollbackNoteBrokerUp();   // the broker is what the next OTA needs: this image stays
         publishProbeFlags();
         publishSleepStatus();
         return;
@@ -500,6 +506,8 @@ void publishHeartbeat() {
     meta["rssi"] = netRssi();
     meta["net_dropped"] = netDropped();   // publishes lost to a full queue since boot
     meta["fw"] = FW_VERSION;             // running firmware version (OTA verify)
+    meta["ota_state"] = rollbackState();  // pending until the broker is reached, then valid
+    meta["ota_other"] = rollbackOtherState();   // "invalid"/"aborted" here = a roll-back happened
     // Why the last boot happened, and how much memory is left.
     //
     // Added 2026-09-04 after the device turned out to be REBOOTING rather than
@@ -522,9 +530,19 @@ void publishHeartbeat() {
     // the rider saw.
     meta["loop_max_ms"] = gLoopMaxMs;      gLoopMaxMs = 0;
     meta["ble_gap_max_ms"] = bleMaxGapTake();
-    char buf[260];
-    size_t n = serializeJson(meta, buf, sizeof(buf));
-    netPublish("meta", buf, n, true);
+    // 260 held until the two ota_* fields went in: a heartbeat with long
+    // numbers then ran past it, serializeJson cut it silently, and a cut JSON
+    // parses as nothing on the other side (bench, 2026-10-04). Same rule as
+    // `state`: say so and do NOT publish.
+    char buf[400];
+    const size_t need = measureJson(meta);
+    if (need >= sizeof(buf)) {
+        logEventf("[meta] JSON needs %u bytes, buffer is %u -- NOT published",
+                  (unsigned)need, (unsigned)sizeof(buf));
+    } else {
+        size_t n = serializeJson(meta, buf, sizeof(buf));
+        netPublish("meta", buf, n, true);
+    }
 
     // Bus health, on its own retained topic rather than in `state`.
     //
@@ -2897,6 +2915,7 @@ void setup() {
     probeFlagsBegin();
     buttonsBegin(buttonEmit);    // which probes run; also outlives an OTA
     sleepBegin();         // deep-sleep setting, and why this boot happened
+    rollbackBegin();      // is this image still on probation? (OTA rollback)
     bleSetup();
 
     netBegin(onNetMessage);   // WiFi, MQTT and OTA come up in their own task
@@ -2975,6 +2994,7 @@ void loop() {
         sLoopPrevMs = t;
     }
     netPoll();                    // inbound broker messages, handled here, not in the task
+    rollbackTick();               // a pending image that never reached the broker goes back
 #if FIRMWARE_MODE == MODE_PRODUCTION && PROBE_CHANGES
     // Once per pass, so probeFrame never reaches into the network stack.
     probeOnline = netMqttConnected();
@@ -3034,7 +3054,7 @@ void loop() {
         // end of loop() is unreachable in the one situation it was written for.
         // Found on the bike within a minute of switching the feature on: it was
         // enabled, the bus had been quiet for 481 seconds, and it stayed awake.
-        sleepTick(netMqttConnected(), netBusy());
+        sleepTick(netMqttConnected(), netBusy() || rollbackPending());
 
         delay(50);
         return;
@@ -3059,5 +3079,5 @@ void loop() {
     // Does nothing at all unless deep sleep has been switched on from openHAB,
     // and cannot fire within the first ninety seconds of any wake -- see
     // sleep.h for why that window is what makes the feature recoverable.
-    sleepTick(netMqttConnected(), netBusy());
+    sleepTick(netMqttConnected(), netBusy() || rollbackPending());
 }

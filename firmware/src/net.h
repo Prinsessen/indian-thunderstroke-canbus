@@ -58,7 +58,7 @@ typedef void (*NetInboundFn)(const char *leaf, const char *payload);
 void     netBegin(NetInboundFn onMessage);   // creates the queues and the task
 bool     netWifiConnected();
 bool     netMqttConnected();
-bool     netBusy();                          // an HTTP OTA is running in the task
+bool     netBusy();                          // an OTA (HTTP or MQTT) is running in the task
 bool     netPublish(const char *leaf, const char *payload, size_t len, bool retained);
 bool     netPublishTopic(const char *fullTopic, const char *payload, size_t len, bool retained);
 void     netLog(const char *line);           // <base>/debug, or the ring while offline

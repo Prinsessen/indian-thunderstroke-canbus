@@ -213,8 +213,23 @@ Then watch `OTA Status` until it reads `Running 2026.09.14-2`. To go back in
 or that never joins WiFi, cannot receive the next `update`. Every change since
 2026-09-14 has therefore been reviewed against one question first — *does any
 of it run before the network is up, and can it crash there?* — and the answer
-for each is written into the commit. Keep doing that. The bootloader has no
-automatic rollback partition; the tripwires are the review and this file.
+for each is written into the commit. Keep doing that.
+
+**Automatic rollback: half there (checked 2026-10-03).** The bootloader *is* built
+with `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` (the Arduino core's esp32s3
+sdkconfig), so a new image boots as "pending verify" and any reset before it is
+marked valid returns to the previous one. But the core marks it valid itself, in
+`initArduino()`, before `setup()` runs, because our firmware does not override the
+weak `verifyRollbackLater()`. In practice: an image that dies before Arduino starts
+rolls back; one that boots and then never reaches the broker does not. Closing that
+gap is IDEAS D7 step 1: return `true` from `verifyRollbackLater()`, call
+`esp_ota_mark_app_valid_cancel_rollback()` after the first broker connection, and
+reboot (which rolls back) if that has not happened within a few minutes.
+
+**The archive above had lapsed:** nothing between 2026.09.15-1 and 2026.09.27-3 was
+kept. 2026.09.27-3, the image on the bike, was archived and tagged
+`known-good-2026.09.27-3` (commit `aa0c703`, md5 `8853b295b17b22818b19743e0bdbaf0c`)
+on 2026-10-03. Archive every image you OTA to the bike, at the moment you deploy it.
 
 ### Before pressing Update
 
@@ -248,6 +263,135 @@ automatic rollback partition; the tripwires are the review and this file.
    `events.log` for the command and for `Downloading` lines before sending again.
    A second `update` that nobody meant to send cost one extra identity round trip
    on 2026-10-03.
+
+## Automatic rollback (branch `rollback-bench`, on the bench first)
+
+Written 2026-10-04, tested on bench board #0002 before anything of it goes near the
+bike. What it does, in `src/rollback.cpp`:
+
+- `verifyRollbackLater()` returns true, so the Arduino core no longer marks every
+  image valid before `setup()`.
+- An image that arrived by OTA boots `pending`. The first broker connection marks
+  it `valid` (`ota/status` becomes `Running <ver> - verified`, meta `ota_state`
+  `valid`).
+- No broker within `ROLLBACK_GRACE_MS` (5 min; 2 min in the test build): the image
+  marks itself invalid and reboots, and the bootloader starts the previous one.
+  Any other reset while pending - power cut, deep-sleep wake - makes the
+  bootloader do the same (state `aborted`). Deep sleep is therefore held off
+  while pending.
+- A USB-flashed image has no pending state and is never touched.
+- `meta.ota_other` shows the other slot: `invalid` or `aborted` there is the
+  footprint of a roll-back.
+
+Environments: `bench-rollback` (FW 2026.10.04-rb1, honest) and `bench-rollback-bad`
+(2026.10.04-rb9-bad: sees the broker and ignores it, grace 120 s). Both are the
+bench identity and pull `/static/indian-canbus-bench-firmware.bin` - the URL is
+split by identity in `config.h` since this branch, so a bench OTA can no longer
+fetch the bike's file. Deploy with `tools/deploy-bench-ota.sh <env>`; command with
+`CanBench_OTA update`.
+
+### The test, in order
+
+| # | do | expect |
+|---|----|--------|
+| 1 | USB flash rb1 (kit `~/canfd-flash-rollback-rb1.zip`) | serial `[rollback] running app0, state none`; `CanBench_Meta.ota_state` = `none` |
+| 2 | rebuild with `-D FW_VERSION=\"2026.10.04-rb2\"`, deploy, `update` | boots `pending`, then `valid` within a minute; `ota/status` `Running 2026.10.04-rb2 - verified` |
+| 3 | deploy `bench-rollback-bad`, `update` | boots `pending`, serial/debug `TEST: broker reached and ignored`; after 120 s `ROLLBACK: no broker ...` on `ota/status`; then `Running 2026.10.04-rb2` again, meta `reset: sw`, `ota_other: invalid` |
+| 4 | deploy `-bad` again, `update`; pull 12 V ~30 s after it boots; power up | rb2 boots, `ota_other: aborted` (the bootloader's own roll-back) |
+| 5 | rb2 stays `valid` across a power cycle and a deep-sleep wake | `ota_state: valid` after each |
+
+**Results, 2026-10-04, board #0002 without an antenna (RSSI -88 to -91):**
+
+| # | result |
+|---|--------|
+| 1 | passed 08:22. Serial `running app0, state none, other slot none`; meta `ota_state: none`, `ota_other: none` |
+| 2 | passed 08:26. `update` 08:25:49, download 11 s, `Running 2026.10.04-rb2` and `- verified` both at 08:26:38; meta `valid` / `none` |
+| 3 | passed 08:33. `update` 08:30:10, `Running 2026.10.04-rb9-bad` 08:30:59, `ROLLBACK: no broker within 120 s, returning to the previous image` 08:32:24 (120 s after the boot, not after the broker connection: the weak link took 35 s to associate), `Running 2026.10.04-rb2` 08:33:24; meta `valid`, `ota_other: invalid`, `reset: sw` |
+| 4 | the roll-back passed, the footprint did not match. `update` 08:42:46, `Running 2026.10.04-rb9-bad` 08:43:33, 12 V pulled about 08:43:50 and put back, `Running 2026.10.04-rb2` 08:44:23; meta `valid`, `reset: poweron`, but `ota_other: none` where `aborted` was expected. `none` is either no otadata entry for app0 or state UNDEFINED (`rollbackOtherState()` cannot tell them apart). The otadata dump (`read-flash 0xe000 0x2000`, 08:48) shows why: sector 0, which held the trial image's entry, is erased (all `FF`), sector 1 holds seq 2 = app1, state 2 = VALID, crc `55F63774` (correct for seq 2). The bootloader rewrites a pending entry as erase-then-write; the erase landed and the write did not, so power went again inside that window (the cut itself or the re-plug, the dump cannot say which). The outcome is still the safe one: the other sector is never touched, so the previous image boots. `ota_other: none` after a power cut is therefore a third legitimate footprint, next to `invalid` and `aborted` |
+| 5 | passed 09:06. Power cycle: rb2 came up `valid` after both cuts of step 4 (`reset: poweron`). Deep sleep: rb3 (the meta fix, and for the bench only `SLEEP_QUIET_MS` 60 s and `SLEEP_BACKSTOP_S` 120 s, there being no bus to wake it) went in by OTA, `- verified` 09:02:03; sleep enabled 09:02:52, asleep 09:03:00, awake again with `wake: timer`, `reset: deepsleep`, `ota_state: valid`; sleep switched off again 09:06:31 |
+
+Step 4 again, 08:56, this time the 12 V plug pulled (in the first run the supply was
+probably switched off instead, by accident; its output sags slowly): `update` 08:56:25, `Running 2026.10.04-rb9-bad`
+08:58:08, plug out about 08:58:20, in again after 10 s, `Running 2026.10.04-rb2` 08:58:58; meta
+`valid`, `ota_other: aborted`, `reset: poweron`. **Passed as written.** So a clean cut leaves
+`aborted`, a sagging supply can leave `none`, and both boot the previous image.
+
+Open after step 4: the boot following the otadata read-out reported `reset: panic` (08:48:45,
+rb2, stable since). The same esptool reset gave `unknown` at 08:22 and at 08:53, so this was a
+real panic handler run. The coredump partition (`0x7f0000`, `0x10000`), read at 08:53, is
+blank: nothing to decode. Seen once, not explained; watch `reset` in meta.
+
+Found on the way: the meta JSON was cut at 260 bytes (08:55, `...,"ble_gap_max_ms":53` and no
+closing brace). The two `ota_*` fields had used up the slack in `char buf[260]`. Buffer 400 and
+a tripwire that refuses to publish a cut payload, from rb3 on. Master does not have the fields
+and is not affected; this must be in before the branch merges.
+
+All five passed. The board was left on rb3 with deep sleep off, and the served bench file is
+rb3 (md5 `89ae0745005313df17dd38c76b7dbf7c`). rb3's short sleep timers are a bench build flag,
+not in the source. Binaries and ELFs of rb2 and rb3 are in `releases/` (git-ignored); a build
+with other `PLATFORMIO_BUILD_FLAGS` wipes `.pio/build`, so copy the ELF out first.
+
+Needs the board on the home LAN (the OTA pulls from 192.0.2.10) and the serial
+monitor open for steps 1 and 3. Without an antenna the WROOM-1U reaches only a
+metre or so; put it next to an AP.
+
+Reaching a board that is away from home is the next section.
+
+## OTA over the MQTT link (command `mqtt`, branch `rollback-bench`)
+
+`update` pulls the image over HTTP from the server's LAN address, so it works at
+home and nowhere else, and the image is not to be served to the internet: it
+carries the compiled WiFi and MQTT credentials. The broker is reached from
+anywhere the board has a network, over TLS. So `mqtt` on `<base>/ota` brings the
+image the same way. Written and proven 2026-10-04 (IDEAS D7 step 2).
+
+The board pulls (`src/net.cpp`, "OTA over the MQTT link"); openHAB answers
+(`automation/js/canbus-ota-mqtt.js`, requests arrive on a trigger channel of the
+board's thing):
+
+| board, on `<base>/ota/req` | server |
+|---|---|
+| `info` | `<base>/ota/info`: `<size> <md5>` (the file is read from disk here) |
+| `<md5> <offset> <count> <len>` | `<base>/ota/chunk`, `<count>` times: 4 bytes offset (LE) + `<len>` bytes |
+
+- Window 8 x 2048 bytes. A chunk with any offset but the next one is dropped, so a
+  request repeated after a timeout (10 s) or a reconnect cannot damage the image.
+- The same image as the running one (md5 against `ESP.getSketchMD5()`) answers
+  `No update available` without a download.
+- `Update.end()` checks the md5 of the whole image before the boot partition is
+  switched. No data for 240 s: `FAILED: ...`, the running image stays.
+- The file changed on the server half-way: `ERR ...` on `ota/info`, the download stops.
+- After the reboot the roll-back rule above applies as for any OTA.
+- The image is the file `update` serves (`tools/deploy-bench-ota.sh` for the bench).
+  Each board is listed in `BOARDS` in the rule with its own file, so a board cannot
+  be handed another identity's image. `CanBus_OTA` / `CanBench_OTA` take the command.
+
+**Results, 2026-10-04, board #0002, 1 405 584 bytes:**
+
+| # | what | result |
+|---|------|--------|
+| 1 | rb4 (first image with the receiver) by `update` on the LAN | `- verified` 09:21:36 |
+| 2 | rb5 by `mqtt`, office WiFi (-86, no antenna) | `mqtt` 09:22:05, 100 % 09:22:40 (35 s), `Running 2026.10.04-rb5 - verified` 09:23:13 |
+| 3 | rb5 offered again | `No update available` after 1 s |
+| 4 | rb6 by `mqtt`, **phone hotspot** (the board on the hotspot's own address, -58) | `mqtt` 09:31:03, 100 % 09:31:31 (28 s), `Running 2026.10.04-rb6 - verified` 09:31:46, still on the hotspot |
+| 5 | rb7 by `mqtt`, hotspot, after Springfield was added to the rule | `mqtt` 09:40:52, 100 % 09:41:21 (29 s), `- verified` 09:41:39 |
+
+Not tested yet: a link that drops in the middle of a download.
+
+### First time on the bike (2026.10.04-1)
+
+The bike's image has no MQTT receiver yet, so the first one goes by `update` on the
+home LAN. What arrives first is the safety net itself.
+
+1. Ignition on, proven from the bus ("Before pressing Update" above), and the owner's OK.
+2. `cp releases/indian-canbus-firmware-2026.10.04-1.bin /etc/openhab/html/indian-canbus-firmware.bin`,
+   md5 `091547a2801b20e8720c7b1af21a5d31`.
+3. One `update` on `CanBus_OTA`. Expect `Downloading ...`, `Running 2026.10.04-1`, then
+   `Running 2026.10.04-1 - verified` within a minute; meta `ota_state: valid`.
+   `ota_other` then shows the state of the slot holding 2026.09.27-3.
+4. If it says `Running 2026.09.27-3` again instead, the new image did not reach the
+   broker in five minutes and went back by itself: nothing is lost, read `debug`.
+5. Afterwards: tag `known-good-2026.10.04-1`, and try one `mqtt` with the phone hotspot.
 
 ## First flash / emergency recovery (USB cable)
 
@@ -295,6 +439,7 @@ OTA.
 
 | Version | Notes |
 |---------|-------|
+| `2026.10.04-1` | **Automatic rollback and OTA over the MQTT link.** An OTA image is on trial until it has reached the broker (5 min), otherwise the previous image boots again; `mqtt` on `<base>/ota` brings the image over the MQTT/TLS link, so an update no longer needs the LAN. Meta gains `ota_state` / `ota_other`, and its buffer goes 260 -> 400 with a tripwire. Both proven on bench board #0002 on 2026-10-04 (sections above). Built and archived (`releases/indian-canbus-firmware-2026.10.04-1.bin`, md5 `091547a2801b20e8720c7b1af21a5d31`); **not on the bike yet** - it waits for the ignition. Rollback image: `releases/...-2026.09.27-3.bin`, md5 `8853b295b17b22818b19743e0bdbaf0c`. |
 | `2026.09.27-3` | The `asleep` marker is given 250 ms to leave the radio after `netFlush()`; on 27-2 the chip went down with it still in the TCP buffer and openHAB got only the last will. |
 | `2026.09.27-2` | **The network in its own task** (`src/net.cpp`): WiFi, SNTP, MQTT and OTA on core 0 behind two queues; `loop()` never waits for the broker. Measured with the broker blocked: loop gap 5019 → 4 ms, BLE gap 6656 → 3 ms, app uninterrupted. The network is now chosen by scan and signal, not by which SSID worked last. `ENABLE_MQTT 0` compiles again; env `sniffer-t2can-nomqtt` keeps it that way. |
 | `2026.09.27-1` | Two gauges in `meta`: `loop_max_ms` and `ble_gap_max_ms`, worst of the last 30 s, so a stall can be measured from the garage instead of felt on the road. |

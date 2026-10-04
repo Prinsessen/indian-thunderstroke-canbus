@@ -18,6 +18,10 @@
 //   UI press -> command "update" -> publishMQTT canbus/springfield/ota "update"
 //            -> ESP32 downloads http://openhab.local:8080/static/indian-canbus-firmware.bin
 //            -> status shows "Downloading..." then clears after a few seconds
+//
+// The command "mqtt" (firmware 2026.10.04-1 and later) is forwarded the same
+// way: the board then pulls the same image in chunks over the MQTT link, which
+// also works from a hotspot. canbus-ota-mqtt.js answers its requests.
 // =============================================================================
 
 const { rules, triggers, actions, items } = require('openhab');
@@ -32,12 +36,13 @@ rules.JSRule({
     triggers.ItemCommandTrigger('CanBus_OTA')
   ],
   execute: (event) => {
-    // The sitemap Switch only ever sends "update"; guard anyway.
-    if (String(event.receivedCommand) !== 'update') {
+    // "update" = HTTP from the LAN address (the sitemap Switch), "mqtt" = over the MQTT link.
+    const command = String(event.receivedCommand);
+    if (command !== 'update' && command !== 'mqtt') {
       return;
     }
 
-    console.info('canbus-ota: OTA update command received — publishing to MQTT broker');
+    console.info('canbus-ota: OTA command "' + command + '" received — publishing to MQTT broker');
 
     const mqtt = actions.Things.getActions('mqtt', BROKER_UID);
     if (mqtt === null) {
@@ -47,8 +52,8 @@ rules.JSRule({
     }
 
     // Fire the OTA trigger to the ESP32.
-    mqtt.publishMQTT(OTA_TOPIC, 'update');
-    console.info('canbus-ota: published "update" to ' + OTA_TOPIC);
+    mqtt.publishMQTT(OTA_TOPIC, command);
+    console.info('canbus-ota: published "' + command + '" to ' + OTA_TOPIC);
 
     // Initial feedback only. From here the ESP32 drives CanBus_OTA live via
     // canbus/springfield/ota/status: "Starting download..." -> "Downloading NN%" ->

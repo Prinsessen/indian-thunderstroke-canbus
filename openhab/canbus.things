@@ -55,6 +55,11 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	Type string : bitrate    "Detected Bitrate" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.bitrate" ]
 	Type number : scanFrames "Scan Frame Count" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.scan_frames" ]
 	Type string : wifiIp     "WiFi IP"          [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.ip" ]
+	Type number : wifiRssi   "WiFi Signal"      [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.rssi" ]
+	// Worst stalls of the last 30 s (firmware 2026.09.27-1): the loop-stall work is judged on these two.
+	Type string : metaRaw    "Meta (raw JSON)"  [ stateTopic="canbus/springfield/meta" ]
+	Type number : loopMaxMs  "Loop Max Gap"     [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.loop_max_ms" ]
+	Type number : bleGapMaxMs "BLE Max Gap"     [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.ble_gap_max_ms" ]
 	// ---- Engine ---------------------------------------------------------
 	Type number : rpm        "Engine RPM"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rpm" ]
 	Type number : throttle   "Throttle"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.throttle" ]
@@ -191,4 +196,6 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// ---- Firmware version + OTA status (reported by the ESP32) -----------
 	Type string : fw        "Firmware Version" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.fw" ]
 	Type string : otaStatus "OTA Status"      [ stateTopic="canbus/springfield/ota/status" ]
+	// OTA over the MQTT link: the board's requests, as channel events for canbus-ota-mqtt.js
+	Type string : otaReq    "OTA Request"     [ stateTopic="canbus/springfield/ota/req", trigger=true ]
 }

@@ -62,7 +62,7 @@ for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done   # i
 put "$FW/canbus.items"  openhab/canbus.items
 put "$FW/canbus.things" openhab/canbus.things
 put "$FW/canbus_button_garage.example.js" openhab/rules/canbus_button_garage.example.js
-for r in canbus-ota canbus-probe-queue canbus-cruise-latch canbus-trip-this-ride canbus-clear-live-values; do
+for r in canbus-ota canbus-ota-mqtt canbus-probe-queue canbus-cruise-latch canbus-trip-this-ride canbus-clear-live-values; do
   put /etc/openhab/automation/js/$r.js openhab/rules/$r.js; done
 
 # ---- app: source only. Root docs go to docs/, README/IDEAS/tools stay private -
