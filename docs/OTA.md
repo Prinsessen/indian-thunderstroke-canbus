@@ -393,6 +393,23 @@ home LAN. What arrives first is the safety net itself.
    broker in five minutes and went back by itself: nothing is lost, read `debug`.
 5. Afterwards: tag `known-good-2026.10.04-1`, and try one `mqtt` with the phone hotspot.
 
+**Done 2026-10-04, in the garage, ignition on** (`efmsg` 5709 -> 11824 in 30 s, home WiFi -61):
+`update` 10:11:32, 100 % 10:11:42 (10 s), `Running 2026.10.04-1` 10:11:55, `- verified` 10:12:02.
+Meta: `ota_state: valid`, `ota_other: valid` (the slot holding 2026.09.27-3), `reset: sw`,
+250 kbps detected, `efmsg` climbing again, decoded values flowing. Against 2026.09.27-3 a minute
+earlier: heap 71.8 kB both, `heap_min` 20.7 kB (was 17.4), loop and BLE gaps 4 ms both.
+Then `mqtt` with the same image, 10:13:40: Springfield asked, the rule answered with md5
+`091547a2...`, the board said `No update available` - the MQTT path works on the bike end to
+end, nothing flashed. Tagged `known-good-2026.10.04-1`.
+
+**The same morning, over cellular.** One deep-sleep round with the phone's hotspot on the
+seat put the board on the hotspot (woke on CAN 10:21:44, -63 there). `efmsg` 5709 -> 11824,
+then `mqtt` 10:22:18 with 2026.10.04-2 (the same code under a new version; a board declines
+the image it runs): 100 % 10:22:58 (40 s), `OK - rebooting`, `Running 2026.10.04-2 - verified`
+10:23:13, still on the hotspot. During the download the worst loop and BLE gaps were 104 and
+105 ms (3 ms otherwise; the app calls a stream dead at 2500). When the hotspot left at 10:23:53
+the board was back on the home WiFi at 10:24:44 without a reboot. Tagged `known-good-2026.10.04-2`.
+
 ## First flash / emergency recovery (USB cable)
 
 OTA only works once a *good* image (correct IP URL + WiFi fix) is on the device.
@@ -439,7 +456,8 @@ OTA.
 
 | Version | Notes |
 |---------|-------|
-| `2026.10.04-1` | **Automatic rollback and OTA over the MQTT link.** An OTA image is on trial until it has reached the broker (5 min), otherwise the previous image boots again; `mqtt` on `<base>/ota` brings the image over the MQTT/TLS link, so an update no longer needs the LAN. Meta gains `ota_state` / `ota_other`, and its buffer goes 260 -> 400 with a tripwire. Both proven on bench board #0002 on 2026-10-04 (sections above). Built and archived (`releases/indian-canbus-firmware-2026.10.04-1.bin`, md5 `091547a2801b20e8720c7b1af21a5d31`); **not on the bike yet** - it waits for the ignition. Rollback image: `releases/...-2026.09.27-3.bin`, md5 `8853b295b17b22818b19743e0bdbaf0c`. |
+| `2026.10.04-2` | The code of 2026.10.04-1 under a new version, built to prove an `mqtt` OTA on the bike over the phone's hotspot (a board declines the image it already runs). On the bike since 2026-10-04 10:23, tag `known-good-2026.10.04-2`, md5 `c5f2d813a2de53af39e2f4d1d5cab714`. Rollback image: `releases/...-2026.10.04-1.bin`. |
+| `2026.10.04-1` | **Automatic rollback and OTA over the MQTT link.** An OTA image is on trial until it has reached the broker (5 min), otherwise the previous image boots again; `mqtt` on `<base>/ota` brings the image over the MQTT/TLS link, so an update no longer needs the LAN. Meta gains `ota_state` / `ota_other`, and its buffer goes 260 -> 400 with a tripwire. Both proven on bench board #0002 on 2026-10-04 (sections above). On the bike since 2026-10-04 10:12 (`releases/indian-canbus-firmware-2026.10.04-1.bin`, md5 `091547a2801b20e8720c7b1af21a5d31`, tag `known-good-2026.10.04-1`). Rollback image: `releases/...-2026.09.27-3.bin`, md5 `8853b295b17b22818b19743e0bdbaf0c`. |
 | `2026.09.27-3` | The `asleep` marker is given 250 ms to leave the radio after `netFlush()`; on 27-2 the chip went down with it still in the TCP buffer and openHAB got only the last will. |
 | `2026.09.27-2` | **The network in its own task** (`src/net.cpp`): WiFi, SNTP, MQTT and OTA on core 0 behind two queues; `loop()` never waits for the broker. Measured with the broker blocked: loop gap 5019 → 4 ms, BLE gap 6656 → 3 ms, app uninterrupted. The network is now chosen by scan and signal, not by which SSID worked last. `ENABLE_MQTT 0` compiles again; env `sniffer-t2can-nomqtt` keeps it that way. |
 | `2026.09.27-1` | Two gauges in `meta`: `loop_max_ms` and `ble_gap_max_ms`, worst of the last 30 s, so a stall can be measured from the garage instead of felt on the road. |
