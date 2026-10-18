@@ -18,8 +18,7 @@ taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
 Last revised **2026-10-04**, when every status in this file was checked against
-the firmware running on the bike (`2026.10.04-3`, `src/main.cpp`; `2026.10.18-1`
-built 2026-10-18 adds the measured cruise and `torque`). **What is
+the firmware running on the bike (`2026.10.18-1` since 2026-10-18, `src/main.cpp`). **What is
 still open is collected in one place:
 [What is genuinely still open](#what-is-genuinely-still-open-2026-10-04).**
 
@@ -762,8 +761,8 @@ module knows which is which and does not say. The withdrawn decode keeps its
 **7. Throttle position — SOLVED 2026-09-04.** PGN 65266 byte 7, SPN 51, 0.4 % per bit. Verified on the bike with the engine stopped: six sweeps, 5-7 % at rest, 100 % at full, rpm at zero throughout. EEC2 was never the place to look.
 
 **8. Cruise control — see below.** Shipped since 2026-09-05 as `cruiseEnable`,
-`cruiseSw` and a derived `cruise`. One lead is open: a bit from SA 0 that may
-be the engaged state itself. (Until 2026-10-04 this line read "Understood; what
+`cruiseSw` and a derived `cruise`; since 2026.10.18-1 `cruise` is measured, the
+ECM's SPN 595 (the lead from SA 0 was confirmed on the ride of 2026-10-17). (Until 2026-10-04 this line read "Understood; what
 is missing is a decision, not data" — the decision was made on 2026-09-05.)
 
 ### Tier 2b — the key fob and what it controls (stationary, passive)
@@ -1210,12 +1209,13 @@ the dated text below counts from one, so its "byte 4" is `b[3]` and its "byte
   demonstrably holding and the hand off the grip, while `b[4]` reported every
   SET and RESUME press in the same frames. The control was inside the
   measurement.
-- **The firmware therefore derives `cruise`** (`HOLDING` / `off`). A SET or
-  RESUME press with the rocker on and at least 35 km/h arms it; three seconds
-  within 3 km/h confirm it; the brake (SPN 597), the clutch (SPN 598 — both from
+- **The firmware derived `cruise` from 2026-09-05 to 2026-10-17** (`HOLDING` / `off`). A SET or
+  RESUME press with the rocker on and at least 35 km/h armed it; three seconds
+  within 3 km/h confirmed it; the brake (SPN 597), the clutch (SPN 598 — both from
   SA 0 `b[3]`), the rocker going off, or a drift of more than 6 km/h for two
-  seconds end it. Every input is measured; only the rule joining them is
-  inferred, and the value says `HOLDING` rather than `ON` so that it shows.
+  seconds ended it. Every input was measured; only the rule joining them was
+  inferred, and the value said `HOLDING` rather than `ON` so that it showed.
+  **Replaced in 2026.10.18-1 by the measured bit** — the block below.
 
 **SETTLED 2026-10-17 — SA 0 `b[3]` bits 0-1 IS the engaged state (SPN 595).**
 One ride of 473 km on the bus (odometer 143448 -> 143921; owner's figure 480 km),

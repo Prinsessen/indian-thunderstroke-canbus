@@ -1,5 +1,15 @@
 # Next ride — what to do, and what happens by itself
 
+> **Status 2026-10-18.** The engine-byte hunt below is over: PGN 65382 byte 0 is
+> the low byte of a 16-bit engine speed, SPN 595 (cruise engaged) is on the bus
+> from the ECM and shipped as `cruise`, and the demand torque (61444 byte 7) is
+> verified and shipped as `torque` — all in firmware `2026.10.18-1`, on the bike
+> since 2026-10-18 (DECODE-PLAN.md). **Stage 2, the next ride with the cruise in
+> use:** `probe/throttle` is ON and logs the torque beside the valve, the fuel
+> rate and the speed; the question left is how the demand torque behaves while
+> the cruise holds with the grip released. The sections below are kept as the
+> record of how the questions were asked.
+
 ## What the Zealand ride taught, 2026-09-13
 
 1000 km, and a partial success. Three findings, in the order they matter.
@@ -160,7 +170,7 @@ it was not run. Writing the instruction down was not enough.
 ---
 
 Everything waiting on wheels, in one list, so it takes one outing instead of
-three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.04-3`.
+three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.18-1`.
 
 Most of it is passive: ride normally and the data arrives. Only two things ask
 anything of the rider, and both take four minutes.
@@ -238,6 +248,10 @@ Either answer is useful. The wrong name is the only bad outcome.
 
 **2. Steady throttle, changing load — 2 minutes, anywhere with a hill**
 
+**CLOSED 2026-10-17 without a ride:** byte 0 is the low byte of the engine speed
+(bytes 0-1 little-endian, 1 rpm per bit, r = 0.9993 against EEC1 in the August
+captures). Nothing in this message is left to separate. Kept as written below.
+
 PGN 65382 **byte 1** is the busiest unexamined byte on the bus: 255 distinct
 values across 4,721 frames, in a proprietary message already known to carry
 engine data. Now that the throttle is decoded it can finally be separated
@@ -313,8 +327,10 @@ Just ride, and these answer themselves from the log afterwards:
 - **Wheel sensor dropout counters.** They should stay at zero. Both are watched
   now, because both shims were left out and only the front was destroyed -- the
   rear survived on a good bearing, not a good gap.
-- **PGN 61444 byte 8**, engine demand torque: should track the throttle closely
-  and go negative the moment it shuts. Cheap to confirm now.
+- **PGN 61444 byte 8**, engine demand torque — **confirmed 2026-10-17 in the
+  August captures** (-22..+60 %, monotonic with the valve, negative only on the
+  move) **and shipped as `torque` in 2026.10.18-1.** Stage 2 looks at it under
+  cruise.
 - **PGN 65215 byte 5**: candidate for the rear wheel straight from the ABS
   module, which would be a third independent speed.
 - **Grip temperature** should fall with speed while the heat is off -- the last
@@ -327,6 +343,10 @@ Just ride, and these answer themselves from the log afterwards:
 ---
 
 ## Cruise control — one thing to do on the next ride (added 2026-10-04)
+
+**DONE 2026-10-17, 473 km:** SPN 595 IS on the bus from SA 0 — 100 engagements,
+94 within 2.5 s of a press, the derived hold 3-5 s behind and blind to 19. Shipped
+as the measured `cruise` in 2026.10.18-1 (DECODE-PLAN.md, cruise section).
 
 Use the cruise control for a minute or two at a steady speed, let it go with the
 brake once and with the clutch once, and SET it again. Nothing to watch while
@@ -360,9 +380,9 @@ and an instruction to flash `probe/cruise` before riding. Both are obsolete.
 RES/ACC as momentary presses, reported as the legend printed on the rocker. The
 enable rocker is byte 4 bit 0.
 
-**What the app shows is derived in code** from measured inputs only — the rocker,
-the presses, the brake, the clutch and road speed. It is honest about being a
-derivation: the vocabulary differs from the measured fields around it on purpose.
+**What the app showed was derived in code** from measured inputs only — the rocker,
+the presses, the brake, the clutch and road speed — until 2026.10.18-1; since then
+it is the ECM's own engaged bit (the section above).
 
 ## Two stationary tests — both closed, kept so they are not run again
 

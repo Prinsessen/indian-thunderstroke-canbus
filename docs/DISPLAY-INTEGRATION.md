@@ -68,7 +68,7 @@ gauge hardware/software information, TPMS sensor registration (dealer).
 | battery voltage | `battery` | SA 0 |
 | turn signals | `indLeft/Right` | ECM, SA 0 (PGN 65089; corrected 2026-10-04, listed under SA 39 before) |
 | hazard, high beam | `hazard`, `headlight` | VCM, SA 39 (PGN 65381) |
-| cruise enabled / set | `cruiseEnable`, `cruise` | SA 39 / derived |
+| cruise enabled / engaged | `cruiseEnable`, `cruise` | SA 39 / ECM, SA 0 (SPN 595, measured since firmware 2026.10.18-1; derived before) |
 | security lamp | `security` | SA 39 (65386) |
 | check engine, ABS lamp | DM1 lamps MIL / Warn | SA 0, SA 11 |
 | heated grips | `grips` | SA 39 |

@@ -1041,6 +1041,8 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
     // (DECODE-PLAN.md). One line per change of those two bits, with the brake
     // and clutch from the same byte and the derived hold beside it, so a ride
     // with the cruise used answers it either way.
+    // ANSWERED 2026-10-17: it is SPN 595, and `cruise` is read from it since
+    // 2026.10.18-1. The line stays as a cheap live check; `hold=` now mirrors it.
     if (probeEnabled(PROBE_CRUISE) && j.pgn == 65265 && j.sa == 0 && nn >= 4) {
         static uint8_t ecm595 = 0xFF;
         const uint8_t now595 = b[3] & 0x03;
@@ -1422,7 +1424,7 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
                 // The clutch rides in the same byte, bits 6-7 (SPN 598), and
                 // has been arriving free in every frame we already read. It is
                 // decoded now because it is one of the things that drops the
-                // cruise control, and the derived hold below needs it.
+                // cruise control (and the hold derived from it until 2026.10.18-1).
                 uint8_t cl = (b[3] >> 6) & 3;
                 if (cl <= 1) SETI(clutch, cl);
                 // Bits 0-1 of the same byte: SPN 595, cruise control ACTIVE --
@@ -1454,6 +1456,7 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
             // captures could not have shown an engaged state whether or not it
             // is transmitted. A null result from a test incapable of a positive
             // one. Untested, not absent -- see NEXT-RIDE.md.
+            // SETTLED 2026-10-17: the ECM (SA 0) transmits it, decoded above.
             //
             // The service manual names the switches Set/DECEL (599) and
             // Resume/ACCEL (601): one rocker, two jobs, depending on whether
@@ -2961,7 +2964,8 @@ void loop() {
 #if FIRMWARE_MODE == MODE_PRODUCTION
     // Outside the probe block on purpose: until 2026.10.04-3 this call sat
     // inside it, so a build with the probes compiled out would have frozen the
-    // derived cruise state without a word.
+    // then-derived cruise state without a word. The derivation is gone since
+    // 2026.10.18-1; the note stays for the lesson.
 #endif
 #if FIRMWARE_MODE == MODE_PRODUCTION
     // The bus has gone quiet: the ignition is off, and the live readings are

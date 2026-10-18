@@ -41,7 +41,7 @@ heated clothing based on how cold it actually feels at road speed.
 The interface is the owner's own board, the **CANFD-MC rev 1.0** — an
 ESP32-S3-WROOM-1U with an MCP2518FD CAN controller. It replaced the LilyGO
 T-2CANFD the project started on: a first board went on the bike on 2026-09-28
-and board #0001 on 2026-10-03. The bike runs firmware 2026.10.04-3 and still
+and board #0001 on 2026-10-03. The bike runs firmware 2026.10.18-1 and still
 advertises over Bluetooth as "Springfield"; a board on the bench advertises as
 "CANFD-bench". New firmware needs no cable: the interface fetches it over HTTP
 on the home network (`update`), or over its MQTT link from anywhere it can reach

@@ -358,7 +358,7 @@ for each. Details and measured runs: `OTA.md` in the firmware repo.
 **The board on the bike** is the owner's own CANFD-MC rev 1.0 (ESP32-S3-WROOM-1U
 with an MCP2518FD) since 2026-09-28, board #0001 since 2026-10-03; the LilyGO
 T-2CANFD is retired. It is the same pin map and the same build — the environment
-is still called `sniffer-t2can` — and the bike runs 2026.10.04-3 and advertises
+is still called `sniffer-t2can` — and the bike runs 2026.10.18-1 and advertises
 as "Springfield". A bench board is built from `bench-canfdmc` and advertises as
 "CANFD-bench"; the app finds either, because it scans for the service UUID.
 

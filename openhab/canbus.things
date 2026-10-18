@@ -15,7 +15,7 @@
 // ABSENT FIELDS ARE NOT ZERO
 // A field the bike is not currently sending is simply missing from the JSON,
 // and JSONPATH then leaves the item at its last value rather than zeroing it.
-// Several signals only appear once the bike is moving — the derived cruise hold
+// Several signals only appear once the bike is moving — the cruise state
 // and the tyre readings are the clearest examples. automation/js/canbus-clear-live-values.js
 // exists for exactly this: it clears the momentary readings to UNDEF when the
 // ignition goes off or the board goes offline, so a parked bike does not show the last value it had at
@@ -98,7 +98,7 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	Type string : cruiseEnable "Cruise Enabled" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseEnable" ]
 	Type string : cruiseSw     "Cruise Switch"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseSw" ]
 	// Clutch, SPN 598 -- free from the byte the brake comes from. Decoded
-	// 2026-09-05 because the derived cruise hold needs it.
+	// 2026-09-05 because the then-derived cruise hold needed it; a signal in its own right.
 	Type string : clutch       "Clutch"         [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.clutch" ]
 	// ---- TPMS (confirmed 2026-08-15) ------------------------------------
 	Type number : tyreFront     "Front Tyre"      [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.tyreFront" ]

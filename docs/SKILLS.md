@@ -7,8 +7,9 @@ It deliberately does **not** repeat the reference documents. Those are listed
 below and are the authority on what has been found. This one is about **how the
 work is done, where things live, and what has already cost time.**
 
-Last revised **2026-10-04**: checked against the firmware on the bike
-(`2026.10.04-3`, `FIRMWARE_MODE 1`, `PROBE_CHANGES 1`, MCP2518 backend). The
+Last revised **2026-10-18** for firmware `2026.10.18-1` (cruise measured, `torque`
+shipped, 65382 byte 0 solved); the rest was checked on 2026-10-04 against the
+firmware then on the bike (`2026.10.04-3`, `FIRMWARE_MODE 1`, `PROBE_CHANGES 1`, MCP2518 backend). The
 board, the paths, the list of what is shipped and the list of what is open were
 all behind and are corrected below. The revision before it was 2026-09-07: deep
 sleep running on the bike, the kill switch and start button decoded, and
@@ -36,9 +37,9 @@ the app.)
 - **Versions disagree?** The bike is behind the source; something was built and
   not flashed, or an OTA failed. `meta` will say.
 - **`PROBE_CHANGES 0`?** The discovery probe has been removed and section 4's
-  hunting instructions need it back. As the source stands on 2026-10-04 it
-  also stops the derived `cruise`: the call that updates it sits inside the
-  same `#if` in `loop()`. Check that before turning the probe off.
+  hunting instructions need it back. (Until 2026.10.04-3 it also froze the
+  derived `cruise`, whose update sat inside the same `#if`; the derivation is
+  gone since 2026.10.18-1, so nothing else hangs on the probe now.)
 - **`FIRMWARE_MODE` not 1?** You are looking at the discovery build, not the one
   that runs on the bike.
 - **Commits since this date?** Read them. The commit messages on this project
@@ -430,8 +431,9 @@ head temperature (the JSON key is still `coolant`; there is no oil temperature
 sensor), fuel level, rate, economy and range to empty, battery, ambient, tyres,
 DM1, VIN and software ID, odometer, trip, heated grips and their temperatures,
 tilt/stand, the sidestand switch, the kill switch, the start button, brake,
-clutch, indicators, hazard, headlight, cruise enable, the cruise switches and a
-*derived* cruise hold, key fob / security, the two trip buttons as events,
+clutch, indicators, hazard, headlight, cruise enable, the cruise switches and the
+cruise engaged state (measured, the ECM's SPN 595, since 2026.10.18-1), engine
+demand torque, key fob / security, the two trip buttons as events,
 ignition, wheel-sensor cross-check, service odometer.
 
 **Understood and deliberately not shipped:** correcting the front/rear speed
@@ -446,7 +448,8 @@ front brake, horn. Each keeps its `case` and a comment saying why. Two of them
 turned out to be something else entirely: the "horn" bit is the security system
 looking for the key fob — now shipped as `security` — and the "front brake" is
 one brake signal that either control operates. Cruise came back on 2026-09-05
-as measured switches plus a derived state, and the throttle was found in 65266.
+as measured switches plus a derived state — measured since 2026.10.18-1 — and the
+throttle was found in 65266.
 
 **Established as absent, each exercised while watched:** lean angle in corners,
 Trip 2, cruise set speed, **cruise engaged (SPN 595) from SA 39**, **the
@@ -470,15 +473,12 @@ that a signal is expected over the network.
 **Open and worth doing** (zero-based byte numbers; the complete list is
 DECODE-PLAN.md, "What is genuinely still open"):
 
-- **PGN 65382 byte 0** — the busiest byte on the bus and the only unexplained
-  one left in that message, now that byte 1 is known as rpm/256 and bytes 3-4
-  as the range to empty. The sharp test still applies: cruise holding with the
-  grip released separates the rider's demand (SPN 91, not on the bus) from the
-  valve (SPN 51, decoded).
-- **PGN 65265 from SA 0, byte 3 bits 0-1** — an open lead from the August
-  captures that this may be the cruise engaged state. Not confirmed on the
-  bike; one ride with those two bits logged beside the derived `cruise`
-  settles it.
+- ~~**PGN 65382 byte 0**~~ — **solved 2026-10-17:** the low byte of a 16-bit
+  engine speed whose high byte is byte 1. Nothing is left in that message.
+- ~~**PGN 65265 from SA 0, byte 3 bits 0-1**~~ — **confirmed 2026-10-17** as
+  SPN 595, the cruise engaged state, and shipped as `cruise` in 2026.10.18-1.
+- **61444 byte 7** — demand torque, verified and shipped as `torque` in
+  2026.10.18-1; how it behaves under cruise is stage 2 (NEXT-RIDE.md).
 - A handful of two- and three-valued bytes, and four PGNs in which nothing
   varies.
 - The immobiliser's relation to SPN 520330, which a proprietary PGN cannot

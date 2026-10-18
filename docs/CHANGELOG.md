@@ -6,6 +6,19 @@ commits carry the detail.
 
 ---
 
+## 2026-10-18 — release 7 (0.7)
+
+One new thing on the rev dial: a third arc inside the throttle's for the engine
+demand torque (`tq`, firmware 2026.10.18-1) — amber when the engine pulls, blue
+on the overrun, empty within two percent of zero, full sweep at +60 %, half a
+sweep at -25 %. The scale is from the captures and one ride and is three
+constants in `GaugeView.kt`, so it can move once the ring has been read on the
+road. Nothing on the fast packet; a dial fed by older firmware shows two arcs.
+The cruise lamp's "holding" is now the ECM's own engaged bit rather than a hold
+derived from the presses — no app change needed, the firmware sends `"ON"` where
+it sent `"HOLDING"`, and the lamp already took both. `playVersionCode` is 7.
+Written on the server, to be built on the Windows machine.
+
 ## 2026-10-04 — release 6 (0.6)
 
 Nine small fixes found by checking every document against the source (the list,

@@ -309,7 +309,7 @@ Three things in it are not what they seem:
 
 - **Images up to 2026.10.04-2 print an older banner**: `USB + MQTT | LilyGO T-2CANFD (MCP2518FD/SPI, CAN A)` and a fixed
   `canbus/indian/state` on the `MODE` line, whatever the board and its base topic.
-  From 2026.10.04-3, which is on the bike, the lines above are what is printed
+  From 2026.10.04-3 (on the bike until 2026-10-18, then 2026.10.18-1) the lines above are what is printed
   (the topic is the build's own base topic).
 - **There is no bitrate scan.** `CAN_FIXED_BITRATE` is 250000 in `config.h`, so
   the firmware listens at 250 kbit/s only ([SLEEP.md](SLEEP.md) has the reason).

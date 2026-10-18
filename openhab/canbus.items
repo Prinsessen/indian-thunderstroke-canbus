@@ -295,19 +295,18 @@ String CanBus_Clutch           "Clutch [%s]"                     <switch>      (
 // Cruise, decoded in the garage 2026-09-05. The item that was withdrawn on
 // 09-03 is back with the right meaning: it was reading the SET button and
 // calling it the engaged state.
-//   Engaged  SPN 595 -- SA 39 does not transmit it (road test 2026-09-05), so
-//            CanBus_Cruise below is derived. "Not available" is never published
-//            as OFF, which is what caused the false tell-tale.
+//   Engaged  SPN 595 -- SA 39 does not transmit it (road test 2026-09-05), but
+//            the ECM (SA 0) does: measured since firmware 2026.10.18-1, derived
+//            from the presses and the speed before that. "Not available" is
+//            never published as OFF, which is what caused the false tell-tale.
 //   Enabled  SPN 596 -- the rocker. Was ON for all four August rides.
 //   Switch   SPN 599/601 -- momentary; see canbus-cruise-latch.js
 String CanBus_CruiseEnable     "Cruise Enabled [%s]"             <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruiseEnable" }
-// DERIVED, and the label says so. SPN 595 is not on this bus -- proved on the
-// road 2026-09-05 with the cruise demonstrably holding at 94 km/h and byte 4
-// unmoved, while the button presses came through in the same frames. This is
-// worked out from measured inputs: the SET/RESUME press arms it, and it only
-// claims HOLDING once the speed has sat still for three seconds. Brake, clutch
-// and the rocker end it outright; drifting off the held speed ends it too,
-// which is how a backward flick of the grip is caught without being visible.
+// MEASURED since firmware 2026.10.18-1: ON/OFF is the ECM's own SPN 595 (PGN
+// 65265 SA 0 byte 3 bits 0-1), settled on the 473 km ride of 2026-10-17. From
+// 2026-09-05 to then it was DERIVED (HOLDING/off) from the presses, the speed,
+// the brake and the clutch, because SA 39's copy of the field reads "not
+// available" and that had been taken for the whole bus.
 String CanBus_Cruise           "Cruise [%s]"                     <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruise" }
 String CanBus_CruiseSwitch     "Cruise Switch [%s]"              <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruiseSw" }
 String CanBus_CruiseSw_Latched "Cruise Switch (recent) [%s]"     <switch>      (gCanBus_Controls)  ["Status", "Info"]
