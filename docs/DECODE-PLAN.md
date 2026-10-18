@@ -63,7 +63,7 @@ dashboard that was quietly lying:
 |---|---|---|
 | throttle, from PGN 65382 | 2026-09-02 | engine speed over 256 — **the real throttle was later found in 65266 and is live** |
 | front brake | 2026-09-03 | the shared brake-light switch; both levers work it |
-| cruise control | 2026-09-03 | the SET/RESUME button, not the engaged state — **back since 2026-09-05 as `cruiseSw`, `cruiseEnable` and a derived `cruise`** |
+| cruise control | 2026-09-03 | the SET/RESUME button, not the engaged state — **back since 2026-09-05 as `cruiseSw`, `cruiseEnable` and a derived `cruise`; since 2026.10.18-1 `cruise` is measured, the ECM's own SPN 595** |
 | horn | 2026-09-04 | first read as "the bike waking up"; it is the key-fob search — **shipped since 2026-09-05 as `security`** |
 
 Note what is *not* on that list. The **headlight** was corrected, not withdrawn:
