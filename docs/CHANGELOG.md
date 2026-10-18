@@ -6,6 +6,15 @@ commits carry the detail.
 
 ---
 
+## 2026-10-18 — release 8 (0.8)
+
+The torque arc glides. Its value comes in the state packet once a second (the
+revs and the throttle come ten times a second in the fast packet), so in 0.7 the
+arc stood still for a second and jumped - seen on the first garage test the
+same evening. It is now eased towards each new value with a 0.30 s time
+constant, the needle's trick: still moving when the next value lands, never
+stepped. Nothing else changed. `playVersionCode` is 8.
+
 ## 2026-10-18 — release 7 (0.7)
 
 One new thing on the rev dial: a third arc inside the throttle's for the engine

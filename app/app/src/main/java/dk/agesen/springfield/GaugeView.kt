@@ -55,6 +55,14 @@ class GaugeView @JvmOverloads constructor(
         private const val TORQUE_DEADBAND = 2
         private const val TORQUE_FULL_PULL = 60f
         private const val TORQUE_FULL_OVERRUN = 25f
+        /**
+         * The torque comes over BLE in the state packet, once a second, where the revs
+         * and the throttle come ten times a second in the fast packet - so drawn raw the
+         * arc stood still for a second and jumped (first garage test, 2026-10-18). It is
+         * eased like the needle instead. 0.30 s reaches 95 % of a step in 0.9 s, so the
+         * arc is still moving when the next value lands and never looks stepped.
+         */
+        private const val TORQUE_TAU = 0.30f
 
         /**
          * The needle's spring, as stiffness and damping.
@@ -175,7 +183,8 @@ class GaugeView @JvmOverloads constructor(
      * and one ride, and may move once the ring has been looked at on the road.
      */
     var torquePct: Int? = null
-        set(v) { field = v; invalidate() }
+        set(v) { field = v; if (v == null) torqueShown = 0f; invalidate() }
+    private var torqueShown = 0f    // the eased value the arc is drawn from
 
     /** Called when the rider long-presses the ride figure on the speed dial. */
     var onRideReset: (() -> Unit)? = null
@@ -348,6 +357,10 @@ class GaugeView @JvmOverloads constructor(
         // a rider actually reads at speed.
         if (dial == Dial.RPM) {
             drawThrottleArc(canvas, radius, stroke)
+            torquePct?.let { tq ->
+                torqueShown = Cluster.ease(torqueShown, tq.toFloat(), dt, TORQUE_TAU)
+                if (kotlin.math.abs(tq - torqueShown) > 0.3f) postInvalidateOnAnimation()
+            }
             drawTorqueArc(canvas, radius, stroke)
             if (showIgnition) {
                 IgnitionLamp.draw(canvas, cx, cy + size * 0.222f,
@@ -439,7 +452,8 @@ class GaugeView @JvmOverloads constructor(
     private val throttleRect = RectF()
 
     private fun drawTorqueArc(canvas: Canvas, radius: Float, stroke: Float) {
-        val t = torquePct ?: return
+        if (torquePct == null) return
+        val t = torqueShown
         val inner = radius - stroke * 2.0f
         torqueRect.set(arcRect.centerX() - inner, arcRect.centerY() - inner,
                        arcRect.centerX() + inner, arcRect.centerY() + inner)
