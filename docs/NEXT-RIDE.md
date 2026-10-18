@@ -9,6 +9,16 @@
 > rate and the speed; the question left is how the demand torque behaves while
 > the cruise holds with the grip released. The sections below are kept as the
 > record of how the questions were asked.
+>
+> **Firmware changes queued for stage 2** (small, decided 2026-10-18):
+> 1. Announce `NEW pgn=` **above the stationary gate** in `probeFrame()`, so the
+>    per-wake PGN inventory (openHAB, `canbus-probe-inventory.js`) also sees what
+>    the bus sends only while moving. One line per new PGN per boot, no flood.
+> 2. Republish `Running <version> - verified` on every MQTT reconnect while the
+>    image is valid: the first session after the OTA of 2026-10-18 dropped seven
+>    seconds in and took the retained line with it, so CanBus_OTA never showed it.
+> 3. Read the torque under cruise in the `probe/throttle` lines, then decide the
+>    app's torque-arc scale (`TORQUE_*` in GaugeView.kt, app 0.7).
 
 ## What the Zealand ride taught, 2026-09-13
 
