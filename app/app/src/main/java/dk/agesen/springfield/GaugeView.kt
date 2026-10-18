@@ -51,6 +51,10 @@ class GaugeView @JvmOverloads constructor(
          * keeps them doing.
          */
         private const val HUB_CLEARANCE = 0.075f
+        /** Torque arc: nothing drawn inside this, full sweep at this pull, half a sweep at this overrun. */
+        private const val TORQUE_DEADBAND = 2
+        private const val TORQUE_FULL_PULL = 60f
+        private const val TORQUE_FULL_OVERRUN = 25f
 
         /**
          * The needle's spring, as stiffness and damping.
@@ -86,6 +90,7 @@ class GaugeView @JvmOverloads constructor(
     private val colTurn = Color.parseColor("#4FA96B")
     private val colOff = Color.parseColor("#1E242C")
     private val colStrike = Color.parseColor("#39414D")
+    private val colOverrun = Color.parseColor("#4C8DD8")   // engine braking: a cool blue the face has nowhere else
 
     /**
      * What a lit figure throws onto the face behind it.
@@ -153,6 +158,23 @@ class GaugeView @JvmOverloads constructor(
      * message we were reading one field of out of four.
      */
     var throttlePct: Int? = null
+        set(v) { field = v; invalidate() }
+
+    /**
+     * Engine demand torque, -25..+60 %, drawn as a third arc inside the throttle's.
+     *
+     * The outer arc is what the engine is DOING, the throttle arc what the rider
+     * is ASKING, and this one what the ECM is DEMANDING of the engine -- the
+     * three questions one dial can answer. It is the only load-like value the
+     * bus broadcasts (SPN 2432, firmware 2026.10.18-1).
+     *
+     * Length is size, colour is sign: amber when the engine pulls, blue when it
+     * is braking on the overrun, nothing within two percent of zero so a steady
+     * cruise leaves the ring empty. Full sweep at +60 %, half a sweep at -25 %,
+     * the extremes seen on the bus -- the figures are from the August captures
+     * and one ride, and may move once the ring has been looked at on the road.
+     */
+    var torquePct: Int? = null
         set(v) { field = v; invalidate() }
 
     /** Called when the rider long-presses the ride figure on the speed dial. */
@@ -326,6 +348,7 @@ class GaugeView @JvmOverloads constructor(
         // a rider actually reads at speed.
         if (dial == Dial.RPM) {
             drawThrottleArc(canvas, radius, stroke)
+            drawTorqueArc(canvas, radius, stroke)
             if (showIgnition) {
                 IgnitionLamp.draw(canvas, cx, cy + size * 0.222f,
                                   size * 0.070f, ignition, bezelPaint, labelPaint)
@@ -414,6 +437,30 @@ class GaugeView @JvmOverloads constructor(
     }
 
     private val throttleRect = RectF()
+
+    private fun drawTorqueArc(canvas: Canvas, radius: Float, stroke: Float) {
+        val t = torquePct ?: return
+        val inner = radius - stroke * 2.0f
+        torqueRect.set(arcRect.centerX() - inner, arcRect.centerY() - inner,
+                       arcRect.centerX() + inner, arcRect.centerY() + inner)
+
+        tickPaint.color = colDial
+        tickPaint.strokeWidth = stroke * 0.30f
+        tickPaint.strokeCap = Paint.Cap.ROUND
+        canvas.drawArc(torqueRect, START_ANGLE, SWEEP_ANGLE, false, tickPaint)
+
+        if (t > TORQUE_DEADBAND) {
+            tickPaint.color = colAccent
+            val f = (t / TORQUE_FULL_PULL).coerceIn(0f, 1f)
+            canvas.drawArc(torqueRect, START_ANGLE, SWEEP_ANGLE * f, false, tickPaint)
+        } else if (t < -TORQUE_DEADBAND) {
+            tickPaint.color = colOverrun
+            val f = (-t / TORQUE_FULL_OVERRUN).coerceIn(0f, 1f) * 0.5f
+            canvas.drawArc(torqueRect, START_ANGLE, SWEEP_ANGLE * f, false, tickPaint)
+        }
+    }
+
+    private val torqueRect = RectF()
 
     /** The travelled part of the dial glows, so the sweep leaves a trail. */
     private fun drawLitArc(canvas: Canvas, stroke: Float, fraction: Float) {

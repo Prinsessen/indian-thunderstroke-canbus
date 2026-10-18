@@ -114,6 +114,8 @@ data class FastPacket(
 data class BikeJsonState(
     val rpm: Int? = null,
     val throttlePct: Int? = null,
+    /** Engine demand torque, %, SPN 2432 -- negative is overrun. `tq`, firmware 2026.10.18-1 and later. */
+    val torquePct: Int? = null,
     val gear: String? = null,
     val coolantC: Int? = null,
     val speedKmh: Double? = null,
@@ -266,6 +268,7 @@ data class BikeJsonState(
             return BikeJsonState(
                 rpm = i("r"),
                 throttlePct = i("th"),
+                torquePct = i("tq"),
                 gear = s("g"),
                 // "ot" is a leftover misnomer -- this is CYLINDER HEAD
                 // temperature, not oil. PAIRED CHANGE: the firmware's

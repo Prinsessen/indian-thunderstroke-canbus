@@ -114,6 +114,7 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
             // strip exists, and the dial face is left to the needle.
             showIgnition = strip == null
             throttlePct = fast?.throttlePct ?: state?.throttlePct
+            torquePct = state?.torquePct     // state only: the fast packet has no room for it
             introDelay = Cluster.STAGGER_SPEEDO
             turnSide = GaugeView.TurnSide.RIGHT
             rpm = fast?.rpm
