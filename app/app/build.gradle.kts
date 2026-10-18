@@ -56,6 +56,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    lint {
+        // app/lint.xml: the portrait/landscape splash picture has no default copy, on purpose
+        lintConfig = file("lint.xml")
+    }
     kotlinOptions {
         jvmTarget = "17"
     }

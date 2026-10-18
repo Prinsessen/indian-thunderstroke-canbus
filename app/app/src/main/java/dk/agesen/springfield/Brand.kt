@@ -16,6 +16,8 @@ import androidx.core.content.res.ResourcesCompat
  * build break if it is missing.
  *
  * ARTWORK — put a JPG or PNG at: app/src/main/res/drawable-nodpi/splash_art.jpg
+ *   (or, as the app ships since 2026-10, one each in drawable-port-nodpi and
+ *   drawable-land-nodpi with no default; app/lint.xml excuses the missing default)
  *   Any aspect ratio; it is centre-cropped to fill the splash. When present the
  *   splash switches to a full-bleed composition and stops drawing its own badge.
  *

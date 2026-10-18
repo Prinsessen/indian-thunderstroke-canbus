@@ -59,10 +59,13 @@ rules.JSRule({
 // A new wake is a new boot: the firmware's own table is empty again and it
 // re-announces everything, so the list starts over too. The announcements of
 // the previous wake stay in influx under CanBus_Probe_NewPgn.
+// On the wake itself (SleepState asleep -> awake), NOT on CanBus_Status going
+// online: the MQTT link drops and comes back within a wake (20:11:15 on the
+// first garage test, 2026-10-18), and that emptied a list of ten PGNs.
 rules.JSRule({
   name: 'CAN bus - PGN inventory starts over on wake',
-  description: 'Empties the per-wake PGN list when the board comes online',
-  triggers: [triggers.ItemStateChangeTrigger('CanBus_Status', 'offline', 'online')],
+  description: 'Empties the per-wake PGN list when the board wakes',
+  triggers: [triggers.ItemStateChangeTrigger('CanBus_SleepState', 'asleep', 'awake')],
   execute: () => {
     cache.private.put('seen', {});
     items.getItem('CanBus_Probe_Pgns').postUpdate('0 PGNs: (just woke)');

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  splash_art.jpg exists as a portrait and a landscape picture (drawable-port-nodpi,
+  drawable-land-nodpi) and has no default copy on purpose: every device is one or
+  the other, so a default could never be chosen and would only add 220 KB to the
+  bundle. Lint cannot know that, so this one resource is excused here instead of
+  building with -x lint (2026-10-18). Brand.kt looks the picture up by name.
+-->
+<lint>
+    <issue id="MissingDefaultResource">
+        <ignore path="src/main/res/drawable-port-nodpi/splash_art.jpg" />
+        <ignore path="src/main/res/drawable-land-nodpi/splash_art.jpg" />
+    </issue>
+</lint>

@@ -17,7 +17,13 @@ road. Nothing on the fast packet; a dial fed by older firmware shows two arcs.
 The cruise lamp's "holding" is now the ECM's own engaged bit rather than a hold
 derived from the presses — no app change needed, the firmware sends `"ON"` where
 it sent `"HOLDING"`, and the lamp already took both. `playVersionCode` is 7.
-Written on the server, to be built on the Windows machine.
+Also `app/lint.xml`: the portrait and landscape splash pictures have no default
+copy on purpose (every device is one or the other; a copy is 220 KB of dead
+weight), and lint's `MissingDefaultResource` is excused for those two files, so
+the release build no longer needs `-x lint`.
+Written on the server, built on the Windows machine and released to Play's
+internal testers on 2026-10-18 at 19:51.
+Before the next hand-over `playVersionCode` goes to 8.
 
 ## 2026-10-04 — release 6 (0.6)
 
