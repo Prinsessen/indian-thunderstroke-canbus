@@ -183,7 +183,7 @@ The one tell-tale with more than a state to report, so the only one that moves.
 | | what you see |
 |---|---|
 | Armed, no speed set | Amber, steady, empty dial. **Steady on purpose** — the stillness is what makes "holding" different from "armed" |
-| Holding a speed | Green, with a needle, breathing on the app's 1700 ms heartbeat |
+| Holding a speed | Green, with a needle, breathing on the app's 1700 ms heartbeat. Since firmware 2026.10.18-1 this is the ECM's own engaged bit, so it lights in the same second as the cluster's green lamp; before that it was a hold derived from the presses and a steady speed, and ran a few seconds behind |
 | RES/ACC pressed | The needle swings **up** the scale and the tick at the top end flares out past the arc |
 | SET/DEC pressed | The needle swings **down**, and the bottom tick flares |
 
@@ -198,6 +198,19 @@ speed is held — SET is pressed *from* armed, and that press deserves the same
 confirmation as any other. The rocker's own name still appears under the lamp
 for 1.5 s, unchanged; the movement is there so it can be read without looking at
 a word.
+
+### The three arcs on the rev dial
+
+The outer, lit arc is what the engine is **doing** — the revs. Inside it a thin
+arc is what the rider is **asking** — the throttle valve, 0–100 %. Open the
+throttle and the inner arc leaps ahead; shut it and the outer one runs on alone
+while the engine winds down. Inside that, from app 0.7 with firmware
+2026.10.18-1, a third arc is what the ECM is **demanding** of the engine — the
+demand torque: amber when the engine pulls, blue when it brakes on the overrun,
+empty within two percent of zero so a steady cruise leaves it blank. Full sweep
+is +60 %, half a sweep −25 %, the extremes seen on the bus; the figures may move
+once the ring has been read on the road. A dial fed by older firmware simply shows
+two arcs.
 
 ### The needle has mass, the number does not
 

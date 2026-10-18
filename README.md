@@ -65,7 +65,8 @@ you whether *you* are the problem.
 | **Lean angle** | Upright, resting on the stand, or lying down |
 | **Grip heater level and both grip temperatures** | The level in its ten detents, and what each grip has actually reached — separately, so you can see whether the heat is arriving rather than only what you asked for. Which side is which was settled by holding a bare hand on one grip with the heat off |
 | **Cylinder head temperature** | The engine's only temperature sensor. This bike is air-cooled and has no oil temperature sensor at all |
-| **A derived cruise-control state** | See below — the bike does not transmit it |
+| **The cruise-control engaged state** | Measured since firmware 2026.10.18-1: the ECM's own SPN 595. For six weeks it was derived, because the module first asked does not send it — see below |
+| **Engine demand torque** | SPN 2432, -25..+60 %: how hard the ECM is asking the engine to work, negative on the overrun. The one load-like value the bus broadcasts |
 
 ---
 
@@ -79,7 +80,7 @@ Worth as much as the list above, because it saves somebody a week:
 | **The saddlebag locks** | Console switch and both fob buttons, actuators confirmed running by the voltage sag they cause. The bus stayed silent |
 | **The security alarm** | Arming chirps the horn and wakes nothing |
 | **The fog lamps** | On and off six times with the change detector running. Nothing answered. Indian's fault table knows the lamps — SPN 520291 and 520292 — so failures are reported; the switch position is not |
-| **Cruise control engaged (SPN 595), from the switch module** | Held at 94 km/h with the rider's hand off the grip. Byte 4 of the switch module's frame never moved, while the button presses in the *same frames* came through perfectly. Whether the ECM reports it in its own copy of that message is an open lead from older captures, not yet tested on the road; see [DECODE-PLAN.md](docs/DECODE-PLAN.md) |
+| **Cruise control engaged (SPN 595), from the switch module** | Held at 94 km/h with the rider's hand off the grip. Byte 4 of the switch module's frame never moved, while the button presses in the *same frames* came through perfectly. Whether the ECM reports it in its own copy of that message is an open lead from older captures, not yet tested on the road; see [DECODE-PLAN.md](docs/DECODE-PLAN.md) **The ECM sends it** (2026-10-17): PGN 65265 from SA 0, byte 3 bits 0-1 — the same field in the other module's copy of the message, settled on a 473 km ride. The absence is the switch module's alone |
 | **Coast and accelerate (SPN 600 / 602)** | Not sent. Indian transmits SET and RESUME only; the decel/accel meaning is applied by the ECU once engaged |
 | **The low-oil-pressure lamp, at key-on** | Key on, start, idle, key off, key on again with every DM1 lamp byte and every VCM status byte watched: nothing followed the pressure. The switch sits on the VCM; it evidently reports low pressure only as a fault with the engine running, which nobody is going to provoke on purpose. The service manual then named it: SPN 98 FMI 4 "Pressure Too Low", P1526, MIL on, and the lamp is specified to light only with the engine running. So it is a DM1 fault, not a status bit, and nobody is going to run the engine dry to watch it arrive |
 
@@ -153,20 +154,27 @@ that rides on the bar, ANOTHER DEVICE on the phone in the pocket. Without it
 the phone takes the controllers first and the tablet never gets them — which
 is how it was found.
 
-## Cruise control, derived
+## Cruise control, measured — after six weeks derived
 
-The switch module does not transmit SPN 595, so the engaged state is worked out
-instead — from measured inputs only. The rocker (SPN 596), the SET and RESUME presses (599/601),
-the brake (597), the clutch (598) and road speed.
+The switch module does not transmit SPN 595: its copy of the field reads "not
+available" with the cruise demonstrably holding (road test, 2026-09-05). That was
+taken for the whole bus, and from then on the engaged state was *worked out* from
+measured inputs — the rocker (SPN 596), the SET and RESUME presses (599/601), the
+brake (597), the clutch (598) and road speed. A press armed it, three seconds of
+steady speed confirmed it, brake, clutch, rocker or a drift off the held speed
+ended it; the value said `HOLDING` rather than `ON` so the word itself marked what
+kind of fact it was.
 
-A press only *arms* the state. It becomes `HOLDING` once the speed has sat still
-for three seconds, so a press that never caught — too slow, wrong gear — never
-claims to be holding. Brake, clutch and the rocker end it outright; drifting off
-the held speed ends it too, which catches a backward flick of the grip even though
-that input is invisible.
+The ECM sends the same message, and in *its* copy the field is live. One ride of
+473 km with the cruise in use all day (2026-10-17) settled it: 100 engagements,
+94 within 2.5 s of a SET or RESUME press, every drop with the throttle valve
+closing and the speed falling — and the derivation ran 3–5 s behind it on both
+edges and never confirmed 19 of the 100 (short holds that did not reach three
+steady seconds). Since firmware 2026.10.18-1 `cruise` is that bit, `ON`/`OFF`,
+and the derivation is gone. The set speed is still not on the bus.
 
-Only the rule is inferred. Every input is measured, and the published value says
-`HOLDING` rather than `ON` so that the word itself marks what kind of fact it is.
+The lesson is recorded in the decode plan because it is the second time it bit:
+a null result from one module is not a null result for the bus.
 
 ---
 
