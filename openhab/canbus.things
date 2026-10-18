@@ -52,6 +52,10 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// bound to no item. A capture process is a thing to forget; a binding is not.
 	Type string : probeThrottleLine "Probe: throttle line" [ stateTopic="canbus/springfield/probe/throttle" ]
 	Type string : probeCruiseLine   "Probe: cruise line"   [ stateTopic="canbus/springfield/probe/cruise" ]
+	// The generic probe stream: "NEW pgn=... sa=... dlc=..." once per PGN per boot (scan probe on,
+	// bike stationary), byte-change lines and address claims. Not persisted as such - too chatty;
+	// canbus-probe-inventory.js keeps the NEW lines as the per-boot PGN inventory (2026-10-18).
+	Type string : probeLine         "Probe: line"          [ stateTopic="canbus/springfield/probe" ]
 	Type string : bitrate    "Detected Bitrate" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.bitrate" ]
 	Type number : scanFrames "Scan Frame Count" [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.scan_frames" ]
 	Type string : wifiIp     "WiFi IP"          [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.ip" ]

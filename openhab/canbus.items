@@ -401,3 +401,11 @@ String CanBus_Probe_RatesJson  "Probe rates [%s]"                <text>        (
 // torque, throttle, fuel rate, rpm and speed, about twice a second while ON.
 String CanBus_Probe_ThrottleLine "Probe throttle [%s]"          <text>        (gCanBus_Probe) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:probeThrottleLine" }
 String CanBus_Probe_CruiseLine   "Probe cruise [%s]"            <text>        (gCanBus_Probe) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:probeCruiseLine" }
+// The generic probe stream (NEW pgn / byte changes / claims) and what canbus-probe-inventory.js
+// makes of it: every "NEW pgn=" announcement, and the list of PGNs the board has seen since
+// it last woke. Announcements come only with the scan probe ON and the bike stationary
+// (firmware gate), so the list covers what the bus sends while stopped - added 2026-10-18
+// after "was PGN 65253 on yesterday's ride?" could not be answered from any item.
+String CanBus_Probe_Line         "Probe line [%s]"              <text>        (gCanBus_Probe) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:probeLine" }
+String CanBus_Probe_NewPgn       "Last new PGN [%s]"            <text>        (gCanBus_Probe) ["Status", "Info"]
+String CanBus_Probe_Pgns         "PGNs seen since wake [%s]"    <text>        (gCanBus_Probe) ["Status", "Info"]
