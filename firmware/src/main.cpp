@@ -632,7 +632,7 @@ void resetState() {
     st.tyreFront = st.tyreRear = st.tyreFrontTemp = st.tyreRearTemp = NAN;
     st.gripTempL = st.gripTempR = NAN;
     st.speedFront = NAN;
-    st.fuelRate = st.fuelEconInst = NAN;
+    st.fuelRate = st.fuelEconInst = st.torque = NAN;
     st.range = NAN;
     st.wheels[0] = 0;
     st.gear[0] = 0; st.headlight[0] = 0; st.security[0] = 0;
@@ -708,105 +708,18 @@ struct Dm1Src {
 static Dm1Src dm1Src[DM1_SOURCES];
 
 // ---------------------------------------------------------------------------
-// Cruise control, DERIVED.
+// Cruise control: MEASURED since 2026.10.18-1.
 //
-// SPN 595 is not transmitted on this bus -- proved on the road 2026-09-05 with
-// the cruise demonstrably holding and byte 4 unmoved, while byte 5 reported
-// every button press in the same frames. So the engaged state cannot be read.
-// It can, however, be worked out, and every input below is a MEASURED signal:
-// only the rule joining them is inferred.
-//
-//   SPN 596  the rocker is on
-//   SPN 599  SET pressed        SPN 601  RESUME pressed
-//   SPN 597  brake              SPN 598  clutch
-//   speed
-//
-// The confirmation is what makes this more than a guess. A press only ARMS the
-// state; it becomes HOLDING when the speed then sits still for three seconds.
-// Cruise that never caught -- too slow, wrong gear, a press that did nothing --
-// never produces a steady speed, and so never claims to be holding.
-//
-// It is also what handles the exits we cannot see. The rider can drop the cruise
-// with a small backward flick of the grip, and that is invisible to us: SPN 91,
-// the rider's own demand, is not on this bus either. But the moment the cruise
-// lets go, the speed stops sitting still -- so the same test that confirms the
-// engagement also ends it, without needing a list of every way out.
-//
-// Brake, clutch and the rocker are hard exits, because they are certain.
+// From 2026-09-05 to 2026-10-17 the hold was DERIVED here -- a SET or RESUME
+// press armed it, three seconds of steady speed confirmed it, and the brake,
+// the clutch, the rocker or a 6 km/h drift ended it -- because SA 39's copy of
+// SPN 595 reads "not available" and that was taken for the whole bus. The ECM's
+// own copy (PGN 65265 SA 0, byte 3 bits 0-1) turned out to carry the state, and
+// the 473 km ride of 2026-10-17 settled it against that very derivation: the bit
+// led it by 3-5 s on both edges and saw 19 engagements it never confirmed. The
+// derivation is gone; st.cruiseHold is now set in decodeState() from the bit.
+// The history is in DECODE-PLAN.md, "Cruise control -- what it actually is".
 // ---------------------------------------------------------------------------
-#define CRUISE_MIN_KMH     35.0f   // below this the system will not engage
-#define CRUISE_BAND_KMH     3.0f   // "sitting still" while arming
-#define CRUISE_DROP_KMH     6.0f   // drifted this far from target = let go
-#define CRUISE_CONFIRM_MS  3000u   // steady this long before claiming a hold
-#define CRUISE_DROP_MS     2000u   // drifted this long before giving it up
-
-static uint32_t cruiseArmedAt = 0;      // 0 = not arming
-static float    cruiseTarget  = NAN;
-static uint32_t cruiseDriftAt = 0;
-
-// A SET or RESUME press. Arms only; the speed decides whether it took.
-static void cruiseArm() {
-    if (st.cruiseEnable != 1) return;
-    if (isnan(st.speed) || st.speed < CRUISE_MIN_KMH) return;
-    cruiseArmedAt = millis();
-    cruiseTarget  = st.speed;
-    cruiseDriftAt = 0;
-}
-
-static void cruiseClear() {
-    cruiseArmedAt = 0; cruiseTarget = NAN; cruiseDriftAt = 0;
-    SETI(cruiseHold, 0);
-}
-
-// Called from the main loop, once per pass.
-static void cruiseUpdate() {
-    // Hard exits first: these are measured and certain.
-    if (st.cruiseEnable != 1 || st.brakeRear == 1 || st.clutch == 1) {
-        if (st.cruiseHold != 0 || cruiseArmedAt) cruiseClear();
-        return;
-    }
-    if (isnan(st.speed) || isnan(cruiseTarget)) return;
-
-    const uint32_t now = millis();
-    const float off = fabsf(st.speed - cruiseTarget);
-
-    if (st.cruiseHold == 1) {
-        // Holding. Drifting away from the target, and staying away, means the
-        // cruise has let go -- by a flick of the grip or anything else.
-        if (off > CRUISE_DROP_KMH) {
-            if (!cruiseDriftAt) cruiseDriftAt = now;
-            else if (now - cruiseDriftAt > CRUISE_DROP_MS) cruiseClear();
-        } else {
-            cruiseDriftAt = 0;
-            // Track slow legitimate changes: RESUME/ACCEL nudges the set speed,
-            // and a long hill moves it a little either way.
-            //
-            // TIME-GATED, and that is not a detail. This runs from the main
-            // loop, which on an ESP32 turns over thousands of times a second,
-            // so an unconditional 2 % pull would have the target catching the
-            // real speed inside a fraction of a second -- and the drift exit
-            // below could then never fire, because the thing it measures
-            // against would already have moved. The cruise would appear to hold
-            // forever. Once a second, 2 %, gives a time constant near a minute,
-            // which is slower than any real drop-out and faster than a hill.
-            static uint32_t adaptAt = 0;
-            if (now - adaptAt >= 1000) {
-                adaptAt = now;
-                cruiseTarget += (st.speed - cruiseTarget) * 0.02f;
-            }
-        }
-        return;
-    }
-
-    if (!cruiseArmedAt) return;
-
-    // Arming. Wander outside the band and the press simply did not take.
-    if (off > CRUISE_BAND_KMH) { cruiseClear(); return; }
-    if (now - cruiseArmedAt >= CRUISE_CONFIRM_MS) {
-        cruiseArmedAt = 0;
-        SETI(cruiseHold, 1);
-    }
-}
 
 void decodeDM1(uint8_t sa, const uint8_t *b, uint16_t nn) {
     if (nn < 2) return;
@@ -1349,6 +1262,13 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
     switch (j.pgn) {
         case 61444:  // EEC1 RPM (canbus_rpm.js)
             if (nn >= 5) { uint16_t r = b[3] | (b[4] << 8); if (r != 0xFFFF) SETF(rpm, r * 0.125f); }
+            // Byte 7: Engine Demand - Percent Torque, SPN 2432, 1 %/bit, offset
+            // -125 -- the standard position, and the only load-like engine value
+            // this bus broadcasts. Verified 2026-10-17 in the August captures:
+            // -22..+60 %, monotonic with the throttle valve (r +0.65), negative
+            // only on the move (overrun). Bytes 1-2, where the standard puts the
+            // driver's demand and the actual torque, are 0xFF here.
+            if (nn >= 8 && b[7] != 0xFF) SETF(torque, (float)b[7] - 125.0f);
             break;
         case 65382:
             // Not decoded. Byte 1 was read as throttle percent on a 0-11 scale,
@@ -1505,6 +1425,17 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
                 // cruise control, and the derived hold below needs it.
                 uint8_t cl = (b[3] >> 6) & 3;
                 if (cl <= 1) SETI(clutch, cl);
+                // Bits 0-1 of the same byte: SPN 595, cruise control ACTIVE --
+                // from the ECM, which is the module that runs the cruise. SA 39's
+                // copy of this field reads 3 ("not available") for ever, which is
+                // what had this signal written off as not on the bus on
+                // 2026-09-05. The ECM's copy was settled on the 473 km ride of
+                // 2026-10-17: 100 engagements, 94 within 2.5 s of a SET/RESUME
+                // press, every drop with the valve closing and the speed falling;
+                // the derived hold it replaces ran 3-5 s behind it and missed 19.
+                // 3 is left as unknown, never forced to 0.
+                uint8_t act = b[3] & 3;
+                if (act <= 1) SETI(cruiseHold, act);
             }
             // Cruise: WITHDRAWN 2026-09-03. This read was byte 5 bit 0, and
             // byte 5 of CCVS is not the cruise state at all — it is the switch
@@ -1564,16 +1495,12 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
                 uint8_t set = b[4] & 3, res = (b[4] >> 4) & 3;
                 SETI(cruiseSw, set == 1 ? 1 : (res == 1 ? 2 : 0));
 
-                // SPN 595 is NOT read here any more. Settled 2026-09-05 on the
-                // road: byte 4 held 0xF7 at 94, 87 and 73 km/h with the cruise
-                // demonstrably holding the speed and the rider's hand off the
-                // grip. The control was built into the measurement -- byte 5
-                // reported every SET and RESUME press in the same frames, so the
-                // message was being received and decoded correctly while byte 4
-                // sat still. Indian does not transmit the engaged state.
-                //
-                // What replaces it is derived below, from measured inputs only.
-                if (set == 1 || res == 1) cruiseArm();
+                // SPN 595 is not read from SA 39: its copy of the field is 3,
+                // "not available", for ever (road test 2026-09-05, 0xF7 at 94,
+                // 87 and 73 km/h with the cruise holding). The engaged state
+                // comes from the ECM's copy, decoded with the brake and clutch
+                // above. The presses used to ARM a derived hold here; since
+                // 2026.10.18-1 they are published as events only.
             }
             break;
         case 65276:
@@ -2157,7 +2084,7 @@ static void clearLiveValues() {
     // last reading -- see the three categories in
     // automation/js/canbus-clear-live-values.js.
     st.rpm = st.speed = st.speedFront = st.fuelRate = 0.0f;
-    st.fuelEconInst = NAN;
+    st.fuelEconInst = st.torque = NAN;   // a demand torque of a stopped engine is not 0, it is nothing
     st.brakeRear = st.indLeft = st.indRight = -1;
     st.cruiseEnable = st.cruiseSw = st.hazard = st.startBtn = -1;
     st.cruiseHold = st.clutch = -1;
@@ -2216,7 +2143,8 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     if (st.brakeRear >= 0)       doc[K("brakeRear","br")]    = st.brakeRear ? "PRESSED" : "RELEASED";
     // "HOLDING" rather than "ON", so the value itself says this is not the same
     // kind of fact as the fields around it: it is worked out, not read.
-    if (st.cruiseHold >= 0)      doc[K("cruise","cc")]       = st.cruiseHold ? "HOLDING" : "off";
+    if (st.cruiseHold >= 0)      doc[K("cruise","cc")]       = st.cruiseHold ? "ON" : "OFF";   // measured (SPN 595) since 2026.10.18-1; was "HOLDING"/"off" while derived
+    if (!isnan(st.torque))       doc[K("torque","tq")]       = (int)lroundf(st.torque);
     // MQTT only from 2026.09.09-3. The app never read it, and it was the
     // most expensive of the three unread fields at 14 bytes, because
     // "PULLED" is a long string for a one-bit fact.
@@ -3034,7 +2962,6 @@ void loop() {
     // Outside the probe block on purpose: until 2026.10.04-3 this call sat
     // inside it, so a build with the probes compiled out would have frozen the
     // derived cruise state without a word.
-    cruiseUpdate();          // derived cruise hold; see the cruise section above
 #endif
 #if FIRMWARE_MODE == MODE_PRODUCTION
     // The bus has gone quiet: the ignition is off, and the live readings are

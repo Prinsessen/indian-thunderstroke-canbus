@@ -339,10 +339,9 @@ static void buildFastPacket(const VehState &st, uint8_t *out) {
     // fall between two publishes and never be seen at all. That is the same
     // problem openHAB solved with a latch rule, and 10 Hz solves it properly.
     const int8_t sw = st.cruiseSw;
-    // Bit 2 carries the DERIVED hold. st.cruise was the measured SPN 595 and is
-    // never assigned any more -- that signal is not on this bus, proved on the
-    // road 2026-09-05 -- so leaving the bit pointed at it would have made the
-    // cruise lamp permanently "never reported".
+    // Bit 2 is the cruise engaged state. Derived from the presses and the speed
+    // until 2026.10.18-1; since then st.cruiseHold is the measured SPN 595 from
+    // the ECM (PGN 65265 SA 0), so the lamp follows the bike's own.
     const int8_t flags[8] = { sw < 0 ? (int8_t)-1 : (int8_t)(sw == 1),
                               st.brakeRear, st.cruiseHold,
                               st.indLeft, st.indRight,

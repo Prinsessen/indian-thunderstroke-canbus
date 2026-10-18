@@ -58,7 +58,9 @@ const MOMENTARY = [
   'CanBus_Cruise', 'CanBus_CruiseEnable', 'CanBus_CruiseSwitch',
   'CanBus_StartButton',
   // Litres per 100 km at zero speed is undefined, not zero.
-  'CanBus_FuelEconInst'
+  'CanBus_FuelEconInst',
+  // Demand torque of a stopped engine is nothing, not 0 (firmware 2026.10.18-1 drops it too).
+  'CanBus_Torque'
 ];
 
 /** "last seen 15:27" from an age in seconds, or null if the age is unknown. */

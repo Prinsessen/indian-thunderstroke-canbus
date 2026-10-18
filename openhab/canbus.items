@@ -245,6 +245,7 @@ Number CanBus_Range            "Range [%d km]"                   <oil>         (
 // =============================================================================
 Number CanBus_RPM              "Engine RPM [%d rpm]"             <motion>      (gCanBus_Engine) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rpm" }
 Number CanBus_Throttle         "Throttle [%d %%]"                <chart-blue>        (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:throttle" }
+Number CanBus_Torque           "Engine demand torque [%d %%]"    <canbus-engine-teal> (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:torque" }
 String CanBus_Gear             "Gear [%s]"                       <chart-blue>        (gCanBus_Engine) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:gear" }
 // The gear position sensor on this bike is unreliable: a pin held against the
 // sensor by a spring makes the seven contacts, the mechanism is dirty, and it
@@ -307,7 +308,7 @@ String CanBus_CruiseEnable     "Cruise Enabled [%s]"             <switch>      (
 // claims HOLDING once the speed has sat still for three seconds. Brake, clutch
 // and the rocker end it outright; drifting off the held speed ends it too,
 // which is how a backward flick of the grip is caught without being visible.
-String CanBus_Cruise           "Cruise held [%s]"                <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruise" }
+String CanBus_Cruise           "Cruise [%s]"                     <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruise" }
 String CanBus_CruiseSwitch     "Cruise Switch [%s]"              <switch>      (gCanBus_Controls) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:cruiseSw" }
 String CanBus_CruiseSw_Latched "Cruise Switch (recent) [%s]"     <switch>      (gCanBus_Controls)  ["Status", "Info"]
 String CanBus_Headlight        "Headlight [%s]"                  <lightbulb-on-yellow>       (gCanBus_Controls) ["Status", "Light"] { channel="mqtt:topic:broker:canbus:headlight" }

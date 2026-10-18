@@ -5,7 +5,7 @@ firmware, written so it can be implemented **without reading the firmware
 source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
 lives in the "BLE phone link" section of [README.md](../README.md).
 
-Describes firmware `2026.10.04-3`, the image on the bike. The first BLE build
+Describes firmware `2026.10.18-1`, the image built for the bike on 2026-10-18 (`2026.10.04-3` before it). The first BLE build
 was `2026.09.02-2` (verified on the bike 2026-09-02); where an older build
 differs, the section says from which version.
 
@@ -108,7 +108,7 @@ permanently invalid for one release and then reused for the cruise rocker.
 |-----|--------|---------------------|
 | 0 | cruiseSet | SET/DEC pressed (SPN 599) |
 | 1 | brakeRear | brake applied (SPN 597 — either control) |
-| 2 | cruiseHold | cruise is holding a speed — **derived**, see below |
+| 2 | cruiseHold | cruise engaged — **measured** since `2026.10.18-1` (SPN 595 from the ECM, PGN 65265 SA 0); derived before that, see below |
 | 3 | indLeft | on |
 | 4 | indRight | on |
 | 5 | cruiseRes | RES/ACC pressed (SPN 601) |
@@ -224,6 +224,7 @@ the board restarts, which every wake from deep sleep is.
 |----------|---------|------|------|-------|
 | `rpm` | `r` | int | rpm | |
 | `throttle` | `th` | int | % | |
+| `torque` | `tq` | int | % | **Since `2026.10.18-1`.** Engine demand torque, SPN 2432 (PGN 61444 byte 7, offset -125): -22..+60 % seen; negative is overrun, the engine braking. The only load-like engine value the ECM broadcasts. Absent with the engine stopped. Verified against the August captures 2026-10-17 (monotonic with the valve, r +0.65) |
 | `gear` | `g` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
 | `gearGlitches` | — (MQTT only) | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly. **MQTT only since 2026.09.09-3.** It is the counter behind three gear position sensors replaced under warranty, so it went to the transport that KEEPS it: openHAB holds and persists the history, which is what a service desk has to be shown. The radio bytes went to the engine data still being decoded |
 | `coolant` | `ot` | int | °C | **Cylinder head temperature.** The key is a misnomer kept for continuity: this engine is air-cooled and has no coolant, and no oil temperature sensor either — the manual lists exactly one engine temperature sensor, the CHT on the front cylinder head. |
@@ -246,7 +247,7 @@ the board restarts, which every wake from deep sleep is.
 | `tyreAge` | — (MQTT only) | int | s | Seconds since the last TPMS frame arrived. **MQTT only.** The pressures are retained and republished at 1 Hz, so a value alone cannot say whether it is fresh -- a week-old reading looks identical to one taken a second ago. This is what separates them. Absent until a frame has been seen |
 | `brakeRear` | `br` | string | | `"PRESSED"` / `"RELEASED"`. One brake signal, SPN 597, which either control operates — the name is historical. `brakeFront` was removed 2026-09-05. |
 | `clutch` | — (MQTT only) | string | | `"PULLED"` / `"out"` (SPN 598). **MQTT only since 2026.09.09-3** -- 14 bytes, the most expensive of the unread fields, because `"PULLED"` is a long string for a one-bit fact. It does not weaken cruise: the derivation that needs the clutch runs in the firmware and still does |
-| `cruise` | `cc` | string | | `"HOLDING"` / `"off"` — **derived, not measured.** SPN 595 is not transmitted on this bus. The vocabulary differs from the fields around it on purpose, so the value itself says what kind of fact it is. |
+| `cruise` | `cc` | string | | `"ON"` / `"OFF"` — **measured since `2026.10.18-1`:** SPN 595, cruise control active, from the ECM's own CCVS (PGN 65265 SA 0 byte 3 bits 0-1), settled on the 473 km ride of 2026-10-17. Until then it was `"HOLDING"` / `"off"`, a hold DERIVED from the presses and the speed, and the odd vocabulary was there to say so; a client that tests for `"HOLDING"` must now test for `"ON"`. Absent (3, "not available") is never published as off. |
 | `cruiseEnable` | `ce` | string | | `"ON"` / `"OFF"` (SPN 596, the rocker) |
 | `cruiseSw` | `cs` | string | | `"SET/DEC"`, `"RES/ACC"` or `"none"` — the legend printed on the rocker |
 | `hazard` | `hz` | string | | `"ON"` / `"OFF"` |
@@ -622,6 +623,11 @@ Full evidence in [UNEXPLORED-BYTES.md](UNEXPLORED-BYTES.md).
 
 ### Cruise control — the state is not transmitted, so it is derived
 
+> **Superseded 2026-10-18.** The state IS transmitted — by the ECM (SA 0), not by
+> the cluster (SA 39) this section tested. Firmware `2026.10.18-1` reads it
+> (`cruise` = `"ON"`/`"OFF"`) and the derivation below is removed. Kept as
+> written: it is the record of how the wrong module was asked.
+
 The original tell-tale read byte 5 bit 0 from SA 39. Byte 5 of CCVS is the
 **switch** byte, so the lamp lit on a momentary press and went out a second
 later. Withdrawn 2026-09-03.
@@ -680,18 +686,24 @@ value, so a field added to the firmware without a width is a hard error rather
 than a silent gap in the estimate.
 
 Worst case today — every field populated at its widest, tool output of
-2026-10-04 for firmware 2026.10.04-2 (49 fields emitted, 39 of them on BLE; the
+2026-10-18 for firmware 2026.10.18-1 (50 fields emitted, 40 of them on BLE; the
 tool counts `fw` separately). All three columns use the short keys; only the
 fault encoding differs:
 
 | active faults | readable (no longer sent) | compact, `fw` always | compact, `fw` rarely |
 |---|---|---|---|
-| 0 | 515 over | 468 | 447 |
-| 1 | 525 over | 479 | 458 |
-| 2 | 548 over | 490 | 469 |
-| 4 | 594 over | 512 | **491** |
+| 0 | 524 over | 477 | 456 |
+| 1 | 534 over | 488 | 467 |
+| 2 | 557 over | 499 | 478 |
+| 4 | 603 over | 521 over | **500** |
 
-The right-hand column is what ships. For reference: long keys with readable
+The right-hand column is what ships. `torque` (`"tq":-22`) cost the nine bytes
+between this table and the one of 2026-10-04 for 2026.10.04-2 (447 / 458 / 469 /
+**491**, with 468-512 in the `fw`-always column); fourteen bytes remain under the
+ceiling at four faults, and the `fw`-always column now crosses it at four faults,
+which is the first time a column other than the readable one has. That case
+cannot reach the radio: `ble.cpp` measures the serialised payload and drops `fw`
+first, then trims the fault list, when it would exceed `BLE_STATE_MAX`. For reference: long keys with readable
 faults and no fault at all is 740, and the MQTT payload — long keys, VIN, four
 faults — is 1131 and has no limit.
 

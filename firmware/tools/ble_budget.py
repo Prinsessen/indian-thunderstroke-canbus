@@ -59,6 +59,7 @@ W = {
     # by moving fuelRate off it: "fr" cost 11 bytes and this costs 9, so the
     # trade came out two bytes ahead rather than level.
     "rg": 3,
+    "tq": 3,   # torque demand, "-22".."60": sign and two digits
     # MQTT-only; never on the radio.
     "vn": 19, "si": 113, "dr": 21, "sb": 10,
 }

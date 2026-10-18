@@ -98,10 +98,10 @@ OPEN or OPEN LEAD. `SOLVED` and `NONE` are closed.
 
 | PGN | SA | byte | values | range | what the standard says | odds | note |
 |---|---|---|---|---|---|---|---|
-| 65382 | 0 | 0 | 255 | 0–255 | Proprietary | **HIGH** | 255 values on 4,721 frames -- the busiest unexamined byte on the bus. Byte 1 of this PGN was the false throttle (rpm/256) and bytes 3-4 are the range to empty, so this message clearly carries engine data. Prime candidate for load, ignition advance or injector duty. The last thing the probe is hunting; `probe/throttle` prints it as `b1`. |
+| 65382 | 0 | 0 | 255 | 0–255 | Proprietary | **SOLVED** | **The low byte of the engine speed** (2026-10-17, from the August captures): bytes 0-1 little-endian, 1 rpm per bit, r = 0.9993 against EEC1, median difference 0.2 rpm. 255 values because a low byte takes them all; no correlation with anything on its own because a residue mod 256 has none. Was rated HIGH as "load, ignition advance or injector duty" - the one test nobody ran was adding the known high byte to it. |
 | 65382 | 0 | 3-4 | 80 | 29–252 | Proprietary | **SOLVED** | **Range to empty, in km, one count per km, sixteen bits little-endian: byte 3 low, byte 4 high** (found 2026-09-08, widened from one byte 2026-09-14). The count and range columns are byte 3 alone, because the range never passed 255 in August. See below. |
-| 65265 | 0 | 3 | 5 | 12–92 | CCVS byte 4 — cruise active (bits 0-1), cruise enable (2-3), brake switch (4-5), clutch switch (6-7) | **OPEN LEAD** | Bits 4-5 (brake) and 6-7 (clutch) are decoded. **Bits 0-1 are not, and they move:** `0x0D` in twelve episodes across the two long rides, all at 64–113 km/h, three starting within a second of a SET press, two ending on a brake-and-clutch frame. That is the position of SPN 595, cruise active. From change-only captures and never watched on the bike, so not established. Missing from this table until 2026-10-04 because the byte counted as "read". See DECODE-PLAN.md, cruise section, for the evidence and the check. |
-| 61444 | 0 | 7 | 75 | 103–185 | EEC1 byte 8 — Engine Demand Percent Torque (SPN 2432), offset -125 | **HIGH** | Negative means overrun braking. Range 103-179 reads as -22 % to +54 %, which is exactly right for a bike that coasts and pulls. Cheap: correlate against throttle now that we have it. |
+| 65265 | 0 | 3 | 5 | 12–92 | CCVS byte 4 — cruise active (bits 0-1), cruise enable (2-3), brake switch (4-5), clutch switch (6-7) | **SOLVED** (bits 0-1, 2026-10-17: SPN 595 cruise active from the ECM - 100 engagements on a 473 km ride, 94 within 2.5 s of a SET/RESUME press, the derived `cruise` 3-5 s behind it and blind to 19; DECODE-PLAN.md, cruise section) | Bits 4-5 (brake) and 6-7 (clutch) are decoded. **Bits 0-1 are not, and they move:** `0x0D` in twelve episodes across the two long rides, all at 64–113 km/h, three starting within a second of a SET press, two ending on a brake-and-clutch frame. That is the position of SPN 595, cruise active. From change-only captures and never watched on the bike, so not established. Missing from this table until 2026-10-04 because the byte counted as "read". See DECODE-PLAN.md, cruise section, for the evidence and the check. |
+| 61444 | 0 | 7 | 75 | 103–185 | EEC1 byte 8 — Engine Demand Percent Torque (SPN 2432), offset -125 | **SOLVED** | Verified 2026-10-17 in the August captures: -22..+60 %, monotonic with the throttle valve (r +0.65), +0.52 with the fuel rate, negative only on the move. Shipped in 2026.10.18-1 as `torque`. |
 | 65215 | 11 | 4 | 88 | 39–220 | EBC2 byte 5 — Relative Speed, Rear Axle Left Wheel (SPN 907) | **HIGH** | 88 values, r = +0.84 against speed, offset 125 = zero. If that scaling holds this is the REAR wheel from the ABS module -- a third speed source, and a direct cross-check on the one the dash uses. |
 | 65265 | 11 | 0 | 2 | 63–127 | CCVS byte 1 — parking brake, two-speed axle, cruise pause | **MEDIUM** | Two values from SA 11. Two-bit fields; worth one controlled test. |
 | 65381 | 39 | 1 | 4 | 3–67 | Proprietary | **SOLVED** | Indicator switch (2026-09-05): bit 2 left, bit 4 right, bit 6 cancel, each a blip while the stalk is moved. Was rated MEDIUM as "probably a lamp state". |
@@ -288,29 +288,26 @@ it, or the app will show a 29 km panic three times a ride.
 Rewritten 2026-10-04 with zero-based byte numbers, to match the table. (It
 counted from one before, so its "65382 byte 1" is this byte 0.)
 
-**PGN 65382 byte 0.** The busiest unexamined byte on the bus -- 255 distinct
-values across 4,721 frames -- and now the only unexplained byte in a proprietary
-message that has given up the rest: byte 1 is engine speed over 256, and bytes
-3-4 are the dash's range to empty. Whatever Indian keeps private about how the
-engine is running is most likely here. Load, ignition advance and injector duty
-are all plausible and all testable now that the throttle is known: hold a steady
-throttle and change the load, and watch whether it follows the load rather than
-the hand.
+**PGN 65382 byte 0.** Solved 2026-10-17: the low byte of a 16-bit engine speed
+whose high byte is byte 1 (the table above). The message is rpm + range to
+empty and nothing else. Indian keeps nothing about the running engine here.
 
-**PGN 65265 from SA 0, byte 3 bits 0-1.** An open lead, not a finding: the
-field where the standard puts "cruise active" moves in the August captures, in
-step with SET presses and steady speed. If one ride confirms it, the derived
-`cruise` can be replaced by a measured one. Evidence and the check are in
+**PGN 65265 from SA 0, byte 3 bits 0-1.** Settled 2026-10-17: it is SPN 595,
+cruise active, and the derived `cruise` can be replaced by it. Evidence in
 DECODE-PLAN.md, "Cruise control — what it actually is".
 
 **PGN 65215 byte 4.** If the standard holds, the rear wheel speed straight from
 the ABS module -- a third speed source and an independent check on the one the
 dash uses. Given the sensor history on this bike that is worth having.
 
-**PGN 61444 byte 7.** Engine demand torque, signed around 125, so negative
-values are engine braking. Cheap to confirm now: it should track the throttle
-closely and go negative the moment the throttle shuts. The firmware already
-prints it on the `probe/throttle` line; it is not published.
+**PGN 61444 byte 7.** Engine demand torque, verified 2026-10-17 (the table
+above). The one load-like engine value on this bus; shipped in 2026.10.18-1 as
+`torque`. With it, everything the ECM broadcasts is decoded: rpm (twice),
+fuel rate, the two economies, the throttle valve, demand torque, head
+temperature, battery, fuel level, range, brake, clutch, cruise, lamps, grips.
+Per-cylinder ignition, injector duty and load are not broadcast; they would
+need a diagnostic request (TRANSMIT.md), which this listen-only board does not
+send.
 
 The rest of the open rows — 65265 SA 11 byte 0, 61441 byte 5, 61445 byte 4,
 65265 SA 0 byte 6 — are two- or three-valued and low yield. Beyond the table,
@@ -341,7 +338,9 @@ each checked with a working detector rather than assumed:
   "not available" **by SA 39** -- road-tested 2026-09-05 with the cruise
   holding. That is all the test covered: SA 0's copy of the "cruise active"
   field was not watched and is an open lead (the table above), so this entry
-  is an absence for one module, not yet for the bus.
+  is an absence for one module, not yet for the bus. **2026-10-17: SA 0 sends
+  it** - bits 0-1 of its CCVS byte 3 are the engaged state, settled on a
+  473 km ride (the table above). The set speed is still not on the bus.
 - **The horn, the saddlebag locks, the security alarm, the fog-lamp switch and
   a separate front brake.** Each exercised while watched, with the rig proved
   in the same run (GARAGE-RUN.md; DECODE-PLAN.md, "Not on the bus").

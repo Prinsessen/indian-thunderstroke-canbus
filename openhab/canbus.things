@@ -62,6 +62,9 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	Type number : bleGapMaxMs "BLE Max Gap"     [ stateTopic="canbus/springfield/meta", transformationPattern="JSONPATH:$.ble_gap_max_ms" ]
 	// ---- Engine ---------------------------------------------------------
 	Type number : rpm        "Engine RPM"   [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rpm" ]
+	// Engine demand torque, SPN 2432 (PGN 61444 byte 7, offset -125), % -- negative is
+	// overrun. Firmware 2026.10.18-1; verified in the August captures 2026-10-17.
+	Type number : torque     "Engine demand torque" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.torque" ]
 	Type number : throttle   "Throttle"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.throttle" ]
 	Type string : gear       "Gear"         [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gear" ]
 	Type number : coolant    "Coolant Temp" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.coolant" ]
@@ -84,13 +87,14 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// removed 2026-09-05: its decode had been withdrawn and the firmware had
 	// not published the field for days, so the item never updated.
 	Type string : brakeRear "Brake"          [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.brakeRear" ]
-	// Cruise, decoded in the garage 2026-09-05 (PGN 65265 SA 39 byte 4/5).
-	//   cruise       the DERIVED hold state (SA 39 does not transmit SPN 595);
-	//                absent until a press has armed it
+	// Cruise, decoded in the garage 2026-09-05 (PGN 65265 SA 39 byte 4/5) and
+	// on the road 2026-10-17 (SA 0 byte 3 bits 0-1).
+	//   cruise       SPN 595, cruise ACTIVE, from the ECM -- measured since
+	//                firmware 2026.10.18-1 ("ON"/"OFF"; "HOLDING"/"off" while it
+	//                was derived from the presses and the speed, 2026-09-05..10-17)
 	//   cruiseEnable SPN 596 rocker on
 	//   cruiseSw     SPN 599/601, the SET and RESUME presses
-	// DERIVED, not measured -- SPN 595 is not transmitted on this bus.
-	Type string : cruise       "Cruise (derived)" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruise" ]
+	Type string : cruise       "Cruise (SPN 595)" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruise" ]
 	Type string : cruiseEnable "Cruise Enabled" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseEnable" ]
 	Type string : cruiseSw     "Cruise Switch"  [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.cruiseSw" ]
 	// Clutch, SPN 598 -- free from the byte the brake comes from. Decoded

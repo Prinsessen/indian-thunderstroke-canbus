@@ -18,7 +18,8 @@ taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
 Last revised **2026-10-04**, when every status in this file was checked against
-the firmware running on the bike (`2026.10.04-3`, `src/main.cpp`). **What is
+the firmware running on the bike (`2026.10.04-3`, `src/main.cpp`; `2026.10.18-1`
+built 2026-10-18 adds the measured cruise and `torque`). **What is
 still open is collected in one place:
 [What is genuinely still open](#what-is-genuinely-still-open-2026-10-04).**
 
@@ -288,9 +289,9 @@ with the measured ranges. Byte numbers here are **zero-based**, as in the code.
 
 | PGN | SA | byte | what is known | what would settle it |
 |---|---|---|---|---|
-| 65382 | 0 | 0 | 255 distinct values, a live engine quantity. Load, ignition advance and injector duty are the candidates. The busiest unread byte on the bus, and the last thing the probe is hunting. | `probe/throttle` on a ride with cruise holding: hold the throttle and change the load, see which it follows. |
-| 65265 | 0 | 3, bits 0-1 | **Open lead, 2026-10-04.** Takes the values 0 and 1 in the August captures, in the position where the standard puts SPN 595, cruise active. Not confirmed on the bike. See [the cruise section](#cruise-control--what-it-actually-is). | Log `b[3] & 3` from SA 0 beside the derived `cruise` on one ride. |
-| 61444 | 0 | 7 | Standard position of engine demand torque (SPN 2432, offset −125). Range 103–185 in the captures. Read only to print it on the `probe/throttle` line; not published. | It should follow the throttle and go negative when the throttle shuts. |
+| 65382 | 0 | 0 | **SOLVED 2026-10-17 from the August captures: the LOW byte of the engine speed.** Bytes 0-1 are one 16-bit little-endian value, 1 rpm per bit: against EEC1's rpm, r = 0.9993, slope 0.999, median difference 0.2 rpm over 4,597 same-second pairs. It correlated with nothing on its own (rpm, throttle, fuel, torque, speed all within 0.05) and wandered up and down in steps of 1-4 - a residue mod 256, not a counter and not a load. "rpm/256" in byte 1 was the high byte. Nothing engine-private here. | Nothing. The throttle probe has no byte left to hunt in this PGN. |
+| 65265 | 0 | 3, bits 0-1 | **SETTLED 2026-10-17: SPN 595, cruise active, from the ECM.** 100 engagements on one ride, 94 within 2.5 s of a SET/RESUME press; the derived `cruise` lagged it by 3-5 s and missed 19 of them. See [the cruise section](#cruise-control--what-it-actually-is). | **Shipped in 2026.10.18-1.** |
+| 61444 | 0 | 7 | **VERIFIED 2026-10-17 from the August captures: engine demand torque, SPN 2432, offset -125.** -22..+60 %, 73 values; monotonic with the throttle valve (median -2 % below 3 % valve, +14 % at 10-20 %, +51 % above 40 %), r = +0.65 with the valve, +0.52 with the fuel rate; negative in 1,215 frames, every one on the move (overrun). **Shipped in 2026.10.18-1 as `torque` / `tq` (int, %).** | The only load-like engine value this bus broadcasts; stage 2 (next ride, probe/throttle on) looks at it under cruise. |
 | 65215 | 11 | 4 | 39–220, `r = +0.84` against speed. Possibly a relative wheel speed with 125 = zero. | A capture with a known hard acceleration. |
 | 65265 | 11 | 0 | Two values, 63 and 127. Standard: parking brake / two-speed axle / cruise pause, two-bit fields. | One controlled test. |
 | 61441 | 11 | 5 | `0xCC`, `0xCD`, `0xDC` — the same three values as the cruise switch byte. Mirror or coincidence. | Ten minutes with the SET and RESUME buttons, parked. |
@@ -1216,7 +1217,33 @@ the dated text below counts from one, so its "byte 4" is `b[3]` and its "byte
   seconds end it. Every input is measured; only the rule joining them is
   inferred, and the value says `HOLDING` rather than `ON` so that it shows.
 
-**Open lead — SA 0 `b[3]` bits 0-1. Not established.**
+**SETTLED 2026-10-17 — SA 0 `b[3]` bits 0-1 IS the engaged state (SPN 595).**
+One ride of 473 km on the bus (odometer 143448 -> 143921; owner's figure 480 km),
+firmware 2026.10.04-3, `probe/cruise` on, cruise used all day. 215 SA 0 lines,
+201 edges of `b[3] & 3`: **100 times 0 -> 1, 101 times 1 -> 0.**
+
+- **94 of the 100 rises came within 2.5 s of a SET or RESUME press** on SA 39
+  `b[4]` (`cruiseSw`), the first at 09:58:59 in the same second as SET/DEC.
+  Rise speeds 41-113 km/h, median 88. The other six rises came 10-182 s after
+  the previous fall with no press recorded within 2.5 s.
+- **The falls:** 7 on a frame with the brake or clutch bit set, 7 within 2.5 s
+  of a switch press, and 87 with neither. In those 87 the throttle valve
+  (SPN 51) went from a median 11 % to 3 % within one second, the revs fell
+  about 230 in three seconds and the speed about 16 km/h in eight: the cruise
+  had let go. What the rider did to end it is not on the bus (the manual lists
+  rolling the throttle forward past closed; nobody asked her).
+- **Against the derived `cruise`:** `HOLDING` appeared about 3 s after the bit
+  rose and went `off` 3-5 s after it fell, and **never appeared at all in 19 of
+  the 100 episodes** (short holds that did not reach the three-second steady
+  speed). The bit is earlier, and it sees what the derivation misses.
+
+So the state can be read instead of derived: `cruise` = SA 0 `b[3] & 3` = 1.
+**Shipped in `2026.10.18-1` (built 2026-10-18, the owner's decision the same
+evening):** `cruiseHold` is set from the bit in `decodeState()`, the derivation
+and its arming from the presses are removed, and `cruise` reads `"ON"`/`"OFF"`.
+To be watched live on the next ride beside the `probe/cruise` lines, which stay.
+
+The lead as it was written before the ride:
 
 SA 0 sends PGN 65265 as well, and the same two bits of its frame — the position
 where the standard puts SPN 595 — are not constant. The road test and
@@ -1242,7 +1269,7 @@ twelve episodes have no recorded press at their start; and it has never been
 watched on the bike. A bit that is set while riding steadily on an open road
 has more than one possible meaning.
 
-**The check, in the firmware since 2026.10.04-3:** `probe/cruise` now also
+**The check, in the firmware since 2026.10.04-3 (run 2026-10-17, result above):** `probe/cruise` now also
 reports SA 0. One line per change of `b[3] & 3`, with the brake and clutch bits
 from the same byte and the derived hold beside it:
 `SA0 b4=0C 595=0  brake=0 clutch=0  hold=0  0 km/h` (the first one, parked,

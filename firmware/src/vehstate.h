@@ -22,6 +22,7 @@ struct VehState {
     float speedFront;    // front wheel, PGN 65215 (ABS module) -- true road speed
     float fuelRate;      // L/h, PGN 65266 bytes 1-2
     float fuelEconInst;  // l/100km right now, PGN 65266 bytes 3-4
+    float torque;        // engine demand torque, %, PGN 61444 byte 7 (SPN 2432, offset -125); negative = overrun
     // Range to empty in km, exactly as the original dash shows it:
     // PGN 65382 SA 0 bytes 3-4 (16 bits, low byte first), one count per km, no offset. Identified
     // 2026-09-08 by reading the dash against the byte twice; the proof
@@ -47,13 +48,12 @@ struct VehState {
     // brakeFront and horn were removed 2026-09-05. Neither was ever assigned
     // after their decodes were withdrawn, so both shipped as permanently absent
     // keys; the horn is now proven not to exist on this bus at all.
-    // cruiseHold is DERIVED, not measured -- SPN 595 is not on this bus. See
-    // the cruise section in main.cpp. clutch is SPN 598, free from the byte the
-    // brake already comes from.
-    // `cruise` (the measured SPN 595) was removed 2026-09-05. It is not on this
-    // bus -- proved on the road with the cruise holding at 94 km/h and the byte
-    // unmoved -- so the field could never carry a value. cruiseHold replaces it
-    // and is DERIVED; see the cruise section in main.cpp.
+    // cruiseHold is MEASURED since 2026.10.18-1: SPN 595, cruise active, from the
+    // ECM's own CCVS (PGN 65265 SA 0 byte 3 bits 0-1). It was derived from the
+    // presses and the speed between 2026-09-05 and 2026-10-17, because SA 39's
+    // copy of the field reads "not available" for ever; the ECM's copy was
+    // settled on the 473 km ride of 2026-10-17 (DECODE-PLAN.md, cruise section).
+    // clutch is SPN 598, free from the byte the brake already comes from.
     // standDown is the sidestand SWITCH, and it is not the same question as
     // `stand` below. The switch says where the stand is; `stand` is derived
     // from lean and says whether the motorcycle is resting on it. Both are
