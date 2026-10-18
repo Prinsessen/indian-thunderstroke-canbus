@@ -1,7 +1,11 @@
 # Indian Thunder Stroke — CAN bus decoder
 
 **Listen-only J1939 decoder for Indian Thunder Stroke motorcycles: ESP32 firmware,
-an Android instrument cluster, and how each signal was found.**
+an Android instrument cluster, and how each signal was found.** It runs on the
+author's own board, **CANFD-MC** — ESP32-S3 + MCP2518FD, soldered to the bike's
+service connector, open hardware in
+[Prinsessen/canfd-mc-hardware](https://github.com/Prinsessen/canfd-mc-hardware)
+(see [Hardware](#hardware)).
 
 Developed and verified on a **2017 Indian Springfield**. The service manual it was
 worked from is the *2017 Indian Motorcycle (Full-Size)* volume, which covers the
@@ -256,7 +260,8 @@ which the same build still fits.
 ## Layout
 
 ```
-firmware/     ESP32-S3 + MCP2518FD (CANFD-MC, or a LilyGO T-2CANFD). PlatformIO.
+firmware/     ESP32-S3 + MCP2518FD: CANFD-MC (github.com/Prinsessen/canfd-mc-hardware),
+              or the LilyGO T-2CANFD it replaced. PlatformIO.
 app/          Android cluster. Kotlin, plain Views and Canvas, no Compose.
 docs/         The protocol, the decode plan, and the method.
 openhab/      The openHAB side: canbus.items, canbus.things and the rules that

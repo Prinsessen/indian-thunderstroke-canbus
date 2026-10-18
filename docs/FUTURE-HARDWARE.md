@@ -6,7 +6,8 @@ nothing here was scheduled and the order of work was: **bring up CANFD-MC
 rev 1.0 first**, with a proven bus front end, a measured power profile and a
 verified net list. Everything below builds on that, not instead of it.
 
-**Status 2026-10-04.** That first step is done: CANFD-MC rev 1.0 is on the bike
+**Status 2026-10-04.** That first step is done: CANFD-MC rev 1.0
+([Prinsessen/canfd-mc-hardware](https://github.com/Prinsessen/canfd-mc-hardware)) is on the bike
 (a first board from 2026-09-28, which failed; board #0001 since 2026-10-03),
 board #0002 is the bench board, and the sleep current is measured (4.62 mA,
 SLEEP.md). Of what follows, one thing has started: the cellular trial of §2, as

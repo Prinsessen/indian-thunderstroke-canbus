@@ -8,6 +8,9 @@ was retired on 2026-09-28, when a first CANFD-MC rev 1.0 went on the bike; that
 board failed, and #0001 replaced it on 2026-10-03 (§5b). Board **#0002** is the
 bench board (§5c). The pin map is the LilyGO's, so the bike's build environment
 is still `sniffer-t2can`; the bench board is built from `bench-canfdmc`.
+The board's schematic, layout, BOM and assembly notes are in the hardware repository,
+[Prinsessen/canfd-mc-hardware](https://github.com/Prinsessen/canfd-mc-hardware)
+(mirrored read-only at `/etc/openhab-firmware/canfd-mc-hardware/`).
 
 **The normal way to update is OTA**, not this file: `update` on the home LAN or
 `mqtt` from anywhere the board reaches the broker, with automatic rollback — see
