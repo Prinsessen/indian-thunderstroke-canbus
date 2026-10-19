@@ -33,8 +33,10 @@ private const val BIT_CRUISE_ENABLE = 6
 private const val BIT_HAZARD = 7
 
 /**
- * The 8-byte `fast` characteristic — rpm, speed, throttle, gear and the switch
- * flags, pushed ~10x/sec. Fixed length, so it survives the default 23-byte MTU.
+ * The `fast` characteristic — rpm, speed, throttle, gear and the switch flags,
+ * pushed ~10x/sec. 8 bytes up to firmware 2026.10.18-1; 9 from 2026.10.19-1,
+ * the ninth being the engine demand torque. Fixed length per firmware, so it
+ * survives the default 23-byte MTU; the app takes either length (0.8 and later).
  */
 data class FastPacket(
     val rpm: Int?,
@@ -55,17 +57,21 @@ data class FastPacket(
     val cruiseEnable: Boolean?,
     val indLeft: Boolean?,
     val indRight: Boolean?,
-    val hazard: Boolean?
+    val hazard: Boolean?,
+    /** Engine demand torque, %, from byte 8 (firmware 2026.10.19-1 and later); null on an 8-byte packet. */
+    val torquePct: Int? = null
 ) {
     companion object {
-        const val LENGTH = 8
+        const val LENGTH = 8              // the packet up to firmware 2026.10.18-1
+        const val LENGTH_WITH_TORQUE = 9  // from 2026.10.19-1: byte 8 = int8 torque, 0x7F unknown
+        private const val I8_UNKNOWN = 0x7F
 
         private const val U16_UNKNOWN = 0xFFFF
         private const val U8_UNKNOWN = 0xFF
 
-        /** Returns null if the payload is not exactly 8 bytes. */
+        /** Returns null if the payload is shorter than 8 bytes; 8 or 9 are both read. */
         fun parse(b: ByteArray): FastPacket? {
-            if (b.size != LENGTH) return null
+            if (b.size < LENGTH) return null
 
             fun u8(i: Int) = b[i].toInt() and 0xFF
             // Little-endian, as the firmware writes it.
@@ -96,7 +102,8 @@ data class FastPacket(
                 cruiseEnable = flag(BIT_CRUISE_ENABLE),
                 indLeft = flag(BIT_IND_LEFT),
                 indRight = flag(BIT_IND_RIGHT),
-                hazard = flag(BIT_HAZARD)
+                hazard = flag(BIT_HAZARD),
+                torquePct = if (b.size >= LENGTH_WITH_TORQUE && u8(8) != I8_UNKNOWN) b[8].toInt() else null
             )
         }
     }

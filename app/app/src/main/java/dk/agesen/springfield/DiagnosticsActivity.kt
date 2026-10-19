@@ -101,6 +101,7 @@ class DiagnosticsActivity : AppCompatActivity() {
                 appendLine("  rpm      ${decoded.rpm ?: "unknown"}")
                 appendLine("  speed    ${decoded.speedKmh ?: "unknown"}")
                 appendLine("  throttle ${decoded.throttlePct ?: "unknown"}")
+                appendLine("  torque   ${decoded.torquePct ?: "not in packet"}")
                 appendLine("  gear     ${decoded.gear ?: "unknown"}")
                 appendLine("  cruiseEn ${decoded.cruiseEnable ?: "unknown"}")
                 appendLine("  brakeR   ${decoded.brakeRear ?: "unknown"}")

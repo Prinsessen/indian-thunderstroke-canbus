@@ -593,7 +593,7 @@ adb shell settings get global enable_freeform_support
 ## When the app and openHAB disagree
 
 **Long-press the firmware line in settings** for the diagnostics screen: app and
-firmware versions, link state, RSSI, negotiated MTU, the raw 8-byte fast packet
+firmware versions, link state, RSSI, negotiated MTU, the raw fast packet (8 bytes, 9 from firmware 2026.10.19-1)
 in hex with its decode beside it, the raw state JSON, and the tail of the ride
 log.
 

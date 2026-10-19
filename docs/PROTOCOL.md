@@ -5,7 +5,7 @@ firmware, written so it can be implemented **without reading the firmware
 source**. Implemented by [src/ble.cpp](../firmware/src/ble.cpp); the rationale for the design
 lives in the "BLE phone link" section of [README.md](../README.md).
 
-Describes firmware `2026.10.18-1`, on the bike since 2026-10-18 (`2026.10.04-3` before it). The first BLE build
+Describes firmware `2026.10.19-1` (`2026.10.18-1` on the bike since 2026-10-18 until it is flashed). The first BLE build
 was `2026.09.02-2` (verified on the bike 2026-09-02); where an older build
 differs, the section says from which version.
 
@@ -83,7 +83,7 @@ history over MQTT.
 | `531` | `0x13` | Remote user terminated — the phone hung up |
 | `534` | `0x16` | Terminated by local host — the firmware's own drop after failed pairing |
 
-## 4. `fast` characteristic — 8 bytes
+## 4. `fast` characteristic — 9 bytes (8 up to 2026.10.18-1)
 
 **Little-endian.** Fixed length, so it always fits one notification regardless of
 the negotiated MTU.
@@ -96,6 +96,7 @@ the negotiated MTU.
 | 5 | `char` | gear — `'N'`, `'1'`-`'6'`, `'-'` | — | `0x00` |
 | 6 | `uint8` | flags | bitfield | — |
 | 7 | `uint8` | flagsValid | bitfield | — |
+| 8 | `int8` | torque | % | `0x7F` — **since `2026.10.19-1`.** Engine demand torque, SPN 2432, so the app's torque arc moves at 10 Hz; the same value as `tq` in `state`. App 0.7 and older reject any packet that is not exactly 8 bytes, so every phone runs 0.8 before this firmware goes on the bike |
 
 ### Flag bits (same positions in both bytes 6 and 7)
 
@@ -366,7 +367,7 @@ device that is.
 ### ⚠️ MTU negotiation is REQUIRED for `state`
 
 The default ATT MTU is **23 bytes**, which caps a notification payload at
-**20 bytes**. `fast` is 8 bytes and is unaffected — but a `state` JSON of ~400
+**20 bytes**. `fast` is 9 bytes (8 before 2026.10.19-1) and is unaffected — but a `state` JSON of ~400
 bytes is **silently truncated to 20 bytes** on a default-MTU link. The client
 gets a fragment of JSON, not an error.
 
@@ -413,7 +414,7 @@ To keep receiving with the screen off, the connection must be held by a
 Implementation order that fails cheapest:
 
 1. Scan filtered on the service UUID, connect, bond.
-2. Subscribe to `fast` only, log the raw 8 bytes, confirm they match the layout
+2. Subscribe to `fast` only, log the raw 9 bytes (8 before 2026.10.19-1), confirm they match the layout
    above against a known state (a board started with the ignition off = all-unknown).
 3. Add `state`, and assert that neither `vin` nor `softwareId` appears.
 4. Only then build the UI.

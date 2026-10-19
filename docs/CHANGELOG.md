@@ -13,7 +13,12 @@ revs and the throttle come ten times a second in the fast packet), so in 0.7 the
 arc stood still for a second and jumped - seen on the first garage test the
 same evening. It is now eased towards each new value with a 0.30 s time
 constant, the needle's trick: still moving when the next value lands, never
-stepped. Nothing else changed. `playVersionCode` is 8.
+stepped. And the fast packet may now be 9 bytes: firmware 2026.10.19-1 appends
+the torque as a signed byte, so the arc gets it ten times a second like the
+throttle; an 8-byte packet from older firmware is read as before and the torque
+then comes from the state. The parser used to reject anything but exactly 8
+bytes, which is why this app must be on every phone BEFORE that firmware goes on
+the bike. `playVersionCode` is 8.
 
 ## 2026-10-18 — release 7 (0.7)
 

@@ -297,7 +297,7 @@ bool bleClientConnected() {
 // Notify
 // ---------------------------------------------------------------------------
 //
-// Packed fast frame, little-endian, 8 bytes:
+// Packed fast frame, little-endian, 9 bytes (8 up to 2026.10.18-1):
 //   [0..1] uint16  rpm                     0xFFFF = unknown
 //   [2..3] uint16  speed x10 (km/h)        0xFFFF = unknown
 //   [4]    uint8   throttle (%)            0xFF   = unknown
@@ -306,6 +306,11 @@ bool bleClientConnected() {
 //                          bit3 indLeft, 4 indRight, 5 cruise RES/ACC,
 //                          bit6 cruiseEnable, 7 hazard
 //   [7]    uint8   flagsValid — same bit positions, 1 = the bus has told us
+//   [8]    int8    engine demand torque, % (SPN 2432)   0x7F = unknown
+//          Added 2026.10.19-1 because the torque arc in the app fed from the 1 Hz
+//          state packet stepped once a second (first garage test, 2026-10-18).
+//          One byte at 10 Hz. App 0.7 and older reject a packet that is not exactly
+//          8 bytes, so every phone must run 0.8 before this firmware goes on.
 //
 // flagsValid exists because every switch is tri-state in VehState (-1 unknown).
 // Without it the app could not tell "brake released" from "never seen a brake
@@ -355,6 +360,7 @@ static void buildFastPacket(const VehState &st, uint8_t *out) {
     }
     out[6] = bits;
     out[7] = valid;
+    out[8] = isnan(st.torque) ? (uint8_t)0x7F : (uint8_t)(int8_t)lroundf(st.torque);
 }
 
 // How long the phone went without service, at worst, since the last time
@@ -383,7 +389,7 @@ void bleUpdate(const VehState &st) {
 
     if (now - gLastFast >= BLE_FAST_MS) {
         gLastFast = now;
-        uint8_t pkt[8];
+        uint8_t pkt[9];
         buildFastPacket(st, pkt);
         gChFast->setValue(pkt, sizeof(pkt));
         gChFast->notify();

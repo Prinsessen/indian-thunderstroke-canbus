@@ -206,7 +206,8 @@ arc is what the rider is **asking** — the throttle valve, 0–100 %. Open the
 throttle and the inner arc leaps ahead; shut it and the outer one runs on alone
 while the engine winds down. Inside that, from app 0.7 with firmware
 2026.10.18-1, a third arc is what the ECM is **demanding** of the engine — the
-demand torque: amber when the engine pulls, blue when it brakes on the overrun,
+demand torque (ten times a second from firmware 2026.10.19-1, once a second
+from 2026.10.18-1): amber when the engine pulls, blue when it brakes on the overrun,
 empty within two percent of zero so a steady cruise leaves it blank. Full sweep
 is +60 %, half a sweep −25 %, the extremes seen on the bus; the figures may move
 once the ring has been read on the road. A dial fed by older firmware simply shows
