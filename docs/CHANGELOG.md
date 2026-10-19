@@ -18,7 +18,10 @@ the torque as a signed byte, so the arc gets it ten times a second like the
 throttle; an 8-byte packet from older firmware is read as before and the torque
 then comes from the state. The parser used to reject anything but exactly 8
 bytes, which is why this app must be on every phone BEFORE that firmware goes on
-the bike. `playVersionCode` is 8.
+the bike. `playVersionCode` is 8. Built on the Windows machine with
+`C:\SpringfieldAndroid\.jtmp\build-release-8.ps1` and released to Play's internal
+testers on 2026-10-19 at 06:33. Before the next hand-over `playVersionCode`
+goes to 9.
 
 ## 2026-10-18 — release 7 (0.7)
 
@@ -37,7 +40,7 @@ weight), and lint's `MissingDefaultResource` is excused for those two files, so
 the release build no longer needs `-x lint`.
 Written on the server, built on the Windows machine and released to Play's
 internal testers on 2026-10-18 at 19:51.
-Before the next hand-over `playVersionCode` goes to 8.
+(`playVersionCode` went to 8 with release 8.)
 
 ## 2026-10-04 — release 6 (0.6)
 
