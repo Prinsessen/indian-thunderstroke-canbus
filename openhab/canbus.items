@@ -246,6 +246,17 @@ Number CanBus_Range            "Range [%d km]"                   <oil>         (
 Number CanBus_RPM              "Engine RPM [%d rpm]"             <motion>      (gCanBus_Engine) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rpm" }
 Number CanBus_Throttle         "Throttle [%d %%]"                <chart-blue>        (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:throttle" }
 Number CanBus_Torque           "Engine demand torque [%d %%]"    <canbus-engine-teal> (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:torque" }
+// Start health, canbus-start-health.js (2026-10-20): seconds from the starter turning to
+// the engine running, the temperatures it happened at, and how often the board rebooted
+// in the middle of it - a dip deep enough to kill a buck converter, as on the cold start
+// of 2026-10-19 (head 4 C). A trend here is a battery asking for a load test.
+DateTime CanBus_Start_Last     "Last start [%1$td/%1$tm %1$tH:%1$tM]"     <time-hour-orange>   (gCanBus_Engine) ["Status", "Timestamp"]
+Number   CanBus_Start_CrankSeconds "Crank to fire [%.1f s]"            <canbus-rpm-red>     (gCanBus_Engine) ["Measurement", "Duration"]
+String   CanBus_Start_Result   "Last start [%s]"                        <canbus-engine-teal> (gCanBus_Engine) ["Status"]
+Number   CanBus_Start_Ambient  "Ambient at start [%.0f °C]"             <canbus-ambient-cyan> (gCanBus_Engine) ["Measurement", "Temperature"]
+Number   CanBus_Start_HeadTemp "Head temp at start [%.0f °C]"           <canbus-coolant-red> (gCanBus_Engine) ["Measurement", "Temperature"]
+Number   CanBus_Start_Resets   "Board resets while cranking [%d]"       <canbus-dtc-red>     (gCanBus_Engine) ["Status"]
+String   CanBus_Start_History  "Last starts [%s]"                       <canbus-debug-teal>  (gCanBus_Engine) ["Status"]
 String CanBus_Gear             "Gear [%s]"                       <chart-blue>        (gCanBus_Engine) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:gear" }
 // The gear position sensor on this bike is unreliable: a pin held against the
 // sensor by a spring makes the seven contacts, the mechanism is dirty, and it
