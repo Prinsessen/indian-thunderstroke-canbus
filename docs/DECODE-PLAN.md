@@ -307,7 +307,10 @@ Open questions that are not a byte to find:
   illuminates if a chassis fault occurs" is the amber triangle; it lit on the
   cold start of 2026-10-19 while the ABS module (SA 11) reported SPN 520262 FMI 4
   (undervoltage during the crank) on DM1, 11:08:08, and it was the one time in
-  27 starts that a chassis DTC was active. Lamp bits are merged across sources in
+  27 starts that a chassis DTC was active. The owner knows the same triangle from
+  the sidestand interlock (2026-10-20): stand down, in gear, engine cut — which is
+  the ECM's SPN 520267 FMI 31 (P181C) on DM1. So it is the cluster's "a module
+  reports an active DTC" lamp, whichever module. Lamp bits are merged across sources in
   `dm1`, so whether `Warn` from SA 11 is this triangle or the ABS lamp (the owner's
   2026-09-05 reading) is not separable yet: a per-source lamp read would settle it.
 - **Low oil pressure.** Not a broadcast bit. The manual names a DM1 fault for it
