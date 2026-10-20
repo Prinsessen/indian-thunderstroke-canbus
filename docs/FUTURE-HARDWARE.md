@@ -82,6 +82,34 @@ rev 2 project on top of a finished CANFD-MC, not a replacement for it.
 
 ---
 
+## 1b. The cranking dip — measured, and what rev 2 does about it (2026-10-20)
+
+The rev 1.0 review left one measurement open: "UVLO releases at 6.5 V. A cold
+crank can dip below that … measure the dip during cranking before rev 1.1 is
+frozen. If it is a problem, the answer is a regulator with a lower minimum input,
+not a bigger capacitor." The bike has done the measurement. On 26 of 27 starts
+between 2026-09-18 and 2026-10-18 the board stayed up through the crank (the
+starter's 200-250 rpm is in the samples), so the 12 V rail held above 6.5 V. On
+the cold start of 2026-10-19 — head 4 °C, oil near the night's 0 °C, the Thunder
+Stroke 111 at its heaviest — it did not: rpm 208 at 11:07:50.5, then a 17.5 s
+hole, then "[mqtt] connected" with the message counter restarted, the ABS module
+logging undervoltage in the same second. The dip went under 6.5 V for long
+enough to drop the LM5164.
+
+So the design is right for the riding season and wrong for a frosty morning,
+and the review's own answer stands: **rev 2 gets a regulator with a lower
+minimum input**, to the automotive cold-crank profile (ISO 16750-2: 4.5 V for
+15 ms, 6 V for 1 s) — a buck-boost such as TI's LM5176 or TPS55288. Considered
+and set aside: lowering UVLO to the LM5164's 6 V floor (under 1 V of margin, not
+enough for what was seen); 10 000 µF of hold-up on the 12 V side (a 16 × 25 mm
+can plus a diode, no room on 55 × 32 mm); a 0.47 F supercap on 3.3 V (about one
+second, and this dip lasted longer). Until rev 2 the reboot is tolerated — the
+wake path handles it, it costs 15 s of data and a BLE reconnect — and counted:
+`CanBus_Start_Resets` on the SpringCommand page, with the temperatures. Stage 2
+firmware adds the chip's own reset reason to `meta`, so a brownout is read, not
+inferred. The bike winters indoors at 25 °C, so the count mostly matters in the
+weeks before and after.
+
 ## 2. Cellular on the bike — four shapes compared
 
 For the firmware, three of the four are identical: one more SSID in the list,

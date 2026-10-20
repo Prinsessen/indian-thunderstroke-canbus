@@ -19,6 +19,11 @@
 >    seconds in and took the retained line with it, so CanBus_OTA never showed it.
 > 3. Read the torque under cruise in the `probe/throttle` lines, then decide the
 >    app's torque-arc scale (`TORQUE_*` in GaugeView.kt, app 0.7).
+> 4. Put the ESP32's reset reason into `meta` as it is (`brownout`, `sw`,
+>    `deepsleep`, `poweron`, `panic`), and let `canbus-start-health.js` read it: on
+>    the cold start of 2026-10-19 the board rebooted during the crank, and that was
+>    inferred from a 17.5 s hole in the rpm samples where the chip itself knew it
+>    was a brownout.
 
 ## What the Zealand ride taught, 2026-09-13
 
