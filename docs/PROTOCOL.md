@@ -316,7 +316,7 @@ situation from one with Stop lit, and only the machine knows which it is.
 | lamp | on this motorcycle's dash |
 |---|---|
 | **MIL** | The engine symbol. *Malfunction Indicator Lamp* is what the acronym means and what it has always been |
-| **Warn** | **The amber ABS lamp.** Established 2026-09-05 by the owner watching the instrument while riding: Warn goes out and follows the ABS lamp as the wheels come up to speed |
+| **Warn** | **The amber ABS lamp.** Established 2026-09-05 by the owner watching the instrument while riding: Warn goes out and follows the ABS lamp as the wheels come up to speed. **Also the amber triangle** — the manual's *Chassis Fault* alert symbol — when a chassis module has an active DTC: seen 2026-10-19 with the ABS module's undervoltage fault during a cold crank. The lamp bits are merged across sources here, so the two cannot be told apart from `dm1` alone |
 | **Stop** | Almost certainly the red triangle. Not confirmed -- it cannot be provoked without doing real harm, so it waits until it lights on its own |
 | **Prot** | Unobserved |
 
