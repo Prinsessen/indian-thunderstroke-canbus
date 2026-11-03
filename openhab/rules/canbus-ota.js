@@ -26,12 +26,48 @@
 // board then pulls the same image in chunks over the MQTT link, which also
 // works from a hotspot. canbus-ota-mqtt.js answers its requests.
 // Either way the new image is on trial until it has reached the broker.
+//
+// IGNITION FIRST (code review 2026-10-23, M1). The owner's rule since 2026-10-03 - prove
+// the ignition is on from the bus before any OTA to the bike (firmware OTA.md, "Before
+// pressing Update") - was only in her checklist: the rule published whatever was pressed,
+// also with the bike parked and the board awake for its five minutes after key-off or its
+// hourly wake. Power lost mid-download leaves a half OTA nobody can read. Now the command
+// goes out only when the bus itself shows life: CanBus_Ignition ON, and efmsg (the
+// MCP2518's error-free message counter, CanBus_Bus_CleanMsgs, reported every 30 s) has
+// CLIMBED between the last two reports, the latest under 40 s old. "Online", Meta and the
+// state values are not proof: they come from WiFi, or are repeated while the bus is quiet.
 // =============================================================================
 
-const { rules, triggers, actions, items } = require('openhab');
+const { rules, triggers, actions, items, cache } = require('openhab');
 
 const BROKER_UID = 'mqtt:broker:broker';
 const OTA_TOPIC  = 'canbus/springfield/ota';
+const EFMSG_FRESH_MS = 40 * 1000;    // the latest health report at most this old
+const EFMSG_PAIR_MS = 80 * 1000;     // ... and the one before it at most this old
+
+/** Is the bus alive right now? Returns null when proven, or the reason it is not. */
+function busNotProven() {
+  if (String(items.getItem('CanBus_Ignition').state) !== 'ON') return 'ignition is not ON';
+  const s = cache.private.get('efmsgSamples') || [];
+  if (s.length < 2) return 'waiting for two bus reports (30 s apart) - press again in a minute';
+  const [a, b] = s.slice(-2);
+  const now = Date.now();
+  if (now - b.at > EFMSG_FRESH_MS || now - a.at > EFMSG_PAIR_MS) return 'no fresh bus report';
+  if (!(b.v > a.v)) return 'the bus is silent (efmsg ' + a.v + ' -> ' + b.v + ')';
+  return null;
+}
+
+rules.JSRule({
+  name: 'Indian CAN Bus - OTA ignition proof (efmsg samples)',
+  description: 'Keeps the last two CanBus_Bus_CleanMsgs reports, for the ignition proof before an OTA',
+  triggers: [triggers.ItemStateUpdateTrigger('CanBus_Bus_CleanMsgs')],
+  execute: (event) => {
+    const v = parseFloat(String(event.receivedState !== undefined ? event.receivedState : items.getItem('CanBus_Bus_CleanMsgs').state));
+    if (isNaN(v)) return;
+    const s = (cache.private.get('efmsgSamples') || []).concat([{ at: Date.now(), v }]).slice(-2);
+    cache.private.put('efmsgSamples', s);
+  }
+});
 
 rules.JSRule({
   name: 'Indian CAN Bus - Firmware OTA trigger',
@@ -46,12 +82,18 @@ rules.JSRule({
       return;
     }
 
-    console.info('canbus-ota: OTA command "' + command + '" received — publishing to MQTT broker');
+    const why = busNotProven();
+    if (why) {
+      console.warn('canbus-ota: OTA "' + command + '" REFUSED - ignition not proven from the bus: ' + why);
+      items.getItem('CanBus_OTA').postUpdate('Refused - ignition not proven (' + why + ')');
+      return;
+    }
+    console.info('canbus-ota: OTA command "' + command + '" received, bus alive — publishing to MQTT broker');
 
     const mqtt = actions.Things.getActions('mqtt', BROKER_UID);
     if (mqtt === null) {
       console.error('canbus-ota: MQTT broker actions not available (' + BROKER_UID + ') — is the broker ONLINE?');
-      items.CanBus_OTA.postUpdate('Broker offline');
+      items.getItem('CanBus_OTA').postUpdate('Broker offline');
       return;
     }
 
@@ -63,6 +105,6 @@ rules.JSRule({
     // canbus/springfield/ota/status: "Starting download..." -> "Downloading NN%" ->
     // "OK — rebooting" -> "Running <ver>". No auto-clear: we want the result
     // (and the running version after reboot) to stay visible.
-    items.CanBus_OTA.postUpdate('Requested — waiting for device...');
+    items.getItem('CanBus_OTA').postUpdate('Requested — waiting for device...');
   }
 });

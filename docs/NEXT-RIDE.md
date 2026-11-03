@@ -1,5 +1,61 @@
 # Next ride — what to do, and what happens by itself
 
+> **The 1-2 rides left in 2026 (firmware 2026.11.03-1, app 0.9).** What they can
+> settle: (1) **rear wheel slip** - `CanBus_RearSlipMin` / `Max` after each ride;
+> one firm rear brake and one firm pull-away on a safe road show the extremes (a
+> deliberate ABS stop on an empty surface would also answer IDEAS D10, the owner's
+> call); (2) **NO NETWORK** - leave home with the hotspot off on purpose for two
+> minutes and the amber banner should come after 90 s and go the moment the
+> hotspot is on; (3) **start health** - a warm restart and a quick key-off/on, the
+> two cases canbus-start-health.js got wrong on 2026-11-03 (fix before lay-up);
+> (4) a **reference tyre gauge** on a cold rear tyre before setting off (owner's
+> gauge ~42 PSI vs TPMS ~39 on 2026-11-03). Run `ride_capture.py start` / `check`
+> as always; the capture tool now also connects on 8884 (TLS).
+>
+> **Ride of 2026-11-03 (last of the year), 15:17-17:19, 111 km, phone hotspot.**
+> Capture `captures/ride_20261103_150937.log` (47 372 lines), probes cruise,
+> throttle, claims, rates ON; the same streams are in InfluxDB. What it answered:
+>
+> - **Stage 2 - torque under cruise: answered.** 28 engagements, 35 min with the
+>   hand off the grip (longest 377 s at 84 km/h and 307 s at 87 km/h, speed held
+>   within +-0.2 km/h). The ECM drives the valve itself (`throttle` 3-19 % under
+>   cruise), and the demand torque follows the hill: 8 % downhill (< -1.5 %
+>   grade), 14 % level, 18 % uphill (> +1.5 %) at 85-90 km/h in 6th; r = +0.91
+>   torque vs valve under cruise. Grade from the Springfield tracker's altitude,
+>   which openHAB stamps about 36 s late (the FMM920 sends its 1 s records in
+>   batches): r(grade, torque) = +0.44 at that lag, 0 without it. Whole ride:
+>   torque -18..+67 % (p1 -17, p99 41, p99.9 64; +60 and more only near full
+>   valve). For the app (GaugeView.kt): `TORQUE_FULL_PULL` 60 fits,
+>   `TORQUE_FULL_OVERRUN` 25 is never reached (floor -18 today, -22 in August) -
+>   20 would fill the overrun half; the owner's call, it ships via Play.
+> - **D3 - 65217 while riding: answered, it does not speed up.** SA 23 sends it
+>   every 5 000 ms at every speed up to 137 km/h (540 moving windows). The whole
+>   bus keeps its parked periods on the move, and no 29-bit PGN appeared while
+>   moving that is not there parked - so stage-2 firmware item 1 (announce above
+>   the stationary gate) would find nothing new on this bus.
+> - **Wheel sensors:** `wheelBlips` 0 / 0 and `gearGlitches` 0 over 111 km;
+>   front/rear 0.976 (p1-p99 0.966-0.989).
+> - **Not answered on the ride:** 65215 b5 (no probe prints that byte on the move;
+>   **decoded the same evening from the August raw captures** as the ABS module's
+>   rear-minus-front speed, shipped as `rearSlip*` in 2026.11.03-1); grip
+>   temperature vs speed with the heat off (grips at 10 the whole ride, 5-10 C).
+> - **Link:** `loop_max_ms` <= 18 and `ble_gap_max_ms` <= 18 all ride; one 1 s
+>   MQTT drop at 16:56 on the hotspot; `net_dropped` 90 + 109 of ~47 000.
+>   **Home -> hotspot took 5 min 42 s** (link down 15:24:47, scans found no
+>   `PhoneHotspot` until ~15:30:10) - **explained by the owner: the hotspot was not
+>   switched on**, noticed after 6 km; the board joined within seconds of it
+>   appearing. Not a firmware fault. The ring buffer kept the first 24 lines and
+>   dropped the five from the join itself. **heap_min fell to 4 900 B at that reconnect** (normally
+>   ~20 kB): the queue built up over the outage plus TLS; a near miss.
+> - **Reset `panic` at 15:41:35.** Ignition off 15:36:05, asleep ~15:41:05, the
+>   engine was started ~15:41:30 and the board came back with `panic`, not
+>   `deepsleep` - the wake ran into the crank. Awake it rode out 9.6 V (15:20:02)
+>   and 10.1 V (15:17:50) cranks; the same picture as the bench panic of
+>   2026-10-04 (a dip that never takes the chip down, no coredump) and the cold
+>   start of 2026-10-19. Hypothesis, not proven. 14 s of data lost.
+>   `canbus-start-health.js` then logged a failed start (first rpm 788 < its
+>   `FIRED_RPM` 900, but warm idle is 710-870) - a false entry.
+>
 > **Status 2026-10-18.** The engine-byte hunt below is over: PGN 65382 byte 0 is
 > the low byte of a 16-bit engine speed, SPN 595 (cruise engaged) is on the bus
 > from the ECM and shipped as `cruise`, and the demand torque (61444 byte 7) is
@@ -24,6 +80,12 @@
 >    the cold start of 2026-10-19 the board rebooted during the crank, and that was
 >    inferred from a 17.5 s hole in the rpm samples where the chip itself knew it
 >    was a brownout.
+> 5. Let the probe see **11-bit frames** (added 2026-10-20): `decodeState()` returns
+>    on `!ext` before `probeFrame()`, so a standard-ID frame is neither announced
+>    nor counted. Announce `NEW std=0x7E8 dlc=8` and run the same byte-change
+>    capture on them, keyed by ID. Needed before the garage session where the
+>    Power Vision 3 polls the ECM's datalog record ([PV3-DATALOG.md](PV3-DATALOG.md)):
+>    if that dialogue is UDS on 0x7E0/0x7E8, today's firmware shows nothing at all.
 
 ## What the Zealand ride taught, 2026-09-13
 

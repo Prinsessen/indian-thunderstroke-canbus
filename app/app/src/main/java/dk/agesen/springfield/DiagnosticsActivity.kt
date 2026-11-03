@@ -102,6 +102,7 @@ class DiagnosticsActivity : AppCompatActivity() {
                 appendLine("  speed    ${decoded.speedKmh ?: "unknown"}")
                 appendLine("  throttle ${decoded.throttlePct ?: "unknown"}")
                 appendLine("  torque   ${decoded.torquePct ?: "not in packet"}")
+                appendLine("  net      ${decoded.net?.let { listOf("none", "wifi only", "broker")[it] } ?: "not in packet"}")
                 appendLine("  gear     ${decoded.gear ?: "unknown"}")
                 appendLine("  cruiseEn ${decoded.cruiseEnable ?: "unknown"}")
                 appendLine("  brakeR   ${decoded.brakeRear ?: "unknown"}")
@@ -132,6 +133,10 @@ class DiagnosticsActivity : AppCompatActivity() {
             // One is nothing. One a week becoming twenty a ride is a sensor
             // being ground away, which is how the front one was lost.
             appendLine("  dropouts F ${bike?.wheelBlips ?: 0}   R ${bike?.wheelBlipsRear ?: 0}   (since the ESP32 booted)")
+            // The ABS module's rear-minus-front speed, PGN 65215 byte 4 (2026.11.03-1).
+            val slipFast = BikeRepository.fast
+            appendLine("  slip R-F ${slipFast?.rearSlipMinKmh?.let { "%+.2f".format(it) } ?: "-"} .. " +
+                       "${slipFast?.rearSlipMaxKmh?.let { "%+.2f km/h".format(it) } ?: "-"}   (ABS module, this ride)")
             appendLine()
             appendLine("STAND")
             appendLine("  state    ${bike?.stand ?: "not reported (moving, or never seen)"}")

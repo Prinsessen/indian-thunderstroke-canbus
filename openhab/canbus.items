@@ -246,6 +246,12 @@ Number CanBus_Range            "Range [%d km]"                   <oil>         (
 Number CanBus_RPM              "Engine RPM [%d rpm]"             <motion>      (gCanBus_Engine) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rpm" }
 Number CanBus_Throttle         "Throttle [%d %%]"                <chart-blue>        (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:throttle" }
 Number CanBus_Torque           "Engine demand torque [%d %%]"    <canbus-engine-teal> (gCanBus_Engine) ["Measurement"] { channel="mqtt:topic:broker:canbus:torque" }
+// Rear wheel slip (firmware 2026.11.03-1): the ABS module's rear-minus-front speed, PGN 65215
+// byte 4. Min/max are the ride's, from the ignition on. In the live install these three live in
+// their own items file (canbus_slip.items) so adding them did not reload this one.
+Number CanBus_RearSlip     "Rear wheel slip [%.2f km/h]"           <canbus-speed-green> (gCanBus_Ride) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rearSlip" }
+Number CanBus_RearSlipMin  "Rear wheel slip, ride min [%.2f km/h]" <canbus-speed-green> (gCanBus_Ride) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rearSlipMin" }
+Number CanBus_RearSlipMax  "Rear wheel slip, ride max [%.2f km/h]" <canbus-speed-green> (gCanBus_Ride) ["Measurement", "Speed"] { channel="mqtt:topic:broker:canbus:rearSlipMax" }
 // Start health, canbus-start-health.js (2026-10-20): seconds from the starter turning to
 // the engine running, the temperatures it happened at, and how often the board rebooted
 // in the middle of it - a dip deep enough to kill a buck converter, as on the cold start
@@ -417,6 +423,8 @@ String CanBus_Probe_CruiseLine   "Probe cruise [%s]"            <text>        (g
 // it last woke. Announcements come only with the scan probe ON and the bike stationary
 // (firmware gate), so the list covers what the bus sends while stopped - added 2026-10-18
 // after "was PGN 65253 on yesterday's ride?" could not be answered from any item.
+// Since 2026-10-20 the whole probe stream (CanBus_Probe_Line) is kept in influx as well: the
+// byte-change lines are the same change-capture that found every signal so far.
 String CanBus_Probe_Line         "Probe line [%s]"              <text>        (gCanBus_Probe) ["Status", "Info"] { channel="mqtt:topic:broker:canbus:probeLine" }
 String CanBus_Probe_NewPgn       "Last new PGN [%s]"            <text>        (gCanBus_Probe) ["Status", "Info"]
 String CanBus_Probe_Pgns         "PGNs seen since wake [%s]"    <text>        (gCanBus_Probe) ["Status", "Info"]

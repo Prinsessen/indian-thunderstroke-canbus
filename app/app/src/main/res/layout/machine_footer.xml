@@ -51,6 +51,16 @@
         android:textColor="@color/muted" />
 
     <TextView
+        android:id="@+id/slip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingTop="3dp"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:textColor="@color/muted" />
+
+    <TextView
         android:id="@+id/dtc"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

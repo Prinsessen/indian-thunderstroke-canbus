@@ -633,6 +633,7 @@ void resetState() {
     st.gripTempL = st.gripTempR = NAN;
     st.speedFront = NAN;
     st.fuelRate = st.fuelEconInst = st.torque = NAN;
+    st.rearSlip = st.rearSlipMin = st.rearSlipMax = NAN;
     st.range = NAN;
     st.wheels[0] = 0;
     st.gear[0] = 0; st.headlight[0] = 0; st.security[0] = 0;
@@ -653,6 +654,10 @@ void resetState() {
 // while the rider is still putting the cap back on.
 #define RANGE_STEP_KM 60
 #define RANGE_HOLD_MS 3000UL
+
+// True until the first rear-slip reading after a wake or an ignition-off, so the
+// ride's min/max start again at the new ignition (clearLiveValues sets it).
+static bool slipNewRide = true;
 
 #define SETF(f, v) do { float _v = (v); \
     if (isnan(st.f) || fabsf(st.f - _v) > 1e-4f) { st.f = _v; stateDirty = true; } } while (0)
@@ -1404,6 +1409,23 @@ void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
                 uint16_t f = b[0] | (b[1] << 8);
                 if (f != 0xFFFF) { SETF(speedFront, f / 256.0f); speedFrontAt = millis(); }
             }
+            // Byte 4: rear wheel slip, the ABS module's rear-minus-front speed (SPN 907,
+            // 1/16 km/h, offset -7.8125, so 125 = zero; 251-255 are J1939's error and
+            // not-available). Found 2026-11-03 against the August raw captures: exactly
+            // 125 parked, band means within 0.15 km/h of rear minus front from the two
+            // wheel speeds, r = 0.89 on 1 s means (DECODE-PLAN.md). The byte swings
+            // +-5 km/h frame to frame -- the module's own fast figure -- so the ride's
+            // extremes are kept as well as the last value.
+            if (nn >= 5 && b[4] <= 250) {
+                const float s = ((int)b[4] - 125) / 16.0f;
+                SETF(rearSlip, s);
+                if (slipNewRide || isnan(st.rearSlipMin) || isnan(st.rearSlipMax)) {
+                    st.rearSlipMin = st.rearSlipMax = s; slipNewRide = false; stateDirty = true;
+                } else {
+                    if (s < st.rearSlipMin) { st.rearSlipMin = s; stateDirty = true; }
+                    if (s > st.rearSlipMax) { st.rearSlipMax = s; stateDirty = true; }
+                }
+            }
             break;
         case 65265:  // CCVS — multi-source: speed(SA11), brake light(SA0); SA39 sends only switches
             if (j.sa == 11 && nn >= 3) { uint16_t r = b[1] | (b[2] << 8);
@@ -2088,6 +2110,8 @@ static void clearLiveValues() {
     // automation/js/canbus-clear-live-values.js.
     st.rpm = st.speed = st.speedFront = st.fuelRate = 0.0f;
     st.fuelEconInst = st.torque = NAN;   // a demand torque of a stopped engine is not 0, it is nothing
+    st.rearSlip = NAN;                   // no wheels turning, no module sending; min/max stay for the ride
+    slipNewRide = true;                  // the next ignition starts a new min/max
     st.brakeRear = st.indLeft = st.indRight = -1;
     st.cruiseEnable = st.cruiseSw = st.hazard = st.startBtn = -1;
     st.cruiseHold = st.clutch = -1;
@@ -2148,6 +2172,12 @@ size_t buildStateJson(char *out, size_t cap, bool includeVin, size_t dm1Max,
     // kind of fact as the fields around it: it is worked out, not read.
     if (st.cruiseHold >= 0)      doc[K("cruise","cc")]       = st.cruiseHold ? "ON" : "OFF";   // measured (SPN 595) since 2026.10.18-1; was "HOLDING"/"off" while derived
     if (!isnan(st.torque))       doc[K("torque","tq")]       = (int)lroundf(st.torque);
+    // Rear slip on MQTT only: the BLE state JSON has no room (4 faults already
+    // cost it the firmware version), so the app gets the ride's min/max in
+    // bytes 10-11 of the fast packet instead (ble.cpp).
+    if (includeVin && !isnan(st.rearSlip))    doc[K("rearSlip","rs")]     = roundf(st.rearSlip * 100) / 100.0;
+    if (includeVin && !isnan(st.rearSlipMin)) doc[K("rearSlipMin","rsn")] = roundf(st.rearSlipMin * 100) / 100.0;
+    if (includeVin && !isnan(st.rearSlipMax)) doc[K("rearSlipMax","rsx")] = roundf(st.rearSlipMax * 100) / 100.0;
     // MQTT only from 2026.09.09-3. The app never read it, and it was the
     // most expensive of the three unread fields at 14 bytes, because
     // "PULLED" is a long string for a one-bit fact.

@@ -315,6 +315,13 @@ on 2026-10-03. Archive every image you OTA to the bike, at the moment you deploy
    - openHAB logs a health event only when the payload *changes*. More than 30 s
      with no new health line in `events.log` means the bus is silent.
 
+   Since 2026-10-23 openHAB enforces this for the bike: `canbus-ota.js` sends the
+   command only with `CanBus_Ignition` ON and `efmsg` higher in the latest of two
+   reports (the latest under 40 s old), and otherwise sets `CanBus_OTA` to
+   `Refused - ignition not proven (...)`. Right after that rule file loads it needs
+   two reports first, so press again after a minute. Still read it yourself: the
+   rule is the second lock, not the first. The bench board has no bus and no lock.
+
    Losing power mid-download does not brick the board. The image goes to the
    inactive app slot, and the boot partition switches over only after
    `Update.end()` has verified it, so the board boots the old image again. What it
@@ -551,6 +558,7 @@ the two listed, are in `git log` only.
 
 | Version | Notes |
 |---------|-------|
+| `2026.11.03-1` | **Network state and rear wheel slip in the fast packet; rear slip on MQTT.** After the last ride of 2026 (hotspot left off for 6 km, nothing said so): fast byte 9 = 2 broker / 1 WiFi only / 0 none, for app 0.9's NO NETWORK banner. PGN 65215 byte 4 decoded the same evening from the August captures as the ABS module's rear-minus-front speed: `rearSlip`, `rearSlipMin`, `rearSlipMax` on MQTT (km/h; min/max from the ignition on), fast bytes 10-11 = the ride's min/max. 12-byte fast packet; app 0.8 reads 8 or more and ignores the rest, so this firmware and app 0.9 go out in either order |
 | `2026.10.19-1` | **Torque in the fast packet.** Byte 8, `int8`, 0x7F unknown — the app's torque arc stepped once a second from the state packet on the first garage test. Nothing else changed. **Lockstep:** app 0.8 (reads 8 or 9 bytes) on every phone first; 0.7 rejects a 9-byte packet and goes blind to rpm, speed, throttle, gear and the lamps. Built 2026-10-19, **on the bike since 2026-10-19 11:06** (`update` over the LAN, 22 s; the bus proven live by CleanMsgs 5713 -> 11827 in 35 s before the command; this time the `- verified` line arrived, 14 s after the reconnect). Tag `known-good-2026.10.19-1` |
 | `2026.10.18-1` | **Cruise measured, torque shipped.** `cruise` is read from the ECM's SPN 595 (PGN 65265 SA 0 byte 3 bits 0-1; `"ON"`/`"OFF"`, was the derived `"HOLDING"`/`"off"`), settled on the 473 km ride of 2026-10-17; the derivation is removed. New `torque` / `tq`: engine demand torque, SPN 2432 (61444 byte 7, -125), verified in the August captures. The probe/throttle line is unchanged and still on for stage 2 (torque under cruise). BLE budget: 500 of 514 at four faults in the shipping form. Built 2026-10-18, **on the bike since 2026-10-18 06:16** (`update` over the LAN, 10 s; ignition on, bus proven live first). The `- verified` line never showed in CanBus_OTA: the image was marked valid on the first MQTT connect, that session dropped seven seconds later and took the retained publish with it, and the reconnect had nothing left to mark. `ota_state: valid` in Meta is the proof. Tag `known-good-2026.10.18-1` |
 | `2026.10.04-3` | The cruise probe also reports the ECM's own copy of PGN 65265 (SA 0, byte 4 bits 0-1, with brake, clutch and the derived hold), so a ride with the cruise in use settles whether SPN 595 is on the bus after all. The derived cruise update no longer sits inside the probe block (a build with the probes compiled out would have frozen it). The serial banner names the board it runs on and prints the build's own base topic, and the no-frames hint lists what applies to the MCP2518FD boards. On the bike since 2026-10-04 12:54 by `update` on the home LAN (ignition proven, 10 s download, `- verified` 25 s after the command), tag `known-good-2026.10.04-3`, md5 `a41238ce1b5cfb236bb0e4d28de94e33`. Rollback image: `releases/...-2026.10.04-2.bin`. |

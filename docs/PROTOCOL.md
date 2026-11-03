@@ -49,7 +49,7 @@ down), is `READ | WRITE` behind the same gate.
 
 | Name | UUID | Default rate | Payload |
 |------|------|--------------|---------|
-| **fast** | `5f6d0001-9b2a-4c31-8f0e-2a7c1d3e4b50` | 10 Hz | 8 binary bytes |
+| **fast** | `5f6d0001-9b2a-4c31-8f0e-2a7c1d3e4b50` | 10 Hz | 12 binary bytes (§4) |
 | **state** | `5f6d0002-9b2a-4c31-8f0e-2a7c1d3e4b50` | 1 Hz | UTF-8 JSON |
 | **button** | `5f6d0004-9b2a-4c31-8f0e-2a7c1d3e4b50` | per press | 2 binary bytes — see section 4b. Firmware 2026.09.19-1 and later |
 
@@ -83,7 +83,7 @@ history over MQTT.
 | `531` | `0x13` | Remote user terminated — the phone hung up |
 | `534` | `0x16` | Terminated by local host — the firmware's own drop after failed pairing |
 
-## 4. `fast` characteristic — 9 bytes (8 up to 2026.10.18-1)
+## 4. `fast` characteristic — 12 bytes (9 up to 2026.10.19-1, 8 up to 2026.10.18-1)
 
 **Little-endian.** Fixed length, so it always fits one notification regardless of
 the negotiated MTU.
@@ -97,6 +97,8 @@ the negotiated MTU.
 | 6 | `uint8` | flags | bitfield | — |
 | 7 | `uint8` | flagsValid | bitfield | — |
 | 8 | `int8` | torque | % | `0x7F` — **since `2026.10.19-1`.** Engine demand torque, SPN 2432, so the app's torque arc moves at 10 Hz; the same value as `tq` in `state`. App 0.7 and older reject any packet that is not exactly 8 bytes, so every phone runs 0.8 before this firmware goes on the bike |
+| 9 | `uint8` | network | 0 / 1 / 2 | `0xFF` — **since `2026.11.03-1`.** 2 = the broker has the data, 1 = WiFi but no broker, 0 = no WiFi; `0xFF` on a build without WiFi. App 0.9 shows an amber NO NETWORK banner after a minute without 2 (asked for after 2026-11-03, hotspot left off for 6 km). App 0.8 reads 8 bytes or more and ignores this one |
+| 10-11 | `int8` ×2 | rear slip min, max | 1/16 km/h | `0x7F` — **since `2026.11.03-1`.** The ride's lowest and highest rear wheel slip: the ABS module's rear-minus-front speed, PGN 65215 byte 4 less 125 (SPN 907). From the ignition on. In this packet because the `state` JSON has no room; `rearSlip*` on MQTT carries the same in km/h. App 0.9 shows it on MACHINE |
 
 ### Flag bits (same positions in both bytes 6 and 7)
 
@@ -225,6 +227,7 @@ the board restarts, which every wake from deep sleep is.
 |----------|---------|------|------|-------|
 | `rpm` | `r` | int | rpm | |
 | `throttle` | `th` | int | % | |
+| `rearSlip`, `rearSlipMin`, `rearSlipMax` | — (MQTT only; BLE: fast bytes 10-11) | float | km/h | **Since `2026.11.03-1`.** Rear wheel slip, the ABS module's rear-minus-front speed (PGN 65215 SA 11 byte 4, SPN 907, 1/16 km/h, 125 = zero). Negative = rear braked towards a lock, positive = rear running ahead (drive, plus ~+3 km/h of tyre circumference at 90). The value swings +-5 km/h frame to frame, so min/max are kept from the ignition on; the current value is dropped at key-off, min/max stay |
 | `torque` | `tq` | int | % | **Since `2026.10.18-1`.** Engine demand torque, SPN 2432 (PGN 61444 byte 7, offset -125): -22..+60 % seen; negative is overrun, the engine braking - also for a second after a blip of the throttle standing still, while the revs fall. The only load-like engine value the ECM broadcasts. Reads -22 with the ignition on and the engine stopped (seen on the bike 2026-10-18 06:16, the first minute on this firmware); absent once the bus falls silent. Verified against the August captures 2026-10-17 (monotonic with the valve, r +0.65) |
 | `gear` | `g` | string | | `"N"`, `"1"`-`"6"`, `"-"` |
 | `gearGlitches` | — (MQTT only) | int | | Count of gear changes that were implausible -- a change with the bike stationary on its stand and the engine running. Survives a reboot; it is evidence, gathered slowly. **MQTT only since 2026.09.09-3.** It is the counter behind three gear position sensors replaced under warranty, so it went to the transport that KEEPS it: openHAB holds and persists the history, which is what a service desk has to be shown. The radio bytes went to the engine data still being decoded |

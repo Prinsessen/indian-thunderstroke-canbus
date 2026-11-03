@@ -69,6 +69,11 @@ Thing mqtt:topic:broker:canbus "Indian CAN Bus" (mqtt:broker:broker) {
 	// Engine demand torque, SPN 2432 (PGN 61444 byte 7, offset -125), % -- negative is
 	// overrun. Firmware 2026.10.18-1; verified in the August captures 2026-10-17.
 	Type number : torque     "Engine demand torque" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.torque" ]
+	// Rear wheel slip, km/h: the ABS module's rear-minus-front speed (PGN 65215 byte 4, SPN 907),
+	// firmware 2026.11.03-1; min/max are the ride's, from ignition on (DECODE-PLAN.md)
+	Type number : rearSlip    "Rear wheel slip"       [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rearSlip" ]
+	Type number : rearSlipMin "Rear wheel slip, ride min" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rearSlipMin" ]
+	Type number : rearSlipMax "Rear wheel slip, ride max" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.rearSlipMax" ]
 	Type number : throttle   "Throttle"     [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.throttle" ]
 	Type string : gear       "Gear"         [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.gear" ]
 	Type number : coolant    "Coolant Temp" [ stateTopic="canbus/springfield/state", transformationPattern="JSONPATH:$.coolant" ]

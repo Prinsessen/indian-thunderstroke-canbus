@@ -98,7 +98,15 @@ class GaugeView @JvmOverloads constructor(
     private val colTurn = Color.parseColor("#4FA96B")
     private val colOff = Color.parseColor("#1E242C")
     private val colStrike = Color.parseColor("#39414D")
-    private val colOverrun = Color.parseColor("#4C8DD8")   // engine braking: a cool blue the face has nowhere else
+    // The torque ring, recoloured by the owner after the ride of 2026-11-03: red when
+    // the engine pulls (was the amber accent), dark blue on the overrun (was #4C8DD8).
+    // The red is purer than the redline's #D2452F so the two do not read as one signal.
+    private val colPull = Color.parseColor("#E53935")
+    private val colOverrun = Color.parseColor("#1F55E0")
+    // The throttle arc: white (the ink) instead of the muted grey, which was too hard
+    // to see in sunshine (owner, 2026-11-03). The thinnest stroke on the dial needs
+    // the most contrast, and white is the one colour that means nothing else here.
+    private val colThrottle = Color.parseColor("#F2F5F9")
 
     /**
      * What a lit figure throws onto the face behind it.
@@ -176,7 +184,7 @@ class GaugeView @JvmOverloads constructor(
      * three questions one dial can answer. It is the only load-like value the
      * bus broadcasts (SPN 2432, firmware 2026.10.18-1).
      *
-     * Length is size, colour is sign: amber when the engine pulls, blue when it
+     * Length is size, colour is sign: red when the engine pulls, dark blue when it
      * is braking on the overrun, nothing within two percent of zero so a steady
      * cruise leaves the ring empty. Full sweep at +60 %, half a sweep at -25 %,
      * the extremes seen on the bus -- the figures are from the August captures
@@ -426,10 +434,11 @@ class GaugeView @JvmOverloads constructor(
      * The hand, inside the arc that shows the engine.
      *
      * Set in from the main arc by a little over its own width, so the two read
-     * as related rather than as one thick band. Thin, and in the muted ink
-     * rather than the accent, because it is the reference the bright arc is
-     * chasing -- if it competed for attention the dial would have two subjects
-     * and no answer.
+     * as related rather than as one thick band. Thin, and not in the accent,
+     * because it is the reference the bright arc is chasing -- if it competed
+     * for attention the dial would have two subjects and no answer. It was in
+     * the muted grey until 2026-11-03, when the owner could not see it in
+     * sunshine; white now, kept thin so it still reads as the reference.
      */
     private fun drawThrottleArc(canvas: Canvas, radius: Float, stroke: Float) {
         val t = throttlePct ?: return
@@ -444,7 +453,7 @@ class GaugeView @JvmOverloads constructor(
 
         val f = (t / 100f).coerceIn(0f, 1f)
         if (f > 0f) {
-            tickPaint.color = colMuted
+            tickPaint.color = colThrottle
             canvas.drawArc(throttleRect, START_ANGLE, SWEEP_ANGLE * f, false, tickPaint)
         }
     }
@@ -464,7 +473,7 @@ class GaugeView @JvmOverloads constructor(
         canvas.drawArc(torqueRect, START_ANGLE, SWEEP_ANGLE, false, tickPaint)
 
         if (t > TORQUE_DEADBAND) {
-            tickPaint.color = colAccent
+            tickPaint.color = colPull
             val f = (t / TORQUE_FULL_PULL).coerceIn(0f, 1f)
             canvas.drawArc(torqueRect, START_ANGLE, SWEEP_ANGLE * f, false, tickPaint)
         } else if (t < -TORQUE_DEADBAND) {

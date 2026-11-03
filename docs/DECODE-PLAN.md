@@ -290,8 +290,8 @@ with the measured ranges. Byte numbers here are **zero-based**, as in the code.
 |---|---|---|---|---|
 | 65382 | 0 | 0 | **SOLVED 2026-10-17 from the August captures: the LOW byte of the engine speed.** Bytes 0-1 are one 16-bit little-endian value, 1 rpm per bit: against EEC1's rpm, r = 0.9993, slope 0.999, median difference 0.2 rpm over 4,597 same-second pairs. It correlated with nothing on its own (rpm, throttle, fuel, torque, speed all within 0.05) and wandered up and down in steps of 1-4 - a residue mod 256, not a counter and not a load. "rpm/256" in byte 1 was the high byte. Nothing engine-private here. | Nothing. The throttle probe has no byte left to hunt in this PGN. |
 | 65265 | 0 | 3, bits 0-1 | **SETTLED 2026-10-17: SPN 595, cruise active, from the ECM.** 100 engagements on one ride, 94 within 2.5 s of a SET/RESUME press; the derived `cruise` lagged it by 3-5 s and missed 19 of them. See [the cruise section](#cruise-control--what-it-actually-is). | **Shipped in 2026.10.18-1.** |
-| 61444 | 0 | 7 | **VERIFIED 2026-10-17 from the August captures: engine demand torque, SPN 2432, offset -125.** -22..+60 %, 73 values; monotonic with the throttle valve (median -2 % below 3 % valve, +14 % at 10-20 %, +51 % above 40 %), r = +0.65 with the valve, +0.52 with the fuel rate; negative in 1,215 frames, every one on the move (overrun). **Shipped in 2026.10.18-1 as `torque` / `tq` (int, %).** | The only load-like engine value this bus broadcasts; stage 2 (next ride, probe/throttle on) looks at it under cruise. |
-| 65215 | 11 | 4 | 39–220, `r = +0.84` against speed. Possibly a relative wheel speed with 125 = zero. | A capture with a known hard acceleration. |
+| 61444 | 0 | 7 | **VERIFIED 2026-10-17 from the August captures: engine demand torque, SPN 2432, offset -125.** -22..+60 %, 73 values; monotonic with the throttle valve (median -2 % below 3 % valve, +14 % at 10-20 %, +51 % above 40 %), r = +0.65 with the valve, +0.52 with the fuel rate; negative in 1,215 frames, every one on the move (overrun). **Shipped in 2026.10.18-1 as `torque` / `tq` (int, %).** | The only load-like engine value this bus broadcasts. **Stage 2 done 2026-11-03:** under cruise the ECM moves the valve (3-19 %) and the torque follows the grade - 8 % downhill, 14 % level, 18 % uphill at 85-90 km/h; ride range -18..+67 % (NEXT-RIDE.md, ride of 2026-11-03). |
+| 65215 | 11 | 4 | **Very likely SPN 907, relative speed rear axle (rear minus front), 1/16 km/h, offset -7.8125 (125 = zero)** - checked 2026-11-03 against the August raw captures (4 322 frames, ABS module SA 11): exactly 125 at a standstill; mean per band matches rear-minus-front from the two wheel speeds (+0.84 vs +0.78 km/h at 30-60, +1.78 vs +1.63 at 60-90, +2.96 vs +2.86 at 90+); r = 0.89 on 1 s means, 0.03 frame by frame (the byte swings +-5 km/h, so it is the ABS module's fast, unfiltered slip). Bytes 2-3 always 0 and 5-7 always 255 (not used). Not a third speed sensor - the bike has two. | **Shipped 2026-11-03 in `2026.11.03-1`** as `rearSlip` / `rearSlipMin` / `rearSlipMax` (MQTT, km/h; min/max from the ignition on) and fast bytes 10-11 (app 0.9, MACHINE page). Still to see: the extremes in a hard acceleration and a hard rear brake (IDEAS D10). |
 | 65265 | 11 | 0 | Two values, 63 and 127. Standard: parking brake / two-speed axle / cruise pause, two-bit fields. | One controlled test. |
 | 61441 | 11 | 5 | `0xCC`, `0xCD`, `0xDC` — the same three values as the cruise switch byte. Mirror or coincidence. | Ten minutes with the SET and RESUME buttons, parked. |
 | 65265 | 0 | 6 | 241 in all but six records; 240 for about a second on two occasions, once just after a wake and once at the end of a ride. Was filed as a message counter, which two values cannot be. | Unknown; low value. |
@@ -341,6 +341,14 @@ is 0. [TRANSMIT.md](TRANSMIT.md) is the plan.
 - **DM2** — stored (previously active) fault codes.
 - **DM4** — freeze frames: the conditions when a fault was set.
 - **Anything else answered on demand rather than broadcast.**
+- **The ECM's datalog record** — injector pulse width, ignition timing and knock
+  retard per cylinder, load, MAP, requested AFR, fuel trims. The Power Vision 3
+  reads it on request; its channel table (offsets, widths, scales for a 44-byte
+  record) was read out of the PV3's own storage on 2026-10-20 — see
+  [PV3-DATALOG.md](PV3-DATALOG.md) (private, not published). What is still
+  unknown is the request itself; a garage session with the PV3 polling and the
+  scan probe on captures it, once the probe can see 11-bit frames (NEXT-RIDE.md,
+  stage-2 item 5).
 
 ### C. Identified, and deliberately not shipped
 

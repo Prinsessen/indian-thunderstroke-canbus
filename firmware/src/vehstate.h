@@ -23,6 +23,13 @@ struct VehState {
     float fuelRate;      // L/h, PGN 65266 bytes 1-2
     float fuelEconInst;  // l/100km right now, PGN 65266 bytes 3-4
     float torque;        // engine demand torque, %, PGN 61444 byte 7 (SPN 2432, offset -125); negative = overrun
+    // Rear wheel slip, km/h: the ABS module's own rear-minus-front speed, PGN 65215 byte 4
+    // (SPN 907, 1/16 km/h, 125 = zero), found 2026-11-03 in the August captures. Positive
+    // when the driven rear runs ahead (drive, and the tyres' circumference: ~+3 km/h at
+    // 90 steady), negative when it is braked towards a lock. Min and max are kept from the
+    // ignition coming on until it next comes on, because a lock or a spin lasts less than
+    // the 1 s between state publishes.
+    float rearSlip, rearSlipMin, rearSlipMax;
     // Range to empty in km, exactly as the original dash shows it:
     // PGN 65382 SA 0 bytes 3-4 (16 bits, low byte first), one count per km, no offset. Identified
     // 2026-09-08 by reading the dash against the byte twice; the proof

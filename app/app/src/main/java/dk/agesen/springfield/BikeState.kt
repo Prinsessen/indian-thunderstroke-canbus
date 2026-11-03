@@ -35,7 +35,8 @@ private const val BIT_HAZARD = 7
 /**
  * The `fast` characteristic — rpm, speed, throttle, gear and the switch flags,
  * pushed ~10x/sec. 8 bytes up to firmware 2026.10.18-1; 9 from 2026.10.19-1,
- * the ninth being the engine demand torque. Fixed length per firmware, so it
+ * the ninth being the engine demand torque; 12 from 2026.11.03-1: byte 9 the
+ * board's network state, bytes 10-11 the ride's rear wheel slip min and max. Fixed length per firmware, so it
  * survives the default 23-byte MTU; the app takes either length (0.8 and later).
  */
 data class FastPacket(
@@ -59,17 +60,33 @@ data class FastPacket(
     val indRight: Boolean?,
     val hazard: Boolean?,
     /** Engine demand torque, %, from byte 8 (firmware 2026.10.19-1 and later); null on an 8-byte packet. */
-    val torquePct: Int? = null
+    val torquePct: Int? = null,
+    /**
+     * How far the board's data gets, from byte 9 (firmware 2026.11.03-1): 2 = the
+     * broker has it, 1 = WiFi without the broker, 0 = no WiFi. Null on an older
+     * packet or a board built without WiFi.
+     */
+    val net: Int? = null,
+    /**
+     * The ride's lowest and highest rear wheel slip, km/h, bytes 10-11 (firmware
+     * 2026.11.03-1): the ABS module's rear-minus-front speed, PGN 65215 byte 4.
+     * Negative = the rear braked towards a lock, positive = the rear running ahead
+     * (drive, and about +3 km/h of tyre circumference at 90). From the ignition on.
+     */
+    val rearSlipMinKmh: Double? = null,
+    val rearSlipMaxKmh: Double? = null
 ) {
     companion object {
         const val LENGTH = 8              // the packet up to firmware 2026.10.18-1
         const val LENGTH_WITH_TORQUE = 9  // from 2026.10.19-1: byte 8 = int8 torque, 0x7F unknown
+        const val LENGTH_WITH_NET = 10    // from 2026.11.03-1: byte 9 = network 0/1/2, 0xFF unknown
+        const val LENGTH_WITH_SLIP = 12   // from 2026.11.03-1: bytes 10-11 = int8 slip min/max, 1/16 km/h, 0x7F unknown
         private const val I8_UNKNOWN = 0x7F
 
         private const val U16_UNKNOWN = 0xFFFF
         private const val U8_UNKNOWN = 0xFF
 
-        /** Returns null if the payload is shorter than 8 bytes; 8 or 9 are both read. */
+        /** Returns null if the payload is shorter than 8 bytes; 8 to 12 are all read. */
         fun parse(b: ByteArray): FastPacket? {
             if (b.size < LENGTH) return null
 
@@ -103,7 +120,10 @@ data class FastPacket(
                 indLeft = flag(BIT_IND_LEFT),
                 indRight = flag(BIT_IND_RIGHT),
                 hazard = flag(BIT_HAZARD),
-                torquePct = if (b.size >= LENGTH_WITH_TORQUE && u8(8) != I8_UNKNOWN) b[8].toInt() else null
+                torquePct = if (b.size >= LENGTH_WITH_TORQUE && u8(8) != I8_UNKNOWN) b[8].toInt() else null,
+                net = if (b.size >= LENGTH_WITH_NET && u8(9) <= 2) u8(9) else null,
+                rearSlipMinKmh = if (b.size >= LENGTH_WITH_SLIP && u8(10) != I8_UNKNOWN) b[10] / 16.0 else null,
+                rearSlipMaxKmh = if (b.size >= LENGTH_WITH_SLIP && u8(11) != I8_UNKNOWN) b[11] / 16.0 else null
             )
         }
     }

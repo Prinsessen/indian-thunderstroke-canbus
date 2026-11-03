@@ -6,6 +6,41 @@ commits carry the detail.
 
 ---
 
+## 2026-11-03 — release 9 (0.9), not built yet
+
+From the owner after the last ride of the year (2026-11-03), all three hers:
+
+- **Tyre warnings can be muted** with a long press on the banner (`TyreMute.kt`,
+  `TyreMuteTest.kt`). The rear sat on the 2 PSI line for an hour after she had
+  pumped it to 42 on her own gauge (the sensor said ~39; which is right is not
+  measured yet), so the amber banner came and went nine times, and the bike's own
+  SPN 520302 FMI 17 stood red before the stop. The mute remembers each tyre's
+  deviation and gives way to a tyre falling a further 1 PSI, a more severe tyre
+  code (FMI 18/1), any other code, and twelve hours.
+- **Torque ring colours:** red when the engine pulls (was amber), dark blue on
+  the overrun (`#1F55E0`, was `#4C8DD8`). Her words: the ring works the way she
+  feels the engine. The dark blue has about half the contrast of the old one on
+  the dark face; lighter is one line if it is hard to see.
+- **Throttle arc white** (was the muted grey), which she could not see in sun.
+- **NO NETWORK banner** (`NetWatch.kt`, `NetWatchTest.kt`; her words: "vi skal ha
+  hotspot ideen med nu"). On 2026-11-03 the hotspot was left off and the first
+  6 km never reached home with nothing on the cluster saying so. Firmware
+  2026.11.03-1 puts the board's network state in byte 9 of the fast packet
+  (2 broker, 1 WiFi only, 0 none); after 90 s without the broker the banner says
+  "hotspot off?" in amber, silent, and clears the moment the broker answers. A
+  long press mutes it until then. Older firmware sends 9 bytes and the banner
+  never shows; app 0.8 reads the 10-byte packet and ignores the new byte, so
+  firmware and app can go out in either order.
+
+- **Rear slip on the MACHINE page** (`REAR SLIP min / max`, also on the
+  diagnostics screen; `RearSlipTest.kt`): the ABS module's own rear-minus-front
+  wheel speed, PGN 65215 byte 4, found the same evening in the August captures.
+  The ride's extremes come in bytes 10-11 of the fast packet (firmware
+  2026.11.03-1) because the state JSON has no room. Same firmware, same packet,
+  same either-order rule as the network byte.
+
+`playVersionCode` is 9. Built on the Windows machine as before.
+
 ## 2026-10-18 — release 8 (0.8)
 
 The torque arc glides. Its value comes in the state packet once a second (the

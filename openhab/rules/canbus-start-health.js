@@ -78,7 +78,10 @@ rules.JSRule({
     }
     const v = parseFloat(String(event.receivedState));
     if (isNaN(v)) return;                        // NULL/UNDEF: the board is away
-    if (!s.crank && v > 0 && s.lastRpm <= 0 && now - s.lastRunAt > QUIET_MS) {
+    // v < FIRED_RPM: after a reload the state is empty, and the first sample of an engine
+    // already running (1200 rpm) started a "crank" that the next sample "fired" in 0.3 s
+    // (code review 2026-10-23). A crank starts below the firing speed.
+    if (!s.crank && v > 0 && v < FIRED_RPM && s.lastRpm <= 0 && now - s.lastRunAt > QUIET_MS) {
       s.crank = { t0: now, ambient: num('CanBus_Ambient'), head: num('CanBus_Coolant'), cleanMsgs: num('CanBus_Bus_CleanMsgs'), reconnected: false };
       console.info(LOG + ': starter turning (' + Math.round(v) + ' rpm)');
     } else if (s.crank) {

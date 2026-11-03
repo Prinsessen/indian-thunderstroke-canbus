@@ -33,6 +33,12 @@ import android.view.View
  * It is deliberately not dismissible. A warning you can swipe away is one you
  * will swipe away, and neither of these clears itself for a good reason: the
  * banner disappears when the bike stops reporting the fault, and not before.
+ *
+ * One exception since 2026-11-03, at the owner's request: a tyre warning (the
+ * app's own, or the bike's tyre-low code at its least severe level) can be
+ * acknowledged with a long press. [TyreMute] keeps that from hiding anything
+ * new - a tyre that falls further, a more severe code, any other code, or the
+ * next day all bring the banner back.
  */
 class AlertBannerView @JvmOverloads constructor(
     context: Context,
@@ -127,8 +133,37 @@ class AlertBannerView @JvmOverloads constructor(
     private var searchingSince = 0L
     private var severity = Severity.CRITICAL
 
+    /** True while the banner shows a tyre warning, which a long press may mute. */
+    private var tyreShown = false
+
+    /** The board's own view of whether its data gets home (fast packet byte 9). */
+    private val netWatch = NetWatch()
+    private var netShown = false
+
+    init {
+        // A long press, not a tap: the phone is on the handlebar, and a glove
+        // brushing the screen must not silence anything.
+        setOnLongClickListener {
+            if (netShown) {
+                // Until the broker is reached again: a ride without the hotspot
+                // on purpose should not be an hour of amber.
+                netWatch.mute()
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                onBikeUpdate()
+                return@setOnLongClickListener true
+            }
+            if (!tyreShown) return@setOnLongClickListener false
+            val t = TyreMemory.last()
+            TyreMute.mute(System.currentTimeMillis(), t?.front?.deviation, t?.rear?.deviation)
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            onBikeUpdate()
+            true
+        }
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        TyreMute.init(context)
         BikeRepository.addObserver(this)
         onBikeUpdate()
     }
@@ -192,6 +227,11 @@ class AlertBannerView @JvmOverloads constructor(
             searchingSince = 0L
         }
         val slowSearch = searchingSince != 0L && nowMs - searchingSince > SEARCH_WARN_MS
+
+        // No network: the board has had no broker for longer than a handover
+        // takes (NetWatch). Firmware before 2026.11.03-1 sends no byte 9 and
+        // this stays quiet.
+        val netLost = netWatch.update(if (live) BikeRepository.fast?.net else null, nowMs)
         val fobMissing = security == "NOT FOUND" || slowSearch
 
         val volts = state?.batteryV
@@ -217,11 +257,24 @@ class AlertBannerView @JvmOverloads constructor(
         // it would go quiet precisely when the machine has been standing long
         // enough for a slow puncture to have emptied a tyre.
         val tyres = TyreMemory.last()
-        val worstTyre = tyres?.let {
-            listOf("FRONT" to it.front, "REAR" to it.rear)
-                .maxByOrNull { w -> w.second.level.ordinal }
-        }
+        val mute = TyreMute.current()
+        val wheels = tyres?.let { listOf("FRONT" to it.front, "REAR" to it.rear) }
+        // A tyre the rider has acknowledged drops out here, so the other one -
+        // or nothing - is what the banner judges (TyreMute: only until it falls
+        // a further PSI, or twelve hours pass).
+        val worstTyre = wheels
+            ?.filter { (name, w) -> !TyreMute.holds(mute, name, w.deviation, nowMs) }
+            ?.maxByOrNull { w -> w.second.level.ordinal }
         val tyreLevel = worstTyre?.second?.level
+
+        // The bike's own tyre-low code, muted on the same terms: every tyre it
+        // names must be covered by the mute on its current reading.
+        val tyreDtc = if (dtc) TyreMute.tyreDtcWheels(Dtc.parse(dm1)) else null
+        val dtcMuted = tyreDtc != null && tyreDtc.all { name ->
+            val w = wheels?.firstOrNull { it.first == name }?.second
+            w != null && TyreMute.holds(mute, name, w.deviation, nowMs)
+        }
+        val dtcShown = dtc && !dtcMuted
 
         // The filtered level, not the sender's.
         //
@@ -294,7 +347,7 @@ class AlertBannerView @JvmOverloads constructor(
                 // search finally becomes a failed one. It is the same news.
                 key = "security-missing"
             }
-            dtc -> {
+            dtcShown -> {
                 // Amber when the bike keeps its own lamp off — except for the
                 // handful that end the ride whatever the lamp does. A flat key
                 // fob cannot hurt the engine, so the lamp stays off, and you
@@ -328,6 +381,18 @@ class AlertBannerView @JvmOverloads constructor(
                     Settings.distance(rangeKm), Settings.distanceLabel)
                 key = "fuel"
             }
+            netLost != null -> {
+                // Amber and silent: nothing on the bike is wrong, but nothing is
+                // being recorded at home either - the ride of 2026-11-03 lost its
+                // first 6 km that way. Above the tyre watch, which was standing at
+                // the same time on that ride and would have hidden it.
+                newSeverity = Severity.CAUTION
+                newHeadline = "NO NETWORK"
+                newDetail = if (netLost == NetWatch.WIFI_ONLY)
+                    "on WiFi, but nothing reaches home"
+                else "nothing reaches home - hotspot off?"
+                key = "net-$netLost"
+            }
             tyreLevel == TyreMemory.Level.WATCH && worstTyre != null -> {
                 newSeverity = Severity.CAUTION
                 newHeadline = "TYRE PRESSURE"
@@ -347,6 +412,9 @@ class AlertBannerView @JvmOverloads constructor(
         }
 
         criticalActive = newHeadline != null && newSeverity == Severity.CRITICAL
+        netShown = key != null && key.startsWith("net-")
+        tyreShown = key != null &&
+                (key.startsWith("tyre-") || (key.startsWith("dtc-") && tyreDtc != null))
 
         if (newHeadline != headline || newDetail != detail || newSeverity != severity) {
             headline = newHeadline

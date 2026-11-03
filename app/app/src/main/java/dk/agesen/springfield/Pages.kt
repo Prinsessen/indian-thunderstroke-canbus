@@ -418,6 +418,19 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
         v.findViewById<TextView>(R.id.records).text =
             if (best.isEmpty()) "" else "BEST  " + best.joinToString("  ·  ")
 
+        // Rear wheel slip, the ABS module's own rear-minus-front speed (firmware
+        // 2026.11.03-1, fast packet bytes 10-11): the ride's extremes, because a
+        // lock or a spin is over in less than a second. Braking towards a lock
+        // shows as the negative end; the positive end carries the tyres' own
+        // circumference difference too, about +3 km/h at 90 km/h steady.
+        val fast = if (BikeRepository.isLive) BikeRepository.fast else null
+        val slipMin = fast?.rearSlipMinKmh
+        val slipMax = fast?.rearSlipMaxKmh
+        v.findViewById<TextView>(R.id.slip).text =
+            if (slipMin == null || slipMax == null) ""
+            else "REAR SLIP  %+.1f / %+.1f %s".format(
+                Settings.speed(slipMin), Settings.speed(slipMax), Settings.speedLabel)
+
         // Rendered through Dtc, never printed raw. This line used to print the
         // firmware's string directly and looked right only by accident: the
         // readable form happened to be a sentence. Since 2026.09.05-56 the radio

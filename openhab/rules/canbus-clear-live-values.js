@@ -60,7 +60,10 @@ const MOMENTARY = [
   // Litres per 100 km at zero speed is undefined, not zero.
   'CanBus_FuelEconInst',
   // Demand torque of a stopped engine is nothing, not 0 (firmware 2026.10.18-1 drops it too).
-  'CanBus_Torque'
+  'CanBus_Torque',
+  // Rear wheel slip now: no module sends it on a parked bike (firmware 2026.11.03-1 drops it
+  // too). CanBus_RearSlipMin/Max are NOT here: they are the ride's answer and stay until the next.
+  'CanBus_RearSlip'
 ];
 
 /** "last seen 15:27" from an age in seconds, or null if the age is unknown. */
@@ -76,7 +79,7 @@ function seenAt(ageItemName) {
   }
 }
 
-function settle(why) {
+function settle(why, stamp) {
   let cleared = 0;
   for (const name of MOMENTARY) {
     try {
@@ -88,6 +91,12 @@ function settle(why) {
   }
   // Stamp the two that are kept, while the ages are still the ones the ESP32
   // reported. Once the board sleeps, nothing further arrives to correct them.
+  // Not after a restart (stamp false): the ages are then restored values from before,
+  // and "now minus a stale age" would write a wrong time.
+  if (stamp === false) {
+    console.info(`canbus-clear-live-values: cleared ${cleared} momentary readings (${why}, after a restart - no stamps)`);
+    return;
+  }
   const stamps = [['CanBus_Interlock_Age', 'CanBus_Interlocks_Seen'],
                   ['CanBus_Tyre_Age',      'CanBus_Tyres_Seen']];
   for (const [ageItem, seenItem] of stamps) {
@@ -106,7 +115,12 @@ rules.JSRule({
     // goes off -- while the board is still awake and the ages are still live.
     triggers.ItemStateChangeTrigger('CanBus_Ignition', 'ON', 'OFF'),
     // The board itself has gone: asleep, out of range, or crashed.
-    triggers.ItemStateChangeTrigger('CanBus_Status', 'online', 'offline')
+    // Any change TO offline: after a restart with the bike parked the board is offline
+    // from the start, and the rider inputs restored from before stayed "pressed" on the
+    // sitemap (2026-10-23, docs/FROM-STATE-TRIGGERS.md #20). The key-off above keeps ON->OFF on purpose (#34).
+    triggers.ItemStateChangeTrigger('CanBus_Status', undefined, 'offline')
   ],
-  execute: (event) => settle(event.itemName)
+  // A first value after a restart (NULL/UNDEF -> offline) clears, but does not stamp.
+  execute: (event) => settle(event.itemName,
+    !(event.oldState === undefined || ['NULL', 'UNDEF'].indexOf(String(event.oldState)) >= 0))
 });

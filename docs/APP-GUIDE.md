@@ -202,12 +202,14 @@ a word.
 ### The three arcs on the rev dial
 
 The outer, lit arc is what the engine is **doing** — the revs. Inside it a thin
-arc is what the rider is **asking** — the throttle valve, 0–100 %. Open the
+white arc is what the rider is **asking** — the throttle valve, 0–100 % (grey until
+app 0.9, too faint in sunshine). Open the
 throttle and the inner arc leaps ahead; shut it and the outer one runs on alone
 while the engine winds down. Inside that, from app 0.7 with firmware
 2026.10.18-1, a third arc is what the ECM is **demanding** of the engine — the
 demand torque (ten times a second from firmware 2026.10.19-1, once a second
-from 2026.10.18-1): amber when the engine pulls, blue when it brakes on the overrun,
+from 2026.10.18-1): red when the engine pulls, dark blue when it brakes on the overrun
+(amber and a lighter blue until app 0.9),
 empty within two percent of zero so a steady cruise leaves it blank. Full sweep
 is +60 %, half a sweep −25 %, the extremes seen on the bus; the figures may move
 once the ring has been read on the road. A dial fed by older firmware simply shows
@@ -389,6 +391,7 @@ caution colour, figure included.
 | **Ride distance** | This ride, kept by the app — see [9.6](#96-ride-distance) |
 | **Top speed, average, moving time** | This ride. **Average is over moving time**, not elapsed — see [9.7](#97-ride-figures) |
 | **All-time records** | Highest speed and rpm ever seen, on their own line, separately resettable. A ride's top speed and every ride's top speed answer different questions and are not put on one line |
+| **Rear slip** | `REAR SLIP -5.4 / +5.9 km/h`: the lowest and highest difference between the rear and the front wheel this ride, as the ABS module itself measures it (PGN 65215 byte 4, firmware 2026.11.03-1). Negative is the rear braked towards a lock; positive is the rear running ahead under drive - and always about +3 km/h at 90 km/h, because the two tyres are not the same size. From the ignition on, so a fuel stop with the key off starts it again. Blank on older firmware. App 0.9 |
 | **Service** | Distance to the next service — see [9.8](#98-service-remaining) |
 | **Diagnostics** | Active fault codes, or a statement that there are none |
 
@@ -407,7 +410,7 @@ Heated clothing. Covered in full in [section 8](#8-heated-clothing).
 ## 7. Alerts
 
 One banner across the top of the cluster, above the pages so that changing page
-cannot dismiss it. Nine conditions can raise it. Only the worst one shows, and
+cannot dismiss it. Ten conditions can raise it. Only the worst one shows, and
 this is the order they are ranked in:
 
 | | Banner | Raised when | |
@@ -419,8 +422,9 @@ this is the order they are ranked in:
 | 5 | KILL SWITCH | The run/stop switch is at STOP with the ignition on | Amber |
 | 6 | CHARGING | Below 12 V with the engine turning | Red |
 | 7 | FUEL | Under 50 km left at worst | Amber |
-| 8 | TYRE PRESSURE | A wheel is between 2 and 4 PSI from target | Amber |
-| 9 | SERVICE | The service is overdue | Amber |
+| 8 | NO NETWORK | The board has had no broker for 90 s - "hotspot off?" or "on WiFi, but nothing reaches home". Needs firmware 2026.11.03-1; a long press mutes it until the broker answers | Amber |
+| 9 | TYRE PRESSURE | A wheel is between 2 and 4 PSI from target | Amber |
+| 10 | SERVICE | The service is overdue | Amber |
 
 **Red breathes and buzzes; amber sits still and stays silent.** A red banner
 breathes rather than flashes — a flash is read once and then tuned out — and
@@ -432,6 +436,14 @@ that has been due for a week would teach you that the buzz means nothing.
 
 **None of them can be dismissed**, because a warning you can swipe away is one
 you will. Each clears itself when its cause does.
+
+**Except a tyre warning, which a long press mutes** (app 0.9). It covers both
+tyre banners and the bike's own tyre-low code at its least severe level (SPN
+520300 / 520302, FMI 17). The mute remembers how far each tyre was from target
+when you pressed, and comes undone by itself: a tyre that falls a further 1 PSI,
+a more severe tyre code (FMI 18 or 1), any other fault code, and twelve hours
+all bring the banner back. Asked for after the ride of 2026-11-03, when the rear
+sat on the 2 PSI line for an hour and the amber banner came and went nine times.
 
 A few of them need a word:
 

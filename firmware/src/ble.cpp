@@ -22,6 +22,7 @@
 #include <NimBLEDevice.h>
 
 #include "service.h"
+#include "net.h"
 
 // ---- Fallbacks so a config.h predating the BLE block still builds -----------
 #ifndef BLE_DEVICE_NAME
@@ -361,6 +362,24 @@ static void buildFastPacket(const VehState &st, uint8_t *out) {
     out[6] = bits;
     out[7] = valid;
     out[8] = isnan(st.torque) ? (uint8_t)0x7F : (uint8_t)(int8_t)lroundf(st.torque);
+
+    // Byte 9, since 2026.11.03-1: how far the board's data gets. 2 = the broker
+    // has it, 1 = WiFi but no broker, 0 = no WiFi at all. On the last ride of
+    // 2026 the phone's hotspot was left off and nothing said so for 6 km; the
+    // board knew the whole time. The app turns a lasting 0 or 1 into an amber
+    // "NO NETWORK" banner. Read from the network task's flags, never waiting.
+    // App 0.8 reads 8 or more bytes and ignores the rest, so this ships alone.
+#if ENABLE_WIFI
+    out[9] = netMqttConnected() ? 2 : (netWifiConnected() ? 1 : 0);
+#else
+    out[9] = 0xFF;                         // a board built without WiFi: unknown, not "none"
+#endif
+
+    // Bytes 10-11, since 2026.11.03-1: the ride's lowest and highest rear wheel
+    // slip, int8 in 1/16 km/h (the raw 65215 byte 4 less 125), 0x7F unknown. In
+    // the fast packet because the state JSON has no room left for them.
+    out[10] = isnan(st.rearSlipMin) ? (uint8_t)0x7F : (uint8_t)(int8_t)lroundf(st.rearSlipMin * 16.0f);
+    out[11] = isnan(st.rearSlipMax) ? (uint8_t)0x7F : (uint8_t)(int8_t)lroundf(st.rearSlipMax * 16.0f);
 }
 
 // How long the phone went without service, at worst, since the last time
@@ -389,7 +408,7 @@ void bleUpdate(const VehState &st) {
 
     if (now - gLastFast >= BLE_FAST_MS) {
         gLastFast = now;
-        uint8_t pkt[9];
+        uint8_t pkt[12];
         buildFastPacket(st, pkt);
         gChFast->setValue(pkt, sizeof(pkt));
         gChFast->notify();

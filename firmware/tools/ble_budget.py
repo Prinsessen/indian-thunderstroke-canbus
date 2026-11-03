@@ -60,6 +60,7 @@ W = {
     # trade came out two bytes ahead rather than level.
     "rg": 3,
     "tq": 3,   # torque demand, "-22".."60": sign and two digits
+    "rs": 5, "rsn": 5, "rsx": 5,   # rear slip km/h, "-7.81".."7.81" (MQTT only, 2026-11-03)
     # MQTT-only; never on the radio.
     "vn": 19, "si": 113, "dr": 21, "sb": 10,
 }
