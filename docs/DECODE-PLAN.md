@@ -18,7 +18,8 @@ taken from a J1939 table. Where a standard table and the captures disagree, the
 captures win — that has already happened four times.
 
 Last revised **2026-10-04**, when every status in this file was checked against
-the firmware running on the bike (`2026.10.18-1` since 2026-10-18, `src/main.cpp`). **What is
+the firmware then on the bike; rows added since name their own version. The bike
+runs `2026.11.03-1` since 2026-11-03 (`src/main.cpp`). **What is
 still open is collected in one place:
 [What is genuinely still open](#what-is-genuinely-still-open-2026-10-04).**
 

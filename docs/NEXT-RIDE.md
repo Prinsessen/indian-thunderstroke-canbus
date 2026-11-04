@@ -251,7 +251,7 @@ it was not run. Writing the instruction down was not enough.
 ---
 
 Everything waiting on wheels, in one list, so it takes one outing instead of
-three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.10.18-1`.
+three. Needs firmware `2026.09.04-32` or later; the bike runs `2026.11.03-1`.
 
 Most of it is passive: ride normally and the data arrives. Only two things ask
 anything of the rider, and both take four minutes.

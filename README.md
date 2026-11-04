@@ -71,6 +71,7 @@ you whether *you* are the problem.
 | **Cylinder head temperature** | The engine's only temperature sensor. This bike is air-cooled and has no oil temperature sensor at all |
 | **The cruise-control engaged state** | Measured since firmware 2026.10.18-1: the ECM's own SPN 595. For six weeks it was derived, because the module first asked does not send it — see below |
 | **Engine demand torque** | SPN 2432, -25..+60 %: how hard the ECM is asking the engine to work, negative on the overrun. The one load-like value the bus broadcasts |
+| **Rear wheel slip** | PGN 65215 byte 4 from the ABS module, very likely SPN 907: the rear wheel's speed less the front's, 1/16 km/h, as the ABS module itself measures it - negative braking towards a lock, positive under drive. The ride's lowest and highest since firmware 2026.11.03-1. A real lock or spin has not been captured yet, so what one looks like is still to be seen |
 
 ---
 
@@ -203,24 +204,41 @@ instrument and a layout engine has nothing to contribute to a needle.
 
 **A fault banner across the top of every page.** The diagnostics were decoded and
 then buried on a page nobody visits while a fault is developing, which is the one
-time they matter. Nine conditions in the order a rider wants them: what could put
+time they matter. Ten conditions in the order a rider wants them: what could put
 you down, then what will strand you, then what needs planning; only the worst one
 shows. Red ones breathe, amber ones sit still. It is deliberately not dismissible —
-a warning you can swipe away is one you will swipe away.
+a warning you can swipe away is one you will swipe away — with two exceptions a
+long press mutes, each built so it can only hide what the rider has already seen:
+a tyre warning (it comes back if the tyre falls a further 1 PSI, on a more severe
+tyre code, on any other fault, and after twelve hours) and **NO NETWORK**, the
+board's own word that its data has not reached home for 90 s, usually a phone
+hotspot left off (it comes back the moment the broker answers).
 
 **Three lamp states, not two.** Every switch is lit, dark, or *struck through*
 when the bus has never mentioned it. A dark lamp reads as "not active", which is
 a claim the app has no business making about something it has never heard from.
 
-**Two transports.** A packed eight-byte BLE frame at 10 Hz for the things that
-move — revs, speed, throttle, gear, switch flags — and a JSON state at 1 Hz for
-everything else. Over WiFi the same JSON arrives by MQTT. The fast frame carries
+**Two transports.** A packed BLE frame at 10 Hz for the things that move —
+revs, speed, throttle, gear, switch flags, and since autumn 2026 engine torque,
+the board's network state and the ride's rear slip (twelve bytes, up from eight;
+the app reads any length from eight) — and a JSON state at 1 Hz for everything
+else. Over WiFi the same JSON arrives by MQTT. The fast frame carries
 a second byte of *validity* flags for exactly the reason above.
 
 **It remembers what the bike cannot.** The CAN interface is listen-only, so the
 motorcycle's own trip meter can never be reset from here — the app keeps its own.
 Tyre readings, their trend, the service interval and the ride distance all live on
 the phone.
+
+**Two cards, one at each end of a ride.** *Before you ride* comes up while the
+bike stands still after the link is made: tyres, fuel, battery, faults, service —
+everything that can still be fixed in the drive. *This ride* comes up when the key
+goes off: distance and moving time, average and top speed, top rpm, rear slip over
+every leg, the ride's own fuel economy (from the filtered tank level, because the
+bike's own figure is a lifetime average), the faults that stood and the minutes
+without network — in large type, to be read from the saddle, because none of it
+can be read while riding. A fuel stop is inside the ride; three hours' sleep ends
+it.
 
 ---
 
