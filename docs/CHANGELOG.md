@@ -6,7 +6,11 @@ commits carry the detail.
 
 ---
 
-## 2026-11-04 — release 10 (0.10), not built yet
+## 2026-11-04 — release 10 (0.10), built and installed
+
+Built on Windows and installed the same afternoon; the owner saw the card and
+approved it as it is. Still to see on a ride: that it comes up by itself at
+key-off and that its figures read true (firmware NEXT-RIDE.md, check 0).
 
 - **THIS RIDE: a card at key-off with the whole ride in large type**
   (`RideSummary.kt`, `RideSummaryView.kt`, `RideSummaryTest.kt`). The owner, the

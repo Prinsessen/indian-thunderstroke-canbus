@@ -10,7 +10,7 @@
 > call); (2) **NO NETWORK** - leave home with the hotspot off on purpose for two
 > minutes and the amber banner should come after 90 s and go the moment the
 > hotspot is on; (3) **start health** - a warm restart and a quick key-off/on, the
-> two cases canbus-start-health.js got wrong on 2026-11-03 (fixed 2026-11-04 in openHAB, read its log lines after the ride);
+> two cases canbus-start-health.js got wrong on 2026-11-03 (fixed 2026-11-04 in openHAB, read its log lines after the ride; the first cold start after the fix, 2026-11-04 14:28, logged right: fired after 1.2 s, head 6 C, battery 12.9 -> 10.2 V while cranking, no reset);
 > (4) a **reference tyre gauge** on a cold rear tyre before setting off (owner's
 > gauge ~42 PSI vs TPMS ~39 on 2026-11-03). Run `ride_capture.py start` / `check`
 > as always; the capture tool now also connects on 8884 (TLS).
