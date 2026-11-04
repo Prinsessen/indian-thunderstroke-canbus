@@ -88,6 +88,15 @@
         android:clickable="false"
         android:focusable="false" />
 
+    <!-- The ride summary at key-off (2026-11-04), under the pre-ride check: the
+         next key-on hides this one, and the check is the card that moment is
+         for. Starts gone; RideSummary.pending decides. -->
+    <dk.agesen.springfield.RideSummaryView
+        android:id="@+id/ridesummary"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- The pre-ride check, above the cluster but under the splash: it must not
          cover the identity sequence, and it must cover the pages, because it is
          asking for a moment of attention rather than competing for it. Starts

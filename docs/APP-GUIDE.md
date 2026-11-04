@@ -391,7 +391,7 @@ caution colour, figure included.
 | **Ride distance** | This ride, kept by the app — see [9.6](#96-ride-distance) |
 | **Top speed, average, moving time** | This ride. **Average is over moving time**, not elapsed — see [9.7](#97-ride-figures) |
 | **All-time records** | Highest speed and rpm ever seen, on their own line, separately resettable. A ride's top speed and every ride's top speed answer different questions and are not put on one line |
-| **Rear slip** | `REAR SLIP -5.4 / +5.9 km/h`: the lowest and highest difference between the rear and the front wheel this ride, as the ABS module itself measures it (PGN 65215 byte 4, firmware 2026.11.03-1). Negative is the rear braked towards a lock; positive is the rear running ahead under drive - and always about +3 km/h at 90 km/h, because the two tyres are not the same size. From the ignition on, so a fuel stop with the key off starts it again. Blank on older firmware. App 0.9 |
+| **Rear slip** | `REAR SLIP -5.4 / +5.9 km/h`: the lowest and highest difference between the rear and the front wheel this ride, as the ABS module itself measures it (PGN 65215 byte 4, firmware 2026.11.03-1). Negative is the rear braked towards a lock; positive is the rear running ahead under drive - and always about +3 km/h at 90 km/h, because the two tyres are not the same size. From the ignition on, so a fuel stop with the key off starts it again. Stays on the screen after the key is off and the link is gone (the last figures the board sent, kept across an app restart) until the next ride's first figures replace them. This line is the current leg; the whole ride's figures are on the key-off card (*This ride*, section 7). Blank until the board has sent any (older firmware). App 0.9, kept after the key is off since 0.10 |
 | **Service** | Distance to the next service — see [9.8](#98-service-remaining) |
 | **Diagnostics** | Active fault codes, or a statement that there are none |
 
@@ -485,6 +485,29 @@ Each row carries a green, amber or red dot; a grey one means the bike has not
 said. The card leaves by itself once the bike is moving, a tap dismisses it
 sooner, and it is offered again after the link has been lost and found — after a
 fuel stop, which is exactly when it is wanted.
+
+### This ride (key-off)
+
+When the ignition goes off after the bike has moved for at least a minute, a card
+headed **THIS RIDE** covers the cluster, in large type, to be read from the
+saddle. It is for the figures nobody can read while riding. App 0.10, asked for
+on 2026-11-04 when the REAR SLIP line proved too small to use.
+
+| Row | Says |
+|---|---|
+| **DISTANCE** | The ride's distance and moving time |
+| **SPEED** | Average while moving, and top speed |
+| **ENGINE** | Top rpm |
+| **REAR SLIP** | The lowest (braking) and highest (drive) rear-minus-front speed of the whole ride, every leg included. The positive end always carries about +3 km/h at 90 from the tyres' sizes |
+| **FUEL** | The ride's own economy, from how far the filtered level fell (whole per cent of the tank, a fill-up not counted; only from 3 % and 10 km), and the level left. The bike's own economy figure is its lifetime average, which is why it is not used |
+| **FAULTS** | Every fault code that stood with the ignition on during the ride, or "none on this ride" |
+| **NETWORK** | How long the board could not reach home, counting only losses of 90 s or more (the NO NETWORK banner's rule), or "reached home the whole ride" |
+
+"The ride" is the RIDE figure's ride: a fuel stop, lunch and a ferry are inside
+it, and a new one starts after three hours' sleep or a long press on the RIDE
+figure. So at a fuel stop the card shows the day so far. The figures are kept
+across an app restart. The card stays, through the board going to sleep, until a
+tap or the next key-on; a tap on the RIDE line of the MACHINE page brings it back.
 
 ---
 

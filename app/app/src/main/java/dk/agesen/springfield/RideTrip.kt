@@ -33,6 +33,19 @@ object RideTrip {
     private const val PERSIST_EVERY_MS = 60_000L
 
     /**
+     * A new ride: the distance mark, the tops and moving time, and the key-off
+     * card's figures, all at once (2026-11-04). Until then only the distance was
+     * reset here and the tops lived until the app died - a top speed from last
+     * week beside today's distance. Needs a trip reading to mark against.
+     */
+    fun newRide(trip: Double?) {
+        if (trip == null) return
+        Settings.resetTrip(trip)
+        RideStats.reset()
+        RideSummary.reset(System.currentTimeMillis())
+    }
+
+    /**
      * Fed every state update.
      *
      * Deliberately driven from the repository rather than a screen, so a ride
@@ -49,7 +62,7 @@ object RideTrip {
         // this afternoon's outing. Marking on first sight makes the number
         // start at zero the moment the app meets the bike, which is the only
         // honest reading it can have before it has watched anything.
-        if (trip != null && !Settings.hasTripStart) Settings.resetTrip(trip)
+        if (trip != null && !Settings.hasTripStart) newRide(trip)
 
         val now = System.currentTimeMillis()
 
@@ -77,7 +90,7 @@ object RideTrip {
             // Only mark against a real reading; marking against a null would
             // silently reset to whatever arrived first, which could be several
             // kilometres into the ride.
-            if (trip != null) Settings.resetTrip(trip)
+            newRide(trip)
             return
         }
 
@@ -95,7 +108,7 @@ object RideTrip {
         }
         val offAt = Settings.ignitionOffAt
         if (offAt != 0L && now - offAt >= SAME_RIDE_GAP_MS && trip != null) {
-            Settings.resetTrip(trip)
+            newRide(trip)
         }
     }
 }

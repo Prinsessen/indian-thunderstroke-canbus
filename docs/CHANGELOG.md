@@ -6,7 +6,41 @@ commits carry the detail.
 
 ---
 
-## 2026-11-03 — release 9 (0.9), not built yet
+## 2026-11-04 — release 10 (0.10), not built yet
+
+- **THIS RIDE: a card at key-off with the whole ride in large type**
+  (`RideSummary.kt`, `RideSummaryView.kt`, `RideSummaryTest.kt`). The owner, the
+  same day: the REAR SLIP line is small print on a tablet, a slip is over before
+  it can be read, so the figure belongs to a moment after the ride - "det vil være
+  en kæmpe improvement". Her choices: all of distance/time/average/top, rear slip,
+  fuel, faults and network on one card; up at key-off, gone at a tap or the next
+  key-on; the whole ride across fuel stops (RideTrip's three-hour rule). The fuel
+  row is the ride's own economy from the filtered level's fall, because the bike's
+  `fe` is its lifetime average. Faults: every code that stood with the ignition
+  on. Network: losses of 90 s or more, the banner's rule. A tap on the RIDE line
+  of MACHINE opens the card again.
+- **The ride figures are one ride now** (`RideTrip.newRide`). Top speed, top rpm
+  and moving time (`RideStats`) are kept across an app restart and reset with the
+  distance - by the three-hour rule, the long press on the RIDE figure and the
+  settings button alike. Until now only the settings button reset them, and
+  otherwise only the app dying did, so the RIDE line could put last week's top
+  speed beside today's distance.
+- **REAR SLIP stays on the screen after the key is off** (`RideSlip.kt`,
+  `RideSlipTest.kt`). The owner, the same day 0.9 showed the line for the first
+  time: it is small print and she reads it at a stop, but it was drawn only from
+  a live fast packet and went blank 2.5 s after the board stopped sending. The
+  last min / max are now kept (in memory and in `ride_slip` preferences, so an
+  app restart keeps them too) until the board sends new ones; it starts a new
+  min / max at the next ignition, so the next ride's first packet replaces them.
+  A packet without slip (0x7F after a wake, older firmware) changes nothing. The
+  diagnostics screen still shows only the live figures.
+
+## 2026-11-04 — release 9 (0.9), on Play internal track
+
+Built on Windows 2026-11-04 from this tree unchanged and uploaded to Play's
+internal track the same morning; the bike already ran firmware 2026.11.03-1
+(`CanBus_FW_Version`), so the NO NETWORK banner and the rear slip line have
+their bytes.
 
 From the owner after the last ride of the year (2026-11-03), all three hers:
 

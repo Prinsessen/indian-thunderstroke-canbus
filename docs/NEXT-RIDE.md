@@ -1,13 +1,16 @@
 # Next ride — what to do, and what happens by itself
 
-> **The 1-2 rides left in 2026 (firmware 2026.11.03-1, app 0.9).** What they can
-> settle: (1) **rear wheel slip** - `CanBus_RearSlipMin` / `Max` after each ride;
+> **The 1-2 rides left in 2026 (firmware 2026.11.03-1, app 0.10).** What they can
+> settle: (0) **the THIS RIDE card** (app 0.10, the owner's 2026-11-04) - it should
+> come up at the first key-off after a minute's riding, in large type, and go at the
+> next key-on; check that distance, top, slip, fuel, faults and network read true,
+> and that a fuel stop shows the day so far; (1) **rear wheel slip** - `CanBus_RearSlipMin` / `Max` after each ride;
 > one firm rear brake and one firm pull-away on a safe road show the extremes (a
 > deliberate ABS stop on an empty surface would also answer IDEAS D10, the owner's
 > call); (2) **NO NETWORK** - leave home with the hotspot off on purpose for two
 > minutes and the amber banner should come after 90 s and go the moment the
 > hotspot is on; (3) **start health** - a warm restart and a quick key-off/on, the
-> two cases canbus-start-health.js got wrong on 2026-11-03 (fix before lay-up);
+> two cases canbus-start-health.js got wrong on 2026-11-03 (fixed 2026-11-04 in openHAB, read its log lines after the ride);
 > (4) a **reference tyre gauge** on a cold rear tyre before setting off (owner's
 > gauge ~42 PSI vs TPMS ~39 on 2026-11-03). Run `ride_capture.py start` / `check`
 > as always; the capture tool now also connects on 8884 (TLS).
@@ -54,7 +57,7 @@
 >   2026-10-04 (a dip that never takes the chip down, no coredump) and the cold
 >   start of 2026-10-19. Hypothesis, not proven. 14 s of data lost.
 >   `canbus-start-health.js` then logged a failed start (first rpm 788 < its
->   `FIRED_RPM` 900, but warm idle is 710-870) - a false entry.
+>   `FIRED_RPM` 900, but warm idle is 710-870) - a false entry. **Fixed 2026-11-04** (openHAB `tests/canbus-start-health.test.js`): FIRED_RPM 600, "stopped" = 2 s of rpm 0, and a running engine at the first sample waits for this meta `reset` - the replay of this capture now gives 0.8 s, 0.6 s (the 15:20 restart), RESET panic, 0.4 s.
 >
 > **Status 2026-10-18.** The engine-byte hunt below is over: PGN 65382 byte 0 is
 > the low byte of a 16-bit engine speed, SPN 595 (cruise engaged) is on the bus
@@ -79,7 +82,8 @@
 >    `deepsleep`, `poweron`, `panic`), and let `canbus-start-health.js` read it: on
 >    the cold start of 2026-10-19 the board rebooted during the crank, and that was
 >    inferred from a 17.5 s hole in the rpm samples where the chip itself knew it
->    was a brownout.
+>    was a brownout. **Done:** `reset` is in meta, and since 2026-11-04 the
+>    openHAB rule reads it when the board comes back with the engine running.
 > 5. Let the probe see **11-bit frames** (added 2026-10-20): `decodeState()` returns
 >    on `!ext` before `probeFrame()`, so a standard-ID frame is neither announced
 >    nor counted. Announce `NEW std=0x7E8 dlc=8` and run the same byte-change

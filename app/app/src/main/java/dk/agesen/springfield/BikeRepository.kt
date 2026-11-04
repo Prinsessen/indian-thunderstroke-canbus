@@ -133,6 +133,8 @@ object BikeRepository {
         lastFastAt = System.currentTimeMillis()
         connected = true
         RideStats.feed(p)
+        RideSlip.feed(p)
+        RideSummary.onFast(p.rearSlipMinKmh, p.rearSlipMaxKmh, p.net, lastFastAt)
         notifyObservers()
     }
 
@@ -159,6 +161,15 @@ object BikeRepository {
         val filled = if (s.fw != null) { lastFw = s.fw; s } else s.copy(fw = lastFw)
         state = filled
         RideTrip.onState(filled)  // starts a new ride after a long enough sleep
+        // The key-off card's figures (after RideTrip, so a new ride is reset first).
+        // Fuel only while the filtered level is this ride's; a minute of moving
+        // before a key-off counts as a ride worth a card.
+        val wentOff = RideSummary.onState(
+            filled.ignitionOn, filled.dm1,
+            if (FuelLevel.live) FuelLevel.trusted else null,
+            RideStats.movingMs >= 60_000L, Settings.rideDistanceKm(filled.tripKm), System.currentTimeMillis()
+        )
+        if (wentOff) RideStats.flush()
         connected = true
         TyreMemory.remember(filled)
         notifyObservers()

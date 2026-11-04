@@ -78,6 +78,9 @@ class BleService : Service(), BikeBleClient.Listener {
         Settings.init(this)
         RideLog.init(this)
         TyreMemory.init(this)
+        RideSlip.init(this)
+        RideStats.init(this)
+        RideSummary.init(this)
         createChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Connecting…"))
 

@@ -99,11 +99,11 @@ class SettingsActivity : AppCompatActivity() {
             // Needs a trip reading to mark against. Without one there is nothing
             // to subtract from later, so the press does nothing rather than
             // quietly recording a zero it would then count up from.
-            Settings.resetTrip(BikeRepository.state?.tripKm)
             // Distance and the figures derived from it are one ride; resetting
             // half of them would leave a top speed from a road you are no longer
-            // on sitting next to a distance of zero.
-            RideStats.reset()
+            // on sitting next to a distance of zero. RideTrip.newRide resets all
+            // of it, the key-off card's figures included.
+            RideTrip.newRide(BikeRepository.state?.tripKm)
             paintTrip()
         }
         paintTrip()

@@ -1,5 +1,8 @@
 package dk.agesen.springfield
 
+import android.content.Context
+import android.content.SharedPreferences
+
 /**
  * What this ride has amounted to so far.
  *
@@ -11,8 +14,15 @@ package dk.agesen.springfield
  * twenty minutes at a ferry queue is a number about the day, not about the
  * ride, and it is the wrong one to put next to a top speed.
  *
- * Held in memory only. A ride is a session; carrying half of one across an app
- * restart would produce a figure that quietly means nothing.
+ * **Kept across an app restart since 2026-11-04**, and reset with the ride
+ * ([RideTrip.newRide]). Until then this was memory only ("a ride is a session"),
+ * which was true of the RIDE line and wrong for the card at key-off
+ * ([RideSummary]): the owner chose the whole ride - a fuel stop, lunch, a ferry
+ * inside it, three hours' sleep ends it - and the app is killed freely at any
+ * of those stops. It was also never reset by a new ride, only by the button in
+ * settings or by the app dying, so a top speed could outlive the ride it was set
+ * on. Written at most every [PERSIST_EVERY_MS] (a top speed moves ten times a
+ * second while accelerating) and at key-off ([flush]).
  */
 object RideStats {
 
@@ -43,6 +53,30 @@ object RideStats {
 
     @Volatile private var movingMillis: Long = 0L
     @Volatile private var lastSampleAt: Long = 0L
+    @Volatile private var savedAt: Long = 0L
+
+    /** Time spent moving this ride, ms. */
+    val movingMs: Long get() = movingMillis
+
+    private const val PERSIST_EVERY_MS = 30_000L
+    private const val PREFS = "ride_stats"
+    private var prefs: SharedPreferences? = null
+
+    fun init(context: Context) {
+        if (prefs != null) return
+        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = p
+        maxSpeedKmh = p.getFloat("max_speed", 0f).toDouble()
+        maxRpm = p.getInt("max_rpm", 0)
+        movingMillis = p.getLong("moving_ms", 0L)
+    }
+
+    /** Write what is held, now (key-off). */
+    fun flush() {
+        savedAt = System.currentTimeMillis()
+        prefs?.edit()?.putFloat("max_speed", maxSpeedKmh.toFloat())?.putInt("max_rpm", maxRpm)
+            ?.putLong("moving_ms", movingMillis)?.apply()
+    }
 
     fun feed(p: FastPacket) {
         val now = System.currentTimeMillis()
@@ -70,6 +104,7 @@ object RideStats {
             if (gap in 1..MAX_GAP_MS) movingMillis += gap
         }
         lastSampleAt = now
+        if (now - savedAt >= PERSIST_EVERY_MS) flush()
     }
 
     fun reset() {
@@ -77,6 +112,7 @@ object RideStats {
         maxRpm = 0
         movingMillis = 0L
         lastSampleAt = 0L
+        flush()
     }
 
     /** Average over moving time, or null before anything has moved. */

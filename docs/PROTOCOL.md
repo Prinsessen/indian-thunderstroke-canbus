@@ -98,7 +98,7 @@ the negotiated MTU.
 | 7 | `uint8` | flagsValid | bitfield | — |
 | 8 | `int8` | torque | % | `0x7F` — **since `2026.10.19-1`.** Engine demand torque, SPN 2432, so the app's torque arc moves at 10 Hz; the same value as `tq` in `state`. App 0.7 and older reject any packet that is not exactly 8 bytes, so every phone runs 0.8 before this firmware goes on the bike |
 | 9 | `uint8` | network | 0 / 1 / 2 | `0xFF` — **since `2026.11.03-1`.** 2 = the broker has the data, 1 = WiFi but no broker, 0 = no WiFi; `0xFF` on a build without WiFi. App 0.9 shows an amber NO NETWORK banner after a minute without 2 (asked for after 2026-11-03, hotspot left off for 6 km). App 0.8 reads 8 bytes or more and ignores this one |
-| 10-11 | `int8` ×2 | rear slip min, max | 1/16 km/h | `0x7F` — **since `2026.11.03-1`.** The ride's lowest and highest rear wheel slip: the ABS module's rear-minus-front speed, PGN 65215 byte 4 less 125 (SPN 907). From the ignition on. In this packet because the `state` JSON has no room; `rearSlip*` on MQTT carries the same in km/h. App 0.9 shows it on MACHINE |
+| 10-11 | `int8` ×2 | rear slip min, max | 1/16 km/h | `0x7F` — **since `2026.11.03-1`.** The ride's lowest and highest rear wheel slip: the ABS module's rear-minus-front speed, PGN 65215 byte 4 less 125 (SPN 907). From the ignition on. In this packet because the `state` JSON has no room; `rearSlip*` on MQTT carries the same in km/h. App 0.9 shows it on MACHINE (kept after the key is off from 0.10); app 0.10 gathers the whole ride's extremes, every leg, for its key-off card (THIS RIDE) |
 
 ### Flag bits (same positions in both bytes 6 and 7)
 

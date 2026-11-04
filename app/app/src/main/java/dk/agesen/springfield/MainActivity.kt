@@ -63,6 +63,9 @@ class MainActivity : AppCompatActivity(), BikeRepository.Observer {
         super.onCreate(savedInstanceState)
         Settings.init(this)
         TyreMemory.init(this)
+        RideSlip.init(this)
+        RideStats.init(this)
+        RideSummary.init(this)
         Keis.start(this)
         // A mount holds the phone one way up, and auto-rotate on a bike answers
         // to bumps and lean angle as readily as to intent.

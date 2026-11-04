@@ -69,7 +69,7 @@ class RideFragment : BikePage(R.layout.fragment_ride) {
         // this is for the times a rider means something else by "this ride":
         // the start of a leg, the far end of the outward run, a border.
         val resetRide = {
-            Settings.resetTrip(BikeRepository.state?.tripKm)
+            RideTrip.newRide(BikeRepository.state?.tripKm)
             onBikeUpdate()
         }
         rpmDigits?.onRideReset = resetRide   // portrait: beside the rev figure
@@ -294,6 +294,12 @@ class TyresFragment : BikePage(R.layout.fragment_tyres) {
 
 class MachineFragment : BikePage(R.layout.fragment_machine) {
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // A tap on the RIDE line brings the key-off card back (RideSummaryView).
+        view.findViewById<TextView>(R.id.ridestats).setOnClickListener { RideSummary.open() }
+    }
+
     override fun onBikeUpdate() {
         val v = view ?: return
         val s = if (BikeRepository.isLive) BikeRepository.state else null
@@ -423,13 +429,14 @@ class MachineFragment : BikePage(R.layout.fragment_machine) {
         // lock or a spin is over in less than a second. Braking towards a lock
         // shows as the negative end; the positive end carries the tyres' own
         // circumference difference too, about +3 km/h at 90 km/h steady.
-        val fast = if (BikeRepository.isLive) BikeRepository.fast else null
-        val slipMin = fast?.rearSlipMinKmh
-        val slipMax = fast?.rearSlipMaxKmh
+        // Not only while live (the owner, 2026-11-04): it is small print, read at
+        // a stop with the key off, so the last figures stay until the next ride's
+        // replace them (RideSlip).
+        val slip = RideSlip.last
         v.findViewById<TextView>(R.id.slip).text =
-            if (slipMin == null || slipMax == null) ""
+            if (slip == null) ""
             else "REAR SLIP  %+.1f / %+.1f %s".format(
-                Settings.speed(slipMin), Settings.speed(slipMax), Settings.speedLabel)
+                Settings.speed(slip.minKmh), Settings.speed(slip.maxKmh), Settings.speedLabel)
 
         // Rendered through Dtc, never printed raw. This line used to print the
         // firmware's string directly and looked right only by accident: the
