@@ -1206,6 +1206,42 @@ static void probeFrame(const J1939 &j, const uint8_t *b, uint8_t nn) {
     }
     slot->dlc = nn;
 }
+// --- 11-bit (standard) frames: NEXT-RIDE stage 2 item 5 (2026-11-05) ----------
+// J1939 is 29-bit, so decodeState() returned on !ext before the probe and an
+// 11-bit frame was neither announced nor counted. The Power Vision 3 may ask the
+// ECM for its datalog record (PV3-DATALOG.md) in UDS on 0x7E0/0x7E8, ISO 15765;
+// the garage session needs to SEE that dialogue, so here it is published raw -
+// id, dlc and every byte - not as byte changes: a request/response pair changes
+// on every frame and the content is the answer. Same gate as the scan (switch
+// PROBE_SCAN, stationary), at most PROBE_STD_PER_S frames a second; what had to
+// be dropped is counted and said on the next line. First sighting of an id is
+// announced as "NEW std=0x7E8 dlc=8" on probe, like a new PGN.
+#define PROBE_STD_PER_S 20
+static void probeStd(uint32_t id, const uint8_t *b, uint8_t nn) {
+    if (!probeOnline || !probeEnabled(PROBE_SCAN)) return;
+    if (!isnan(st.speed) && st.speed >= 2.0f) return;
+    static uint16_t seen[16];
+    static uint8_t nseen = 0;
+    bool known = false;
+    for (uint8_t i = 0; i < nseen; i++) if (seen[i] == id) { known = true; break; }
+    if (!known && nseen < 16) {
+        seen[nseen++] = (uint16_t)id;
+        char msg[40];
+        snprintf(msg, sizeof(msg), "NEW std=0x%03lX dlc=%u", (unsigned long)id, nn);
+        netPublish("probe", msg, strlen(msg), false);
+    }
+    static uint32_t winAt = 0;
+    static uint16_t inWin = 0, dropped = 0;
+    const uint32_t now = millis();
+    if (now - winAt >= 1000) { winAt = now; inWin = 0; }
+    if (inWin >= PROBE_STD_PER_S) { if (dropped < 65535) dropped++; return; }
+    inWin++;
+    char msg[80];
+    int n = snprintf(msg, sizeof(msg), "%03lX %u", (unsigned long)id, nn);
+    for (uint8_t i = 0; i < nn && i < 8; i++) n += snprintf(msg + n, sizeof(msg) - n, " %02X", b[i]);
+    if (dropped) { n += snprintf(msg + n, sizeof(msg) - n, "  (+%u dropped)", dropped); dropped = 0; }
+    netPublish("probe/std", msg, (size_t)n, false);
+}
 #endif  // PROBE_CHANGES
 
 static const char *standState();   // defined below; used by gearChanged()
@@ -1258,7 +1294,12 @@ static void gearChanged(char to) {
 
 // Decode one CAN frame into the vehicle state. Scales mirror the JS transforms.
 void decodeState(uint32_t id, bool ext, const CanFrame &frm) {
-    if (!ext) return;
+    if (!ext) {                    // J1939 is 29-bit; an 11-bit frame is for the probe only
+#if PROBE_CHANGES
+        probeStd(id, frm.data, frm.data_length_code);
+#endif
+        return;
+    }
     J1939 j = decodeJ1939(id, ext);
     if (!j.valid) return;
     const uint8_t *b = frm.data;

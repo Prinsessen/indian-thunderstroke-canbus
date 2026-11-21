@@ -362,8 +362,11 @@ static void onWifiUp() {
         // link is not: the core's defaults are 30 s for the TCP connect and
         // 120 s for the TLS handshake. A SYN/ACK over cellular is well under a
         // second; a handshake with a 2048-bit key on this chip is two to three.
-        sWifiClient.setConnectionTimeout(5000);
-        sWifiClient.setHandshakeTimeout(10000);
+        sWifiClient.setConnectionTimeout(5000);   // milliseconds
+        // SECONDS: core 3.x multiplies by 1000. It said 10000 (= 10 000 s, 2.8 h) from
+        // 2026.09.14-3 to 2026.11.21-1 - a stalled handshake held the net task for hours
+        // (tools/check_api_units.py).
+        sWifiClient.setHandshakeTimeout(10);
         sMqtt.setServer(MQTT_BROKER, MQTT_PORT);
         sMqtt.setBufferSize(3072);         // room for reassembled TP messages
         // Keepalive well ABOVE the 30 s heartbeat so one slow or dropped
@@ -552,7 +555,7 @@ static void runHttpOta() {
     httpUpdate.rebootOnUpdate(true);
     otaGuardArm();
     WiFiClient client;
-    client.setTimeout(15);                 // seconds, per read
+    client.setTimeout(15000);              // milliseconds per read (Stream::setTimeout, core 3.x); was 15 = 15 ms
     const t_httpUpdate_return ret = httpUpdate.update(client, OTA_FIRMWARE_URL);
     otaGuardStop();
     switch (ret) {

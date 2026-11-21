@@ -1,6 +1,6 @@
 # Next ride — what to do, and what happens by itself
 
-> **The 1-2 rides left in 2026 (firmware 2026.11.03-1, app 0.10).** What they can
+> **The 1-2 rides left in 2026 (firmware 2026.11.21-1 - 11.03-1 with the TLS/OTA timeouts fixed - app 0.10).** What they can
 > settle: (0) **the THIS RIDE card** (app 0.10, the owner's 2026-11-04) - it should
 > come up at the first key-off after a minute's riding, in large type, and go at the
 > next key-on; check that distance, top, slip, fuel, faults and network read true,
@@ -90,6 +90,12 @@
 >    capture on them, keyed by ID. Needed before the garage session where the
 >    Power Vision 3 polls the ECM's datalog record ([PV3-DATALOG.md](PV3-DATALOG.md)):
 >    if that dialogue is UDS on 0x7E0/0x7E8, today's firmware shows nothing at all.
+>    **Built 2026-11-05 (not on the bike yet):** `probeStd()` in main.cpp - an 11-bit frame
+>    goes to the probe instead of being dropped; first sighting `NEW std=0x7E8 dlc=8` on
+>    `probe`, then every frame raw on `probe/std` ("7E8 8 06 61 F0 ..."), at most 20 a
+>    second (`(+N dropped)` says what was cut). Gate: PROBE_SCAN and stationary. Compiles
+>    for sniffer-t2can and bench-canfdmc; no 11-bit sender on the bench, so the garage
+>    session with the PV3 is its first real test. OTA with the ignition proven first.
 
 ## What the Zealand ride taught, 2026-09-13
 
