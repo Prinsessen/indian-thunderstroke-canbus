@@ -275,6 +275,12 @@ asleep (measured on the bench). Its design files are in
 It has the pin map of the LilyGO T-2CANFD, which the project ran on before and
 which the same build still fits.
 
+On the bike the board rides in a **printed TPU sleeve** instead of heat shrink:
+a tube, an end plug and a conical cable gland, one print job in TPU 95A, nothing
+to cut, two cable ties, the WiFi antenna on a plate on its side. Model (CadQuery),
+STL files and the full description - printing, fitting step by step, every
+dimension and what the test prints taught - are in [`enclosure/`](enclosure/).
+
 ## Layout
 
 ```
@@ -282,6 +288,7 @@ firmware/     ESP32-S3 + MCP2518FD: CANFD-MC (github.com/Prinsessen/canfd-mc-har
               or the LilyGO T-2CANFD it replaced. PlatformIO.
 app/          Android cluster. Kotlin, plain Views and Canvas, no Compose.
 docs/         The protocol, the decode plan, and the method.
+enclosure/    The printed TPU sleeve for the board: model, STL, README.
 openhab/      The openHAB side: canbus.items, canbus.things and the rules that
               run on top of the decoder, straight from the author's server.
 ```

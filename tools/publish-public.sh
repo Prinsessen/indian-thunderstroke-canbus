@@ -9,6 +9,7 @@
 #     firmware/  <- /etc/openhab-firmware/indian-canbus src/, platformio.ini, a
 #                   fixed subset of tools/
 #     tools/     <- this script and the pattern-free checker
+#     enclosure/ <- the TPU sleeve for the CANFD-MC board (model, STL, README)
 #     openhab/   <- canbus.items, canbus.things and the CAN rules from
 #                   /etc/openhab/automation/js (2026-09-19, they carry no secrets)
 #     README.md, LICENSE   public-only, never touched here
@@ -43,7 +44,7 @@ DEST="${1:?usage: $0 /path/to/public/clone}"
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/itc-public.XXXXXX")
 put() {  # put <src-file> <dest-rel>
   mkdir -p "$STAGE/$(dirname "$2")"
-  case "$1" in *.png|*.jpg|*.jpeg|*.webp|*.ttf|*.otf|*.bin|*.jar|*.apk) cp -p "$1" "$STAGE/$2" ;;
+  case "$1" in *.png|*.jpg|*.jpeg|*.webp|*.ttf|*.otf|*.bin|*.jar|*.apk|*.stl) cp -p "$1" "$STAGE/$2" ;;
     *) sed -f "$MAP" "$1" > "$STAGE/$2" ;; esac
   chmod --reference="$1" "$STAGE/$2"
 }
@@ -56,6 +57,8 @@ for t in ble_budget.py brake_separation_test.py decode_names.py mqtt_config.py \
 for d in DECODE-PLAN DISPLAY-INTEGRATION FLASHING FUTURE-HARDWARE GARAGE-RUN NEXT-RIDE OTA PROTOCOL SKILLS SLEEP \
          TOOLING-GAPS TRANSMIT UNEXPLORED-BYTES WIRING-DIAGRAMS IDEAS; do put "$FW/$d.md" "docs/$d.md"; done
 for i in $(ls "$FW/images"); do put "$FW/images/$i" "docs/images/$i"; done   # incl. wiring-*: service-manual excerpts, published on the owner's decision 2026-09-19
+# ---- the TPU sleeve for the board (2026-11-26, the owner): model, STL, README, pictures ----
+for f in $(git -C "$FW" ls-files enclosure); do put "$FW/$f" "$f"; done
 # ---- openHAB side (2026-09-19): the live items/things pair and the CAN rules ----
 # The .items/.things carry topics and JSONPATH picks only; the broker bridge with
 # its host and credentials lives in a different file and is not copied.
